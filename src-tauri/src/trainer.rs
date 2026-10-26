@@ -664,13 +664,7 @@ impl Session {
         if get("unlimited-jetpack-fuel", 0.0) != 0.0 {
             self.hold_jetpack_fuel()?;
         }
-        for a in actions {
-            if a == "add-1-000-coupons" && sink != 0 {
-                let o = self.off(sink, "mNumResourceSinkCoupons")?;
-                let n = self.ue.p.read::<i32>(sink + o).unwrap_or(0);
-                self.ue.p.write(sink + o, n.saturating_add(1000));
-            }
-        }
+        let _ = (actions, sink); // no one-shot mods right now
         Ok(true)
     }
 }

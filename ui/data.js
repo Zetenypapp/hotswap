@@ -8,7 +8,7 @@ const A = (name, info) => ({ type: 'action', name, info });
 const CATALOG = {
   526870: { genre: 'Factory building', cats: [
     { name: 'Player', mods: [T('Infinite Health'), T('Unlimited Jetpack Fuel'), T('No Fall Damage')] },
-    { name: 'Inventory', mods: [T('Infinite Items', 'Stacks in your inventory never go down, and used-up items come back.'), T('Easy Crafting', 'Building and workbench crafting need no materials at all. Reopen the workbench after picking a recipe.'), A('Add 1,000 Coupons')] },
+    { name: 'Inventory', mods: [T('Infinite Items', 'Stacks in your inventory never go down, and used-up items come back.'), T('Easy Crafting', 'Building and workbench crafting need no materials at all. Reopen the workbench after picking a recipe.')] },
     { name: 'Physics', mods: [S('Walking Speed', 10, 1000, 10, 100, 'Percent of normal speed. 100 is the game default.'), S('Jump Height', 10, 1000, 10, 100, 'Percent of normal jump height.'), S('Game Speed', 0.1, 5, 0.1, 1), T('Super Speed'), S('Gravity Strength', 0, 200, 5, 100, 'Percent of normal gravity. 0 lets you float.')] },
     { name: 'Building', mods: [T('Free Production', 'Machines need no ingredients. Their outputs are real items.'), T('No Power Required'), T('No Fuel Needed', 'Generators and vehicles run without fuel.'), T('Turbo Production', 'Machines produce much faster.')] },
   ]},
@@ -42,7 +42,7 @@ const CATALOG = {
 // Mods the trainer can actually apply, by Steam app ID. Everything else shows as "Soon".
 const LIVE = {
   526870: [
-    'infinite-health', 'unlimited-jetpack-fuel', 'no-fall-damage', 'infinite-items', 'easy-crafting', 'add-1-000-coupons',
+    'infinite-health', 'unlimited-jetpack-fuel', 'no-fall-damage', 'infinite-items', 'easy-crafting',
     'walking-speed', 'jump-height', 'game-speed', 'super-speed', 'gravity-strength',
     'free-production', 'no-power-required', 'no-fuel-needed', 'turbo-production',
   ],
