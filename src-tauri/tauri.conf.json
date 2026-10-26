@@ -32,7 +32,15 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
+    "publisher": "Hotswap",
+    "shortDescription": "Swap the way you play, in real time.",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico"
+      }
+    },
     "icon": ["icons/icon.ico"]
   }
 }
