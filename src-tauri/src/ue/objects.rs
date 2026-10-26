@@ -177,6 +177,22 @@ impl Ue {
         self.props(cls).into_iter().find(|p| p.name == name && p.offset >= 0)
     }
 
+    /// All live objects whose class name passes `want`, in one scan (skips class default objects).
+    pub fn find_by_classes(&self, want: impl Fn(&str) -> bool) -> Vec<u64> {
+        let mut is_match: HashMap<u64, bool> = HashMap::new();
+        self.all_objects().into_iter().filter(|&obj| {
+            let Some(cls) = self.class_of(obj) else { return false };
+            *is_match.entry(cls).or_insert_with(|| self.name_of(cls).is_some_and(|n| want(&n)))
+                && !self.name_of(obj).is_some_and(|n| n.starts_with("Default__"))
+        }).collect()
+    }
+
+    /// The class default object (`Default__<Class>`) for a class pointer.
+    pub fn default_object(&self, cls: u64) -> Option<u64> {
+        let name = format!("Default__{}", self.name_of(cls)?);
+        self.all_objects().into_iter().find(|&o| self.class_of(o) == Some(cls) && self.name_of(o).as_deref() == Some(name.as_str()))
+    }
+
     /// All live objects whose class is exactly `class_name`, skipping class default objects.
     pub fn find_by_class(&self, class_name: &str) -> Vec<u64> {
         // Many objects share a class, so name each class pointer only once.

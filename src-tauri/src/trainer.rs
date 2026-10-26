@@ -169,11 +169,18 @@ struct Session {
     gs_search: Option<Instant>,
     jetpacks: Vec<u64>,
     jetpacks_at: Option<Instant>,
+    recipes: HashMap<u64, Vec<(u64, i32)>>,
+    benches: Vec<u64>,
+    benches_at: Option<Instant>,
+    machines: Vec<u64>,
+    machines_at: Option<Instant>,
+    fed_at: Option<Instant>,
 }
 
 impl Session {
     fn new(ue: Ue) -> Session {
-        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), normal_health: HashMap::new(), gs_search: None, jetpacks: Vec::new(), jetpacks_at: None }
+        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), normal_health: HashMap::new(), gs_search: None, jetpacks: Vec::new(), jetpacks_at: None,
+            recipes: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None }
     }
 
     fn off(&mut self, obj: u64, name: &'static str) -> Result<u64, String> {
@@ -231,6 +238,101 @@ impl Session {
                     self.held.insert(i, (class, count.max(self.held.get(&i).filter(|h| h.0 == class).map_or(0, |h| h.1))));
                 }
                 _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// A recipe's ingredients as (item class, amount), read from the recipe's default object. Cached.
+    fn ingredients(&mut self, recipe_cls: u64) -> Vec<(u64, i32)> {
+        if let Some(v) = self.recipes.get(&recipe_cls) {
+            return v.clone();
+        }
+        let mut out = Vec::new();
+        if let Some(cdo) = self.ue.default_object(recipe_cls) {
+            if let Ok(o) = self.off(cdo, "mIngredients") {
+                let (data, n) = (self.ue.p.ptr(cdo + o).unwrap_or(0), self.ue.p.read::<i32>(cdo + o + 8).unwrap_or(0).clamp(0, 16) as u64);
+                for i in 0..n {
+                    let item = self.ue.p.read::<u64>(data + i * 0x10).unwrap_or(0);
+                    let amount = self.ue.p.read::<i32>(data + i * 0x10 + 8).unwrap_or(0);
+                    if item != 0 && amount > 0 {
+                        out.push((item, amount));
+                    }
+                }
+            }
+        }
+        self.recipes.insert(recipe_cls, out.clone());
+        out
+    }
+
+    /// Stacks of an inventory component: (address of the stack array data, count).
+    fn stacks(&mut self, inv: u64) -> Result<(u64, u64), String> {
+        let arr = inv + self.off(inv, "mInventoryStacks")?;
+        Ok((self.ue.p.ptr(arr).unwrap_or(0), self.ue.p.read::<i32>(arr + 8).unwrap_or(0).clamp(0, 500) as u64))
+    }
+
+    /// Easy crafting at the workbench: make sure the player carries what the selected recipe needs.
+    fn stock_workbench(&mut self) -> Result<(), String> {
+        const STACK: u64 = 0x30;
+        if self.benches_at.map_or(true, |t| t.elapsed() > Duration::from_secs(10)) {
+            self.benches = self.ue.find_by_classes(|n| n.contains("WorkBench"));
+            self.benches_at = Some(Instant::now());
+        }
+        let player = self.t.player;
+        let io = self.off(player, "mInventory")?;
+        let Some(inv) = self.ue.p.ptr(player + io) else { return Ok(()) };
+        for bench in self.benches.clone() {
+            let Ok(ro) = self.off(bench, "mCurrentRecipe") else { continue };
+            let Some(recipe) = self.ue.p.ptr(bench + ro) else { continue };
+            let (data, n) = self.stacks(inv)?;
+            for (item, amount) in self.ingredients(recipe) {
+                let want = amount * 5;
+                let have: i32 = (0..n).filter(|&i| self.ue.p.read::<u64>(data + i * STACK + 8) == Some(item))
+                    .map(|i| self.ue.p.read::<i32>(data + i * STACK + 0x28).unwrap_or(0)).sum();
+                if have >= want {
+                    continue;
+                }
+                // Top up an existing stack of that item, else use the first empty slot.
+                let slot = (0..n).find(|&i| self.ue.p.read::<u64>(data + i * STACK + 8) == Some(item))
+                    .or_else(|| (0..n).find(|&i| self.ue.p.read::<u64>(data + i * STACK + 8) == Some(0)));
+                if let Some(i) = slot {
+                    let s = data + i * STACK;
+                    let cur = self.ue.p.read::<i32>(s + 0x28).unwrap_or(0);
+                    self.ue.p.write(s + 8, item);
+                    self.ue.p.write(s + 0x28, cur + (want - have));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Free production: keep each machine's input slots stocked with its recipe's ingredients.
+    fn feed_machines(&mut self) -> Result<(), String> {
+        const STACK: u64 = 0x30;
+        if self.fed_at.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
+            return Ok(());
+        }
+        self.fed_at = Some(Instant::now());
+        if self.machines_at.map_or(true, |t| t.elapsed() > Duration::from_secs(30)) {
+            const KINDS: [&str; 11] = ["Smelter", "Foundry", "Constructor", "Assembler", "Manufacturer", "Refinery", "Blender", "Packager", "HadronCollider", "QuantumEncoder", "Converter"];
+            self.machines = self.ue.find_by_classes(|n| n.starts_with("Build_") && KINDS.iter().any(|k| n.contains(k)));
+            self.machines_at = Some(Instant::now());
+            log(&format!("free production: {} machines", self.machines.len()));
+        }
+        for m in self.machines.clone() {
+            let (Ok(ro), Ok(io)) = (self.off(m, "mCurrentRecipe"), self.off(m, "mInputInventory")) else { continue };
+            let (Some(recipe), Some(inv)) = (self.ue.p.ptr(m + ro), self.ue.p.ptr(m + io)) else { continue };
+            let (data, n) = self.stacks(inv)?;
+            for (i, (item, amount)) in self.ingredients(recipe).into_iter().enumerate() {
+                if i as u64 >= n {
+                    break;
+                }
+                let s = data + i as u64 * STACK;
+                let want = amount * 4;
+                if self.ue.p.read::<i32>(s + 0x28).unwrap_or(0) < want {
+                    self.ue.p.write(s + 8, item);
+                    self.ue.p.write(s + 0x28, want);
+                }
             }
         }
         Ok(())
@@ -398,6 +500,12 @@ impl Session {
             self.hold_inventory()?;
         } else {
             self.held.clear();
+        }
+        if get("easy-crafting", 0.0) != 0.0 {
+            self.stock_workbench()?;
+        }
+        if get("free-production", 0.0) != 0.0 {
+            self.feed_machines()?;
         }
         if get("unlimited-jetpack-fuel", 0.0) != 0.0 {
             self.hold_jetpack_fuel()?;

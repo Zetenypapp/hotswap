@@ -267,6 +267,14 @@ fn main() {
             let read = |n: &str| u.prop(mc, n).and_then(|o| u.p.read::<f32>(m + o.offset as u64));
             println!("player 0x{p:X} ctrl={ctrl:X?} walk={:?} sprint={:?} jump={:?} gravity={:?}", read("MaxWalkSpeed"), read("mMaxSprintSpeed"), read("JumpZVelocity"), read("GravityScale"));
         }
+        for c in ["BP_GameState_C", "FGGameState"] {
+            for gs in u.find_by_class(c) {
+                let cls = u.class_of(gs).unwrap();
+                let flags: Vec<String> = ["mCheatNoCost", "mCheatNoPower", "mCheatNoFuel", "mCheatTurboProductionMode", "mCheatTurboBuildMode"]
+                    .iter().map(|n| format!("{n}={:?}", u.prop(cls, n).and_then(|o| u.p.read::<u8>(gs + o.offset as u64)))).collect();
+                println!("{c} 0x{gs:X}: {}", flags.join(" "));
+            }
+        }
         return;
     }
     if std::env::args().any(|a| a == "--trainer-test") {
