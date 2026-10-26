@@ -38,6 +38,15 @@ pub struct Game {
     art: Art,
 }
 
+impl Game {
+    /// Game ID and install folder, for running-game detection. Software is skipped.
+    pub fn watch_target(&self) -> Option<(String, PathBuf)> {
+        (self.kind == "game" && !self.install_dir.is_empty()).then(|| {
+            (self.app_id.to_string(), PathBuf::from(&self.library).join("steamapps").join("common").join(&self.install_dir))
+        })
+    }
+}
+
 #[derive(Serialize)]
 pub struct Scan {
     pub root: Option<String>,
