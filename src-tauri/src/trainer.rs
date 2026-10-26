@@ -156,11 +156,13 @@ struct Session {
     held: HashMap<u64, (u64, i32)>,
     held_for: u64,
     fuel_max: HashMap<u64, f32>,
+    /// God mode: each health component's real max health, to put back afterwards.
+    normal_health: HashMap<u64, f32>,
 }
 
 impl Session {
     fn new(ue: Ue) -> Session {
-        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new() }
+        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), normal_health: HashMap::new() }
     }
 
     fn off(&mut self, obj: u64, name: &'static str) -> Result<u64, String> {
@@ -335,13 +337,24 @@ impl Session {
                 }
             }
         }
+        // Satisfactory deals damage through its own health component, so the switch above isn't
+        // enough: give the player an enormous max health and keep it full. Restored when turned off.
+        const GOD_HEALTH: f32 = 10_000_000.0;
+        let (max_o, cur_o) = (self.off(health, "mMaxHealth")?, self.off(health, "mCurrentHealth")?);
+        let max = self.ue.p.read::<f32>(health + max_o).unwrap_or(0.0);
         if god {
-            // Also keep health topped up, in case something bypasses the switch.
-            let max = self.off(health, "mMaxHealth")?;
-            let cur = self.off(health, "mCurrentHealth")?;
-            if let Some(m) = self.ue.p.read::<f32>(health + max) {
-                self.ue.p.write(health + cur, m);
+            if max < GOD_HEALTH {
+                self.normal_health.entry(health).or_insert(max);
+                self.ue.p.write(health + max_o, GOD_HEALTH);
+                log(&format!("god health on (normal max {max})"));
             }
+            if self.ue.p.read::<f32>(health + cur_o).is_some_and(|c| c < GOD_HEALTH) {
+                self.ue.p.write(health + cur_o, GOD_HEALTH);
+            }
+        } else if let Some(normal) = self.normal_health.remove(&health) {
+            self.ue.p.write(health + max_o, normal);
+            self.ue.p.write(health + cur_o, normal);
+            log(&format!("god health off (max back to {normal})"));
         }
         // The game's own cheat switches. When a mod is off, put back what the save had.
         if let Some(gs) = self.game_state() {
