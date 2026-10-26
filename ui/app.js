@@ -985,4 +985,9 @@ const icon = (k, s = 16) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"
   } else if (state.playing && !findGame(state.playing)) state.playing = null;
   nav.stack = [{ view: state.view, game: state.game }]; nav.i = 0;
   render();
-})();
+})().catch(err => {
+  console.error(err);
+  document.querySelectorAll('.view').forEach(v => v.hidden = v.id !== 'mapsView');
+  document.querySelector('#mapsView .empty-page').innerHTML = `<h1>Hotswap couldn't start</h1>
+    <p>${esc(err?.message || err)}</p><button class="btn" onclick="location.reload()">Try again</button>`;
+});
