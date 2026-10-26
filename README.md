@@ -81,3 +81,6 @@ Hotswap is for **single-player and private games only**. It refuses to mod anyth
 - Font: [Figtree](https://github.com/erikdkennedy/figtree), SIL Open Font License
 - Game news and store data: Steam Web API and storefront; deals: [CheapShark](https://www.cheapshark.com)
 - Game artwork is read from your own Steam install and is never bundled or redistributed
+
+
+Want to join the discord? https://discord.gg/DadXW3q9Jp
