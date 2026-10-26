@@ -2,30 +2,63 @@
 
 **Swap the way you play, in real time.**
 
-Hotswap is a Windows desktop app for single-player game mods: switch mods on and off while the game runs, with hotkeys that work in-game. No ads, no paywalls.
+Hotswap is a free, open-source, ad-free mod app for **single-player** PC games on Windows. Flip mods on and off while the game is running, from the app or with hotkeys that work inside the game.
 
 > 💡 **Inspired by ArtCraft.**
-> 🤖 **Made by AI.** This app was designed and written by Claude (Anthropic's AI) in Claude Code, directed by [@Zetenypapp](https://github.com/Zetenypapp).
+> 🤖 **Made by AI.** Hotswap was designed and written by Claude (Anthropic's AI) in Claude Code, directed by [@Zetenypapp](https://github.com/Zetenypapp).
 
-> ⚠️ **Early preview:** the interface and game detection work, but **mods don't change games yet**. The mod lists are placeholders.
+> 🎮 **Game support right now: Satisfactory only.** Satisfactory is the only game with working mod settings so far. Every other game shows up in your library with art, playtime and launching, but its mod list is either empty or marked **Soon**.
 
-## ✨ Features
+![Satisfactory mod page](docs/game.png)
+
+## 🏭 Satisfactory mods
+
+All of these work live while you play. Hotswap connects to the running game, and the side panel shows **Connected. Mods are live in the game.**
+
+| | Mod | What it does |
+|---|---|---|
+| 🧍 | **Infinite Health** | You can't die from damage (falling off the map still kills you) |
+| 🧍 | **Unlimited Jetpack Fuel** | The jetpack never runs dry |
+| 🧍 | **No Fall Damage** | Land from any height |
+| 🎒 | **Infinite Items** | Inventory stacks never go down, used-up items come back |
+| 🎒 | **Easy Crafting** | Building and workbench crafting need no materials |
+| 🏃 | **Walking Speed / Jump Height / Gravity** | Sliders from 10% to 1000% (gravity down to 0 = float) |
+| 🏃 | **Game Speed / Super Speed** | Speed up or slow down the whole game |
+| 🏗️ | **Free Production** | Machines get their ingredients delivered automatically (outputs still need belts) |
+| 🏗️ | **Turbo Production** | Every machine runs at 500% clock speed |
+| 🏗️ | **No Power Required / No Fuel Needed** | Factories and generators run for free |
+
+Everything happens in the game's memory only. Nothing is written to your save file: restart the game and it's all back to normal. Still, **keep a backup save** while experimenting.
+
+## ✨ App features
 
 - 🎮 **Your real library:** finds installed Steam, Epic and GOG games, with artwork read from Steam's local cache
 - 🧰 **Games vs software:** tools like OBS or 3DMark are sorted out using Steam's own app labels
-- 🛡️ **Anti-cheat aware:** games with VAC, Easy Anti-Cheat, BattlEye or EA Javelin get no mods
-- ▶️ **Real Play button:** launches the game and detects when it's running, however you started it
-- ⌨️ **In-game hotkeys:** rebindable, with clash warnings and a panic key that turns everything off
-- ⏻ **Power and stop:** pause all mods, or close the game, from the sidebar
+- 🛡️ **Anti-cheat aware:** games with VAC, Easy Anti-Cheat, BattlEye or EA Javelin get no mods, ever
+- ▶️ **Real Play button:** launches through the game's store and detects when it's running, however you started it
+- ⌨️ **In-game hotkeys:** rebindable, with clash warnings, plus a panic key that turns every mod off
+- ⏻ **Power and stop:** pause all mods or close the game from the sidebar
 - 🗂️ **Profiles:** save mod setups per game and switch in one click
 - 📰 **Live Home:** developer news for your games, Steam deals (via CheapShark), top sellers and new releases
 - ⏱️ **Playtime and sessions:** Steam hours plus time played with Hotswap
 - 🔍 **Ctrl+K palette:** jump to any game, page, mod or action
 - 🎨 **Accent colors, tray icon, start with Windows**
 
+![Home](docs/home.png)
+![Library](docs/library.png)
+
+## ⚙️ How the mods work
+
+Hotswap is a trainer, like a friendlier Cheat Engine:
+
+1. 🔎 **Finds the engine's tables by name.** Unreal Engine games like Satisfactory ship debug symbol files. Hotswap reads them to find the list of every live object and every name in the game.
+2. 🧭 **Looks values up by name, not by hardcoded offsets.** For example "the player's `CharacterMovement` → `MaxWalkSpeed`". That's why it keeps working after game updates.
+3. ✍️ **Writes the values you pick**, twice a second, so they stick through respawns.
+4. 💉 **Calls game functions when needed.** For things like adding items, it runs the game's own `AddStack` through Unreal's `ProcessEvent`, so the game reacts properly.
+
 ## 🛠️ Built with
 
-- 🦀 **Rust + [Tauri 2](https://tauri.app)** for the app itself: library scanning, game detection, hotkeys, launching
+- 🦀 **Rust + [Tauri 2](https://tauri.app):** library scanning, game detection, hotkeys, launching, and the memory engine
 - 🌐 **Plain HTML, CSS and JavaScript** for the interface (no framework, no build step)
 
 ## 🚀 Run it
@@ -37,7 +70,11 @@ cd src-tauri
 cargo run
 ```
 
-Dev helpers: `hotswap.exe --scan` prints your detected library, `--home` prints the live Home data.
+Dev helpers: `hotswap.exe --scan` prints your detected library, `--home` prints the live Home data, `--trainer-peek` and `--machine-peek` inspect a running Satisfactory.
+
+## ⚠️ Fair play
+
+Hotswap is for **single-player and private games only**. It refuses to mod anything with anti-cheat, and you shouldn't use it to get an edge over other players.
 
 ## 📜 Credits
 
