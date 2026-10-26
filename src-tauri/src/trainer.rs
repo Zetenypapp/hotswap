@@ -322,7 +322,21 @@ impl Session {
             let o = self.off(world, "TimeDilation")?;
             self.ue.p.write(world + o, get("game-speed", 1.0).clamp(0.1, 5.0) as f32);
         }
-        if get("infinite-health", 0.0) != 0.0 || get("no-fall-damage", 0.0) != 0.0 {
+        let god = get("infinite-health", 0.0) != 0.0 || get("no-fall-damage", 0.0) != 0.0;
+        // True god mode: the engine skips all damage for actors with bCanBeDamaged off.
+        let player = self.t.player;
+        if let Some(p) = self.ue.class_of(player).and_then(|c| self.ue.prop(c, "bCanBeDamaged")) {
+            let addr = player + p.offset as u64 + p.bool_byte as u64;
+            if let Some(byte) = self.ue.p.read::<u8>(addr) {
+                let want = if god { byte & !p.bool_mask } else { byte | p.bool_mask };
+                if want != byte {
+                    let ok = self.ue.p.write(addr, want);
+                    log(&format!("bCanBeDamaged -> {} ok={ok}", !god));
+                }
+            }
+        }
+        if god {
+            // Also keep health topped up, in case something bypasses the switch.
             let max = self.off(health, "mMaxHealth")?;
             let cur = self.off(health, "mCurrentHealth")?;
             if let Some(m) = self.ue.p.read::<f32>(health + max) {
