@@ -49,6 +49,7 @@ impl Trainer {
         let me = self.clone();
         thread::spawn(move || {
             let mut session: Option<Session> = None;
+            let mut last_attach: Option<Instant> = None;
             let mut last = Status { game: None, connected: false, message: String::new() };
             loop {
                 let (game, paused, values, actions) = {
@@ -57,11 +58,14 @@ impl Trainer {
                 };
                 let status = match game.as_deref() {
                     Some(SATISFACTORY) => {
-                        if session.is_none() {
+                        // Attaching is the expensive part; try at most every 3 seconds.
+                        if session.is_none() && last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
+                            last_attach = Some(Instant::now());
                             session = pid_of(SATISFACTORY).and_then(|pid| Ue::attach(pid).ok()).map(Session::new);
                         }
                         match session.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions)) {
-                            Some(Ok(())) => Status { game: game.clone(), connected: true, message: "Connected".into() },
+                            Some(Ok(true)) => Status { game: game.clone(), connected: true, message: "Connected".into() },
+                            Some(Ok(false)) => Status { game: game.clone(), connected: false, message: "Waiting for the game to load".into() },
                             Some(Err(e)) => {
                                 session = None;
                                 Status { game: game.clone(), connected: false, message: e }
@@ -138,16 +142,25 @@ impl Session {
         let world = self.ue.find_by_class("FGWorldSettings").first().copied().unwrap_or(0);
         let sink = self.ue.find_by_class("FGResourceSinkSubsystem").first().copied().unwrap_or(0);
         self.t = Targets { player, movement, health, world, sink };
-        self.resolved_at = Some(Instant::now());
         Ok(())
     }
 
-    fn tick(&mut self, values: Option<&HashMap<String, f64>>, actions: &[String]) -> Result<(), String> {
+    /// Ok(true) when values were applied, Ok(false) while the world is still loading,
+    /// Err only when the game is gone (the caller then drops this session).
+    fn tick(&mut self, values: Option<&HashMap<String, f64>>, actions: &[String]) -> Result<bool, String> {
         if self.ue.count() == 0 {
             return Err("Game closed".into());
         }
-        if !self.still_valid() || self.resolved_at.map_or(true, |t| t.elapsed() > Duration::from_secs(20)) {
-            self.resolve()?;
+        if !self.still_valid() {
+            // Scanning every object is heavy, so while loading only look every 2 seconds.
+            if self.resolved_at.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
+                return Ok(false);
+            }
+            self.resolved_at = Some(Instant::now());
+            if self.resolve().is_err() {
+                self.t = Targets::default();
+                return Ok(false);
+            }
         }
         let Targets { movement, health, world, sink, .. } = self.t;
 
@@ -196,6 +209,6 @@ impl Session {
                 self.ue.p.write(sink + o, n.saturating_add(1000));
             }
         }
-        Ok(())
+        Ok(true)
     }
 }

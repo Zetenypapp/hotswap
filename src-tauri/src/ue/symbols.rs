@@ -5,8 +5,21 @@ use pdb::{FallibleIterator, SymbolData, PDB};
 use std::{fs::File, path::Path};
 
 /// Relative virtual address of the first symbol whose name contains `needle`.
-/// Searches public symbols first, then each module's private ones (statics live there).
+/// Results are cached for the life of the app: reading a .pdb costs tens of MB.
 pub fn find_rva(pdb_path: &Path, needle: &str) -> Result<u32, String> {
+    use std::{collections::HashMap, sync::Mutex};
+    static CACHE: Mutex<Option<HashMap<(std::path::PathBuf, String), u32>>> = Mutex::new(None);
+    let key = (pdb_path.to_path_buf(), needle.to_string());
+    if let Some(&rva) = CACHE.lock().unwrap().as_ref().and_then(|c| c.get(&key)) {
+        return Ok(rva);
+    }
+    let rva = lookup(pdb_path, needle)?;
+    CACHE.lock().unwrap().get_or_insert_with(HashMap::new).insert(key, rva);
+    Ok(rva)
+}
+
+/// Searches public symbols first, then each module's private ones (statics live there).
+fn lookup(pdb_path: &Path, needle: &str) -> Result<u32, String> {
     let file = File::open(pdb_path).map_err(|e| format!("{}: {e}", pdb_path.display()))?;
     let mut pdb = PDB::open(file).map_err(|e| e.to_string())?;
     let address_map = pdb.address_map().map_err(|e| e.to_string())?;
