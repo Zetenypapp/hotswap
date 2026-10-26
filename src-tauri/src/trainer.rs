@@ -76,7 +76,11 @@ impl Trainer {
                             session = pid_of(SATISFACTORY).and_then(|pid| Ue::attach(pid).ok()).map(Session::new);
                         }
                         let started = Instant::now();
-                        let result = session.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions));
+                        // A panic here (bad memory from a game that's loading or closing) must not kill the trainer.
+                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            session.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions))
+                        }))
+                        .unwrap_or_else(|_| Some(Err("Lost track of the game, reconnecting".into())));
                         if started.elapsed() > Duration::from_millis(400) {
                             log(&format!("slow tick: {:?}", started.elapsed()));
                         }
