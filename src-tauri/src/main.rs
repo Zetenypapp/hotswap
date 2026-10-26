@@ -277,6 +277,35 @@ fn main() {
         }
         return;
     }
+    // Dev aid: `hotswap --call-test` adds 10 iron plates to the player's inventory via AddStack.
+    if std::env::args().any(|a| a == "--call-test") {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let pid = sys.processes().values().find(|p| p.name().to_string_lossy().contains("FactoryGameSteam-Win64-Shipping")).map(|p| p.pid().as_u32());
+        let Some(u) = pid.and_then(|p| ue::objects::Ue::attach(p).ok()) else { println!("not attached"); return };
+        println!("ProcessEvent = 0x{:X}", u.process_event);
+        let Some(f) = u.func("FGInventoryComponent", "AddStack") else { println!("AddStack not found"); return };
+        println!("AddStack 0x{:X} params {:?}", f.addr, f.params);
+        let plate = u.find_class("Desc_IronPlate_C").unwrap_or(0);
+        let player = u.find_by_class("Char_Player_C").into_iter().find(|&p| {
+            u.class_of(p).and_then(|c| u.prop(c, "Controller")).and_then(|o| u.p.ptr(p + o.offset as u64)).is_some()
+        });
+        let Some(player) = player else { println!("no player"); return };
+        let inv = u.class_of(player).and_then(|c| u.prop(c, "mInventory")).and_then(|o| u.p.ptr(player + o.offset as u64)).unwrap_or(0);
+        let off = |n: &str| f.params.iter().find(|p| p.0 == n).map(|p| p.1);
+        let mut params = vec![0u8; f.size as usize];
+        let st = off("stack").or_else(|| off("Stack")).unwrap_or(0) as usize;
+        params[st + 8..st + 16].copy_from_slice(&plate.to_le_bytes());
+        params[st + 0x28..st + 0x2C].copy_from_slice(&10i32.to_le_bytes());
+        match u.call(u.process_event, inv, &f, &params) {
+            Ok(out) => {
+                let ret = off("ReturnValue").map(|o| i32::from_le_bytes(out[o as usize..o as usize + 4].try_into().unwrap()));
+                println!("called OK, added {ret:?}");
+            }
+            Err(e) => println!("call failed: {e}"),
+        }
+        return;
+    }
     // Dev aid: `hotswap --machine-peek <Build_X_C>` shows a machine's recipe and input slots.
     if let Some(i) = std::env::args().position(|a| a == "--machine-peek") {
         let cls_name = std::env::args().nth(i + 1).unwrap_or_default();

@@ -174,6 +174,7 @@ struct Session {
     jetpacks_at: Option<Instant>,
     recipe_addr: HashMap<u64, u64>,
     stack_sizes: HashMap<u64, i32>,
+    add_stack_fn: Option<Option<crate::ue::call::Func>>,
     recipe_cache: HashMap<u64, Vec<(u64, i32)>>,
     /// Recipes made ingredient-free: count address -> (real count, [by workbench, by machines]).
     zeroed: HashMap<u64, (i32, [bool; 2])>,
@@ -187,7 +188,7 @@ struct Session {
 impl Session {
     fn new(ue: Ue) -> Session {
         Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), turbo_orig: HashMap::new(), turbo_at: None, normal_health: HashMap::new(), gs_search: None, jetpacks: Vec::new(), jetpacks_at: None,
-            recipe_addr: HashMap::new(), stack_sizes: HashMap::new(), recipe_cache: HashMap::new(), zeroed: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None }
+            recipe_addr: HashMap::new(), stack_sizes: HashMap::new(), add_stack_fn: None, recipe_cache: HashMap::new(), zeroed: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None }
     }
 
     fn off(&mut self, obj: u64, name: &'static str) -> Result<u64, String> {
@@ -382,6 +383,31 @@ impl Session {
         n
     }
 
+    /// Adds items to an inventory through the game's own `UFGInventoryComponent::AddStack`.
+    fn add_stack(&mut self, inv: u64, item: u64, count: i32) -> bool {
+        if self.ue.process_event == 0 {
+            return false;
+        }
+        if self.add_stack_fn.is_none() {
+            self.add_stack_fn = Some(self.ue.func("FGInventoryComponent", "AddStack"));
+        }
+        let Some(Some(f)) = &self.add_stack_fn else { return false };
+        let Some(st) = f.params.iter().find(|p| p.0.eq_ignore_ascii_case("stack")).map(|p| p.1 as usize) else { return false };
+        let mut params = vec![0u8; f.size as usize];
+        params[st + 8..st + 16].copy_from_slice(&item.to_le_bytes());
+        params[st + 0x28..st + 0x2C].copy_from_slice(&count.to_le_bytes());
+        if let Some(o) = f.params.iter().find(|p| p.0 == "allowPartialAdd") {
+            params[o.1 as usize] = 1;
+        }
+        match self.ue.call(self.ue.process_event, inv, f, &params) {
+            Ok(_) => true,
+            Err(e) => {
+                log(&format!("AddStack failed: {e}"));
+                false
+            }
+        }
+    }
+
     /// Free production: keep every machine stocked with its recipe's ingredients.
     fn free_machines(&mut self) -> Result<(), String> {
         if self.fed_at.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
@@ -397,6 +423,7 @@ impl Session {
         // Machines keep their own copy of the ingredient list, so instead of changing the recipe,
         // keep each input slot stocked with what the machine's cached recipe asks for.
         const STACK: u64 = 0x30;
+        let mut calls = 0;
         for m in self.machines.clone() {
             let (Ok(ro), Ok(io)) = (self.off(m, "mCachedRecipe"), self.off(m, "mInputInventory")) else { continue };
             let (Some(recipe), Some(inv)) = (self.ue.p.ptr(m + ro), self.ue.p.ptr(m + io)) else { continue };
@@ -408,7 +435,15 @@ impl Session {
                 }
                 let slot = data + i as u64 * STACK;
                 let want = self.stack_size(item).max(amount);
-                if self.ue.p.read::<i32>(slot + 0x28).unwrap_or(0) < want {
+                let have = self.ue.p.read::<i32>(slot + 0x28).unwrap_or(0);
+                if have >= want {
+                    continue;
+                }
+                // Add through the game's own AddStack so the machine notices and starts.
+                // Plain memory write as a fallback, capped per cycle to go easy on the game.
+                if calls < 40 && self.add_stack(inv, item, want - have) {
+                    calls += 1;
+                } else {
                     self.ue.p.write(slot + 8, item);
                     self.ue.p.write(slot + 0x28, want);
                 }

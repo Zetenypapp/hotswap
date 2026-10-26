@@ -38,6 +38,8 @@ pub struct Ue {
     pub p: Proc,
     objects: u64,
     names: u64,
+    /// UObject::ProcessEvent, for calling script functions (0 if not found).
+    pub process_event: u64,
     name_cache: std::sync::Mutex<HashMap<u32, String>>,
 }
 
@@ -51,6 +53,7 @@ impl Ue {
         let ue = Ue {
             objects: core_uobj + rva(&cu_path, "GUObjectArray")? as u64,
             names: core + rva(&c_path, "NamePoolData")? as u64,
+            process_event: rva(&cu_path, "ProcessEvent@UObject@@").map_or(0, |r| core_uobj + r as u64),
             p,
             name_cache: Default::default(),
         };
