@@ -1,7 +1,8 @@
-//! Reads the local Steam install: library folders, installed games, and the
-//! artwork Steam already caches for them. Nothing is downloaded or copied.
+//! Reads the local Steam install: library folders, installed games, playtime, and
+//! the artwork Steam already caches for them. Nothing is downloaded or copied.
+//! Also defines the shared `Game` shape that the Epic and GOG scanners fill in.
 
-use crate::appinfo;
+use crate::{appinfo, vdf};
 use serde::Serialize;
 use std::{
     collections::{HashMap, HashSet},
@@ -20,30 +21,47 @@ pub struct Art {
     header: Option<String>,
 }
 
+/// How to start a game.
+#[derive(Clone, Default)]
+pub enum Launch {
+    #[default]
+    None,
+    /// A launcher URL such as `steam://rungameid/526870`.
+    Url(String),
+    Exe { path: PathBuf, dir: PathBuf },
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Game {
-    app_id: u32,
-    name: String,
-    install_dir: String,
-    library: String,
-    size_on_disk: u64,
-    last_played: u64,
+    /// Steam app ID as text, or `epic:<AppName>` / `gog:<id>`.
+    pub id: String,
+    /// "steam", "epic" or "gog"
+    pub source: &'static str,
+    /// Steam app ID; 0 for other stores.
+    pub app_id: u32,
+    pub name: String,
+    pub size_on_disk: u64,
+    pub last_played: u64,
+    /// Minutes played, from Steam's local stats (0 when unknown).
+    pub playtime: u64,
     /// "game" or "software"
-    kind: &'static str,
+    pub kind: &'static str,
     /// Steam's own label (e.g. "game", "tool", "application"), when appinfo.vdf has one.
-    steam_type: Option<String>,
+    pub steam_type: Option<String>,
     /// Anti-cheat systems detected, e.g. ["VAC"] or ["Easy Anti-Cheat"]. Empty if none found.
-    anticheat: Vec<&'static str>,
-    art: Art,
+    pub anticheat: Vec<&'static str>,
+    pub art: Art,
+    #[serde(skip)]
+    pub install: PathBuf,
+    #[serde(skip)]
+    pub launch: Launch,
 }
 
 impl Game {
     /// Game ID and install folder, for running-game detection. Software is skipped.
     pub fn watch_target(&self) -> Option<(String, PathBuf)> {
-        (self.kind == "game" && !self.install_dir.is_empty()).then(|| {
-            (self.app_id.to_string(), PathBuf::from(&self.library).join("steamapps").join("common").join(&self.install_dir))
-        })
+        (self.kind == "game" && self.install.as_os_str().len() > 3).then(|| (self.id.clone(), self.install.clone()))
     }
 }
 
@@ -58,17 +76,18 @@ pub struct Scan {
 const NOT_GAMES: &[u32] = &[228980, 250820, 1070560, 1391110, 1628350];
 const NOT_GAME_WORDS: &[&str] = &["Redistributable", "Steamworks", "Steam Linux Runtime", "Proton", "Dedicated Server", "Soundtrack"];
 
-/// Backup for when Steam's own type is missing: well-known software people keep in their Steam library.
+/// Backup for when a store's own type is missing: well-known software people keep in their library.
 const KNOWN_SOFTWARE: &[&str] = &[
     "obs studio", "3dmark", "pcmark", "vrmark", "wallpaper engine", "tacview", "crosshair x", "lossless scaling",
     "soundpad", "steamvr", "blender", "vtube studio", "voicemod", "fpsvr", "ovr advanced settings", "ovr toolkit",
     "virtual desktop", "desktop+", "aseprite", "rpg maker", "gamemaker", "source filmmaker", "source sdk", "furmark",
     "superposition benchmark", "shotcut", "krita", "clip studio paint", "substance", "houdini", "moho", "goxel",
     "bandicam", "action!", "streamlabs", "fl studio", "magix", "vegas pro", "ableton", "spacedesk", "duet display",
+    "unreal engine", "unity hub",
 ];
 
 /// Steam types that count as playable. Everything else Steam labels (tool, application, video, ...) is software.
-fn kind_of(steam_type: Option<&str>, name: &str) -> &'static str {
+pub fn kind_of(steam_type: Option<&str>, name: &str) -> &'static str {
     match steam_type {
         Some("game" | "demo" | "mod" | "beta") => "game",
         Some(_) => "software",
@@ -79,12 +98,22 @@ fn kind_of(steam_type: Option<&str>, name: &str) -> &'static str {
     }
 }
 
+/// Every installed game from Steam, Epic and GOG.
 pub fn scan() -> Scan {
+    let mut scan = scan_steam();
+    scan.games.extend(crate::epic::scan());
+    scan.games.extend(crate::gog::scan());
+    scan.games.sort_by(|a, b| b.last_played.cmp(&a.last_played).then_with(|| a.name.cmp(&b.name)));
+    scan
+}
+
+fn scan_steam() -> Scan {
     let Some(root) = steam_root() else {
         return Scan { root: None, libraries: vec![], games: vec![] };
     };
     let libraries = library_paths(&root);
     let cache = root.join("appcache").join("librarycache");
+    let playtime = playtimes(&root);
     let mut games = Vec::new();
 
     for lib in &libraries {
@@ -101,17 +130,22 @@ pub fn scan() -> Scan {
             if name.is_empty() || NOT_GAMES.contains(&app_id) || NOT_GAME_WORDS.iter().any(|w| name.contains(w)) {
                 continue;
             }
+            let install_dir = kv.get("installdir").cloned().unwrap_or_default();
+            let (minutes, played) = playtime.get(&app_id).copied().unwrap_or_default();
             games.push(Game {
+                id: app_id.to_string(),
+                source: "steam",
                 app_id,
                 name,
-                install_dir: kv.get("installdir").cloned().unwrap_or_default(),
-                library: lib.to_string_lossy().to_string(),
                 size_on_disk: kv.get("SizeOnDisk").and_then(|v| v.parse().ok()).unwrap_or(0),
-                last_played: kv.get("LastPlayed").and_then(|v| v.parse().ok()).unwrap_or(0),
+                last_played: kv.get("LastPlayed").and_then(|v| v.parse().ok()).unwrap_or(0).max(played),
+                playtime: minutes,
                 kind: "game",
                 steam_type: None,
                 anticheat: Vec::new(),
                 art: find_art(&cache, app_id),
+                install: if install_dir.is_empty() { PathBuf::new() } else { lib.join("steamapps").join("common").join(install_dir) },
+                launch: Launch::Url(format!("steam://rungameid/{app_id}")),
             });
         }
     }
@@ -122,11 +156,8 @@ pub fn scan() -> Scan {
         let f = fields.remove(&g.app_id).unwrap_or_default();
         g.steam_type = f.get("common/type").map(|t| t.to_ascii_lowercase());
         g.kind = kind_of(g.steam_type.as_deref(), &g.name);
-        let dir = PathBuf::from(&g.library).join("steamapps").join("common").join(&g.install_dir);
-        g.anticheat = detect_anticheat(&f, &dir);
+        g.anticheat = detect_anticheat(&f, &g.install);
     }
-
-    games.sort_by(|a, b| b.last_played.cmp(&a.last_played).then_with(|| a.name.cmp(&b.name)));
     games.dedup_by_key(|g| g.app_id);
 
     Scan {
@@ -136,9 +167,31 @@ pub fn scan() -> Scan {
     }
 }
 
+/// (minutes played, last played) per app from the most recently used Steam account's localconfig.vdf.
+fn playtimes(root: &Path) -> HashMap<u32, (u64, u64)> {
+    let mut out = HashMap::new();
+    let newest = fs::read_dir(root.join("userdata"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path().join("config").join("localconfig.vdf"))
+        .filter_map(|p| Some((fs::metadata(&p).ok()?.modified().ok()?, p)))
+        .max_by_key(|(t, _)| *t);
+    let Some((_, path)) = newest else { return out };
+    let Ok(text) = fs::read_to_string(path) else { return out };
+    let doc = vdf::parse(&text);
+    let Some(apps) = doc.path(&["UserLocalConfigStore", "Software", "Valve", "Steam", "apps"]) else { return out };
+    for (id, app) in apps.entries() {
+        let Ok(id) = id.parse::<u32>() else { continue };
+        let num = |k| app.get(k).and_then(|n| n.str()).and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+        out.insert(id, (num("Playtime"), num("LastPlayed")));
+    }
+    out
+}
+
 /// Steam's data first (VAC category flag, the anti-cheat support link Steam shows on store
 /// pages), then well-known anti-cheat files within two folder levels of the install.
-fn detect_anticheat(f: &appinfo::Fields, install: &Path) -> Vec<&'static str> {
+pub fn detect_anticheat(f: &appinfo::Fields, install: &Path) -> Vec<&'static str> {
     let mut found: Vec<&'static str> = Vec::new();
     let mut add = |name| if !found.contains(&name) { found.push(name) };
 
@@ -153,6 +206,9 @@ fn detect_anticheat(f: &appinfo::Fields, install: &Path) -> Vec<&'static str> {
         } else {
             "Anti-cheat"
         });
+    }
+    if install.as_os_str().is_empty() {
+        return found;
     }
 
     let mut dirs = vec![install.to_path_buf()];

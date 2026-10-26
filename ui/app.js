@@ -9,7 +9,7 @@ const appWin = tauri?.window?.getCurrentWindow?.();
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const initials = n => n.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-const hue = id => `hsl(${(id * 47) % 360} 55% 55%)`;
+const hue = id => `hsl(${([...String(id)].reduce((h, c) => h * 31 + c.charCodeAt(0), 7) * 47 >>> 0) % 360} 55% 55%)`;
 const steamCdn = (app, file) => `https://cdn.akamai.steamstatic.com/steam/apps/${app}/${file}`;
 const img = (src, cls = '') => src ? `<img class="${cls}" src="${esc(src)}" alt="" loading="lazy" onerror="this.remove()">` : '';
 const ext = 'target="_blank" rel="noopener"';
@@ -43,7 +43,7 @@ function comboFromEvent(e) {
 const DEFAULTS = {
   view: 'home', game: null, playing: null, fav: {}, closed: {}, notes: {}, log: [],
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
-  showSoftware: true, softOpen: false,
+  showSoftware: true, softOpen: false, closeToTray: true,
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
 };
 let state = { ...DEFAULTS };
@@ -53,13 +53,14 @@ let RUNNING = null;          // game ID reported by the watcher (desktop app onl
 let sessionStart = null;     // when the current RUNNING session began
 let launching = null;        // { id, timer } while waiting for a launched game to appear
 let capture = null;          // { gid, mid, dir } while rebinding a key; mid is null for the panic key
+let AUTOSTART = false;       // read from Windows at boot; the setting lives there, not in state
 let profileMenu = false;     // profile popover open
 let newProfile = false;      // profile popover showing the name field
 
 /* ---------- Persistence ---------- */
 async function loadState() {
   try {
-    const raw = invoke ? await invoke('load_state') : localStorage.getItem('tinker');
+    const raw = invoke ? await invoke('load_data', { name: 'state' }) : localStorage.getItem('tinker');
     if (raw) state = { ...DEFAULTS, ...JSON.parse(raw.replace(/^﻿/, '')) };
   } catch { /* first launch or unreadable file: keep defaults */ }
   // Log lines saved while app.js was briefly mis-encoded have a mangled arrow.
@@ -75,28 +76,32 @@ function save() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     const data = JSON.stringify(state);
-    if (invoke) invoke('save_state', { data }).catch(err => console.error('save failed', err));
+    if (invoke) invoke('save_data', { name: 'state', data }).catch(err => console.error('save failed', err));
     else try { localStorage.setItem('tinker', data); } catch { }
   }, 250);
 }
 
 /* ---------- Library ---------- */
+const SOURCES = { steam: 'Steam', epic: 'Epic Games', gog: 'GOG' };
+
 function buildGame(raw) {
-  const c = CATALOG[raw.appId];
+  const appId = raw.appId || 0;
+  const c = appId ? CATALOG[appId] : null;
   const art = raw.art || {};
   const g = {
-    id: String(raw.appId), appId: raw.appId, name: raw.name, lastPlayed: raw.lastPlayed || 0, size: raw.sizeOnDisk || 0,
+    id: raw.id || String(appId), appId, source: raw.source || 'steam', name: raw.name,
+    lastPlayed: raw.lastPlayed || 0, size: raw.sizeOnDisk || 0, playtime: raw.playtime || 0,
     software: raw.kind === 'software', steamType: raw.steamType || null, anticheat: raw.anticheat || [],
-    genre: c?.genre || '', solo: !!c?.solo, color: hue(raw.appId),
+    genre: c?.genre || '', solo: !!c?.solo, color: hue(raw.id || appId),
     // Anti-cheat games never get mods, even if the catalog has some.
     cats: raw.anticheat?.length ? [] : c?.cats || [],
     art: {
       icon: fileSrc(art.icon), logo: fileSrc(art.logo), hero: fileSrc(art.hero), heroBlur: fileSrc(art.heroBlur),
-      capsule: fileSrc(art.capsule) || (invoke ? null : steamCdn(raw.appId, 'library_600x900.jpg')),
-      header: fileSrc(art.header) || steamCdn(raw.appId, 'header.jpg'),
+      capsule: fileSrc(art.capsule) || (!invoke && appId ? steamCdn(appId, 'library_600x900.jpg') : null),
+      header: fileSrc(art.header) || (appId ? steamCdn(appId, 'header.jpg') : null),
     },
   };
-  if (!invoke) { g.art.hero = steamCdn(raw.appId, 'library_hero.jpg'); g.art.logo = steamCdn(raw.appId, 'logo.png'); }
+  if (!invoke) { g.art.hero = steamCdn(appId, 'library_hero.jpg'); g.art.logo = steamCdn(appId, 'logo.png'); }
   let i = 0;
   g.cats.forEach(cat => cat.mods.forEach(m => {
     m.id = m.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -108,7 +113,7 @@ function buildGame(raw) {
 async function scanLibrary() {
   if (invoke) {
     try {
-      const scan = await invoke('scan_steam');
+      const scan = await invoke('scan_library');
       STEAM = { root: scan.root, libraries: scan.libraries };
       LIB = scan.games.map(buildGame);
       return;
@@ -124,6 +129,12 @@ const findGame = id => LIB.find(g => g.id === String(id));
 const game = () => findGame(state.game) || LIB[0];
 // In the desktop app "running" comes from the watcher; in a browser preview Play simulates it.
 const runningId = () => invoke ? RUNNING : state.playing;
+const hours = min => min >= 60 ? `${Math.round(min / 60).toLocaleString()} h` : `${min} min`;
+const duration = ms => { const m = Math.max(1, Math.round(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; };
+const ago = sec => {
+  const m = Math.round((Date.now() / 1000 - sec) / 60);
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
+};
 const isLive = g => !!g && runningId() === g.id;
 
 /* ---------- Profiles: each game has named sets of mod values ---------- */
@@ -272,48 +283,94 @@ function renderHome() {
       ${total ? `<span class="badge">${n ? `<b>${n}</b> active` : `${total} mods`}</span>` : ''}</button>`;
   }).join('');
 
-  const news = NEWS.filter(n => {
+  const H = HOME || snapshotHome();
+  const news = H.news.filter(n => {
     const g = findGame(n.app);
     return match(n.title) || (g && match(g.name));
-  }).map(n => {
+  }).map((n, i) => {
     const g = findGame(n.app);
     const name = g?.name || DEMO_LIBRARY.find(d => d.appId === n.app)?.name || '';
-    const feature = n.feature && !q;
+    const feature = i === 0 && !q;
     const bg = g?.art.hero || g?.art.header;
     const who = feature && g?.art.logo ? img(g.art.logo, 'logo') : `<span class="who">${g ? tile(g, '', false) : ''}${esc(name)}</span>`;
-    return `<a class="news${feature ? ' feature' : ''}" style="--c:${g?.color || hue(n.app)}" href="https://store.steampowered.com/news/app/${n.app}" ${ext}>
+    const when = new Date(n.date * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `<a class="news${feature ? ' feature' : ''}" style="--c:${g?.color || hue(n.app)}" href="${esc(n.url)}" ${ext}>
       ${bg ? `<span class="bg" style="background-image:url('${esc(bg)}')"></span><span class="shade"></span>` : ''}
       ${who}<h3>${esc(n.title)}</h3>${n.text && feature ? `<p>${esc(n.text)}</p>` : ''}
-      <span class="src">${shortDate(n.date)} · ${esc(n.src)}</span></a>`;
+      <span class="src">${when} · ${esc(n.src || 'Steam announcement')}</span></a>`;
   }).join('');
 
-  const deals = DEALS.filter(d => match(d.t)).map(d => `<a class="deal" style="--c:${hue(d.app)}" href="https://store.steampowered.com/app/${d.app}/" ${ext}>
+  const deals = H.deals.filter(d => match(d.t)).map(d => `<a class="deal" style="--c:${hue(d.app)}" href="https://store.steampowered.com/app/${d.app}/" ${ext}>
       <span class="art">${img(steamCdn(d.app, 'header.jpg'))}<span class="off">−${d.off}%</span></span>
       <span class="body"><span class="t">${esc(d.t)}</span>
       <span class="price"><b>${money(d.sale)}</b><s>${money(d.was)}</s></span>
-      <span class="rating">${esc(d.rating)}</span></span></a>`).join('');
+      ${d.rating ? `<span class="rating">${esc(d.rating)}</span>` : ''}</span></a>`).join('');
 
   const rankList = list => `<ol class="rank">${list.filter(x => match(x.t)).map((x, i) => `<li><a href="https://store.steampowered.com/app/${x.app}/" ${ext}>
       <span class="i">${i + 1}</span><span class="thumb">${img(steamCdn(x.app, 'header.jpg'), 'thumb')}</span>
       <span class="nm">${esc(x.t)}${x.note ? `<small>${x.note}</small>` : ''}</span>
-      <span class="pr">${x.off ? `<em>−${x.off}%</em>` : ''}${money(x.price)}</span></a></li>`).join('') || '<li class="empty" style="padding:10px">No matches.</li>'}</ol>`;
+      <span class="pr">${x.off ? `<em>−${x.off}%</em>` : ''}${x.price ? money(x.price) : 'Free'}</span></a></li>`).join('') || '<li class="empty" style="padding:10px">No matches.</li>'}</ol>`;
 
   $('homeBody').innerHTML = `
     <div class="hello"><h1>${hi}</h1><p>Pick up where you left off, or see what's new with your games.</p></div>
     ${jump ? `<section><div class="sec-head"><h2>Jump back in</h2><span>Recently played</span></div><div class="jump">${jump}</div></section>` : ''}
-    <section><div class="sec-head"><h2>From your games</h2><span>Steam news for games in your library</span></div>
+    <section><div class="sec-head"><h2>From your games</h2><span>Announcements from the developers of your recent games</span></div>
       <div class="news-grid">${news || '<p class="empty">No news matches your search.</p>'}</div></section>
     <div class="cols">
       <section><div class="sec-head"><h2>Hot deals</h2><span>Top-rated Steam discounts</span><a href="https://www.cheapshark.com/" ${ext}>More on CheapShark →</a></div>
         <div class="deal-grid">${deals || '<p class="empty">No deals match your search.</p>'}</div></section>
       <section>
         <div class="sec-head"><h2>Top sellers</h2><a href="https://steamdb.info/charts/" ${ext}>SteamDB charts →</a></div>
-        <div class="listcard">${rankList(TOP)}</div>
+        <div class="listcard">${rankList(H.top)}</div>
         <div class="sec-head"><h2>New on Steam</h2></div>
-        <div class="listcard">${rankList(NEW_RELEASES)}</div>
+        <div class="listcard">${rankList(H.newReleases)}</div>
       </section>
     </div>
-    <p class="stamp">News and prices are a snapshot from ${SNAPSHOT} (Steam, CheapShark). Live updates are coming in a later version.</p>`;
+    <p class="stamp">${H.fetchedAt
+      ? `Updated ${ago(H.fetchedAt)} from Steam and CheapShark. Prices in USD.`
+      : `Showing a saved snapshot from ${SNAPSHOT}.`}
+      ${invoke ? `<button class="linkbtn" id="homeRefresh"${homeLoading ? ' disabled' : ''}>${homeLoading ? 'Updating…' : 'Refresh'}</button>` : ''}</p>`;
+}
+
+/* ---------- Home data: live from Steam and CheapShark, cached on disk ---------- */
+let HOME = null;
+let homeLoading = false;
+function snapshotHome() {
+  return {
+    fetchedAt: 0,
+    news: NEWS.map(n => ({ app: n.app, title: n.title, text: n.text || '', src: n.src, url: `https://store.steampowered.com/news/app/${n.app}`, date: Date.parse(n.date + 'T12:00:00') / 1000 })),
+    deals: DEALS, top: TOP, newReleases: NEW_RELEASES,
+  };
+}
+async function loadHome() {
+  try {
+    const raw = invoke && await invoke('load_data', { name: 'home' });
+    HOME = raw ? JSON.parse(raw) : snapshotHome();
+  } catch { HOME = snapshotHome(); }
+  if (invoke && Date.now() / 1000 - (HOME.fetchedAt || 0) > 3600) refreshHome(false);
+}
+async function refreshHome(manual) {
+  if (!invoke || homeLoading) return;
+  homeLoading = true;
+  if (state.view === 'home') renderHome();
+  const appIds = gamesOnly().filter(g => g.appId).sort((a, b) => b.lastPlayed - a.lastPlayed).slice(0, 8).map(g => g.appId);
+  try {
+    const fresh = await invoke('fetch_home', { appIds });
+    if (fresh.failed.length === 3) {
+      if (manual) toast("Couldn't reach Steam or CheapShark", 'check your connection');
+    } else {
+      // Keep the previous data for any source that failed this time.
+      const next = { ...fresh };
+      if (fresh.failed.includes('news')) next.news = HOME.news;
+      if (fresh.failed.includes('deals')) next.deals = HOME.deals;
+      if (fresh.failed.includes('store')) { next.top = HOME.top; next.newReleases = HOME.newReleases; }
+      HOME = next;
+      invoke('save_data', { name: 'home', data: JSON.stringify(HOME) }).catch(console.error);
+      if (manual) toast('Home', 'updated');
+    }
+  } catch (err) { console.error('Home refresh failed', err); }
+  homeLoading = false;
+  if (state.view === 'home') renderHome();
 }
 
 function renderLibrary() {
@@ -332,7 +389,10 @@ function renderLibrary() {
     <div class="lib-grid">${list.map(g => {
       const n = activeCount(g), total = modsOf(g).length;
       return `<button class="lib-item" data-game="${g.id}"><span class="art">${capsule(g)}${n ? `<span class="modded">${n} active</span>` : ''}</span>
-        <span class="nm">${esc(g.name)}</span><span class="sub">${g.software ? 'Software' : g.anticheat.length ? 'Anti-cheat' : total ? `${total} mods` : 'No mods yet'}${g.size ? ` · ${gb(g.size)}` : ''}</span></button>`;
+        <span class="nm">${esc(g.name)}</span><span class="sub">${[
+          g.software ? 'Software' : g.anticheat.length ? 'Anti-cheat' : total ? `${total} mods` : 'No mods yet',
+          g.playtime ? hours(g.playtime) : '', g.source !== 'steam' ? SOURCES[g.source] : '',
+        ].filter(Boolean).join(' · ')}</span></button>`;
     }).join('') || '<p class="empty">Nothing here yet.</p>'}</div>`;
 }
 
@@ -354,8 +414,16 @@ function renderSettings() {
         <button class="key bindable${listeningPanic ? ' listening' : ''}" id="panicBind">${listeningPanic ? 'Press a key…' : esc(comboLabel(state.panicKey))}</button></div>
       <div class="set-row"><div class="txt"><b>Reset all key bindings</b><span>Puts every mod back on its default hotkey.</span></div><button class="btn" id="resetBinds">Reset</button></div>
     </div>
-    <div class="set-group"><h2>Steam</h2>
-      <div class="set-row"><div class="txt"><b>Steam install</b><span>${esc(STEAM.root || 'Not found. Showing demo games.')}</span></div><button class="btn" id="rescanBtn">Rescan</button></div>
+    ${invoke ? `<div class="set-group"><h2>Startup and tray</h2>
+      <div class="set-row"><div class="txt"><b>Start with Windows</b><span>Tinker opens quietly in the tray when you sign in, so hotkeys are ready when you start a game.</span></div>${sw('setAutostart', AUTOSTART)}</div>
+      <div class="set-row"><div class="txt"><b>Close to tray</b><span>The close button hides Tinker in the tray instead of quitting. Quit from the tray icon's menu.</span></div>${sw('setTray', state.closeToTray)}</div>
+    </div>` : ''}
+    <div class="set-group"><h2>Library</h2>
+      <div class="set-row"><div class="txt"><b>Steam install</b><span>${esc(STEAM.root || 'Not found.')}</span></div><button class="btn" id="rescanBtn">Rescan</button></div>
+      <div class="set-row"><div class="txt"><b>Other stores</b><span>${(() => {
+        const n = s => LIB.filter(g => g.source === s).length;
+        return `Epic Games: ${n('epic') ? `${n('epic')} found` : 'none installed'}. GOG: ${n('gog') ? `${n('gog')} found` : 'none installed'}.`;
+      })()}</span></div></div>
       ${STEAM.root ? `<div class="set-row"><div class="txt"><b>Games and software</b><span>${gamesOnly().length} games and ${softwareOnly().length} software, sorted using Steam's own app labels${LIB.some(g => !g.steamType) ? ', with a list of common tools as a backup' : ''}.</span></div></div>` : ''}
       ${STEAM.libraries.length ? `<div class="set-row"><div class="txt"><b>Library folders</b><span>${STEAM.libraries.map(esc).join('<br>')}</span></div></div>` : ''}
     </div>
@@ -393,19 +461,26 @@ function renderGame() {
     ${cover}
     <div><div class="gh-title"><h1>${esc(g.name)}</h1>
       <button class="ghost${fav ? ' on' : ''}" id="favBtn" aria-pressed="${!!fav}" aria-label="Favorite" title="Favorite"><svg width="20" height="20" viewBox="0 0 24 24" fill="${fav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg></button></div>
-      <div class="gh-sub">${[g.software ? 'Software' : g.genre, g.software ? '' : g.anticheat.length ? 'Mods off' : total ? `${total} mods` : 'No mods yet', g.solo ? 'Solo or private sessions only' : ''].filter(Boolean).join(' · ')}</div>
+      <div class="gh-sub">${[
+        g.software ? 'Software' : g.genre,
+        g.software ? '' : g.anticheat.length ? 'Mods off' : total ? `${total} mods` : 'No mods yet',
+        g.playtime ? `${hours(g.playtime)} played` : '',
+        g.source !== 'steam' ? SOURCES[g.source] : '',
+        g.solo ? 'Solo or private sessions only' : '',
+      ].filter(Boolean).join(' · ')}</div>
       ${g.anticheat.length ? `<div class="ac-note"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5z"/></svg>Uses ${esc(g.anticheat.join(' and '))}. Modding it can get your account banned.</div>` : ''}</div>
     <div class="gh-actions">
       ${total ? `${profileControl(g)}
-      <button class="roundbtn" id="resetBtn" aria-label="Turn off all mods" title="Turn off all mods"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
-      <button class="roundbtn${state.panel ? ' on' : ''}" id="panelBtn" aria-pressed="${state.panel}" aria-label="Side panel" title="Side panel"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button>` : ''}
+      <button class="roundbtn" id="resetBtn" aria-label="Turn off all mods" title="Turn off all mods"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>` : ''}
+      <button class="roundbtn${state.panel ? ' on' : ''}" id="panelBtn" aria-pressed="${state.panel}" aria-label="Side panel" title="Side panel"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button>
       ${live
         ? `<button class="play live" id="playBtn" title="${total ? 'Turn off all mods' : 'Running'}">Playing ${total ? '<span class="x" aria-hidden="true">✕</span>' : ''}</button>`
         : busy
           ? `<button class="play busy" disabled><span class="spin"></span>Launching</button>`
           : `<button class="play" id="playBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>Play</button>`}
     </div>`;
-  $('content').classList.toggle('no-panel', !state.panel || !total);
+  $('content').classList.toggle('no-panel', !state.panel);
+  $('activeCard').hidden = !total;
   renderChips(); renderMods(); renderPanel();
 }
 
@@ -441,7 +516,7 @@ function modRow(g, m, clash, locked) {
     ctl = `<button class="apply" data-act="${m.id}"${dis}>Apply</button>`;
   }
   const keys = keyChip(g, m, 'up', clash) + (m.type === 'slider' ? keyChip(g, m, 'down', clash) : '');
-  return `<div class="row${isActive(g, m) ? ' active' : ''}${locked ? ' locked' : ''}">
+  return `<div class="row${isActive(g, m) ? ' active' : ''}${locked ? ' locked' : ''}" data-mod="${m.id}">
     <div class="label"><svg class="bolt" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>${esc(m.name)}${info}</div>
     ${ctl}<div class="keys">${keys}</div></div>`;
 }
@@ -487,6 +562,13 @@ function renderPanel() {
     : `<p class="empty">Nothing on in the ${esc(activeProf(g).name)} profile.</p>`;
   const log = state.log.filter(l => l.g === g.id).slice(-6).reverse();
   $('log').innerHTML = log.length ? log.map(l => `<li><time>${l.t}</time>${esc(l.msg)}</li>`).join('') : '<p class="empty">No activity yet.</p>';
+
+  const mine = state.sessions.filter(s => s.g === g.id);
+  const total = mine.reduce((sum, s) => sum + (s.end - s.start), 0) + (live && sessionStart ? Date.now() - sessionStart : 0);
+  const rows = mine.slice(-5).reverse().map(s => `<li><span>${new Date(s.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${new Date(s.start).toTimeString().slice(0, 5)}</span><span>${duration(s.end - s.start)}</span></li>`);
+  if (live && sessionStart) rows.unshift(`<li class="now-row"><span>Now playing</span><span>${duration(Date.now() - sessionStart)}</span></li>`);
+  $('sessionsMeta').textContent = [g.playtime ? `${hours(g.playtime)} on Steam` : '', total ? `${duration(total)} with Tinker` : ''].filter(Boolean).join(' · ');
+  $('sessions').innerHTML = rows.length ? rows.join('') : '<p class="empty">Sessions show up here after you play with Tinker open.</p>';
   const ta = $('notes');
   if (document.activeElement !== ta) ta.value = state.notes[g.id] || '';
 }
@@ -641,6 +723,69 @@ function switchProfile(g, name) {
   render();
 }
 
+/* ---------- Command palette (Ctrl+K) ---------- */
+let pal = null; // { q, sel, items }
+const PAGE_ICONS = {
+  home: '<path d="M3 10.5L12 3l9 7.5V21h-6v-6H9v6H3z"/>',
+  library: ICONS_GRID(),
+  maps: '<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z" opacity=".35"/><path d="M9 4v14l6 2V6z"/>',
+  settings: '<circle cx="12" cy="12" r="4"/><path d="M11 2h2v4h-2zM11 18h2v4h-2zM2 11h4v2H2zM18 11h4v2h-4z"/>',
+  action: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+};
+function ICONS_GRID() { return '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>'; }
+const palIcon = k => `<span class="pal-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">${PAGE_ICONS[k]}</svg></span>`;
+
+function paletteItems(q) {
+  const items = [];
+  const add = (kind, label, sub, run, ic) => items.push({ kind, label, sub, run, ic });
+  [['home', 'Home'], ['library', 'Library'], ['maps', 'Maps'], ['settings', 'Settings']]
+    .forEach(([v, l]) => add('Page', l, '', () => go(v), palIcon(v)));
+  const games = q ? LIB : gamesOnly().slice().sort((a, b) => b.lastPlayed - a.lastPlayed).slice(0, 6);
+  games.forEach(g => add(g.software ? 'Software' : 'Game', g.name, [g.playtime ? hours(g.playtime) : '', modsOf(g).length ? `${modsOf(g).length} mods` : ''].filter(Boolean).join(' · '),
+    () => go('game', g.id), tile(g, 'pal-tile', false)));
+  if (q) LIB.forEach(g => modsOf(g).forEach(m => add('Mod', m.name, g.name, () => { go('game', g.id); flashMod(m.id); }, palIcon('action'))));
+  const run = findGame(runningId());
+  if (run && modsOf(run).length) add('Action', 'Turn off all mods', run.name, () => panic(), palIcon('action'));
+  if (invoke) add('Action', 'Refresh Home', 'News and deals', () => { go('home'); refreshHome(true); }, palIcon('action'));
+  add('Action', 'Rescan library', 'Steam, Epic and GOG', () => scanLibrary().then(() => { render(); toast('Found', `${LIB.length} games`); }), palIcon('action'));
+  add('Action', state.panel ? 'Hide side panel' : 'Show side panel', '', () => { state.panel = !state.panel; save(); render(); }, palIcon('action'));
+  if (!q) return items;
+  // Name starts with the query, then contains it, then only the subtitle matches.
+  return items
+    .map(it => ({ it, s: it.label.toLowerCase().startsWith(q) ? 0 : it.label.toLowerCase().includes(q) ? 1 : it.sub.toLowerCase().includes(q) ? 2 : 9 }))
+    .filter(x => x.s < 9).sort((a, b) => a.s - b.s).map(x => x.it).slice(0, 40);
+}
+function openPalette() {
+  pal = { q: '', sel: 0 };
+  $('palette').hidden = false;
+  $('palInput').value = '';
+  renderPalette();
+  $('palInput').focus();
+}
+function closePalette() { pal = null; $('palette').hidden = true; }
+function renderPalette() {
+  pal.items = paletteItems(pal.q);
+  pal.sel = Math.max(0, Math.min(pal.sel, pal.items.length - 1));
+  $('palList').innerHTML = pal.items.map((it, i) => `<button class="pal-item${i === pal.sel ? ' sel' : ''}" data-pal="${i}" role="option" aria-selected="${i === pal.sel}">
+      ${it.ic}<span class="pal-text"><b>${esc(it.label)}</b>${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span><span class="pal-kind">${it.kind}</span></button>`).join('')
+    || `<p class="empty" style="padding:18px">Nothing matches “${esc(pal.q)}”.</p>`;
+  $('palList').querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+}
+function runPalette(i) {
+  const it = pal?.items[i];
+  closePalette();
+  it?.run();
+}
+function flashMod(id) {
+  requestAnimationFrame(() => {
+    const row = document.querySelector(`.row[data-mod="${CSS.escape(id)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    row.classList.add('flashrow');
+    setTimeout(() => row.classList.remove('flashrow'), 1400);
+  });
+}
+
 const findMod = id => modsOf(game()).find(m => m.id === id);
 let wipeArmed = false;
 
@@ -648,6 +793,12 @@ document.addEventListener('click', e => {
   const a = e.target.closest('a[target="_blank"]');
   if (a && invoke) { e.preventDefault(); invoke('plugin:opener|open_url', { url: a.href }).catch(console.error); return; }
   if (profileMenu && !e.target.closest('.profile')) { profileMenu = newProfile = false; renderGame(); }
+  if (pal) {
+    const item = e.target.closest('[data-pal]');
+    if (item) runPalette(+item.dataset.pal);
+    else if (!e.target.closest('.pal-box')) closePalette();
+    return;
+  }
   const t = e.target.closest('button');
   if (!t) return;
   const d = t.dataset;
@@ -693,6 +844,14 @@ document.addEventListener('click', e => {
     case 'setCounts': state.showCounts = !state.showCounts; save(); render(); break;
     case 'setHotkeys': state.hotkeys = !state.hotkeys; save(); render(); break;
     case 'setSoftware': state.showSoftware = !state.showSoftware; save(); render(); break;
+    case 'setTray': state.closeToTray = !state.closeToTray; save(); invoke?.('set_close_to_tray', { enabled: state.closeToTray }); render(); break;
+    case 'setAutostart':
+      invoke('set_autostart', { enabled: !AUTOSTART })
+        .then(() => { AUTOSTART = !AUTOSTART; toast('Start with Windows', AUTOSTART ? 'on' : 'off'); })
+        .catch(err => toast("Couldn't change startup", String(err)))
+        .finally(render);
+      break;
+    case 'homeRefresh': refreshHome(true); break;
     case 'softToggle': state.softOpen = !state.softOpen; save(); renderSide(); break;
     case 'rescanBtn': scanLibrary().then(() => { render(); toast('Found', `${LIB.length} games`); }); break;
     case 'wipeBtn':
@@ -731,6 +890,7 @@ document.addEventListener('input', e => {
     e.target.closest('.slider').querySelector('[data-num]').value = fmt(m, v);
   }
   if (e.target.id === 'search') render();
+  if (e.target.id === 'palInput') { pal.q = e.target.value.trim().toLowerCase(); pal.sel = 0; renderPalette(); }
   if (e.target.id === 'notes') { state.notes[state.game] = e.target.value; save(); }
 });
 
@@ -742,8 +902,18 @@ document.addEventListener('keydown', e => {
     else { const combo = comboFromEvent(e); if (combo) finishCapture(combo); }
     return;
   }
+  if (pal) {
+    if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      pal.sel = (pal.sel + (e.key === 'ArrowDown' ? 1 : -1) + pal.items.length) % Math.max(1, pal.items.length);
+      renderPalette();
+    } else if (e.key === 'Enter') { e.preventDefault(); runPalette(pal.sel); }
+    return;
+  }
+  if (e.ctrlKey && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); return; }
   const typing = /INPUT|TEXTAREA/.test(document.activeElement.tagName);
-  if ((e.key === '/' && !typing) || (e.ctrlKey && e.key.toLowerCase() === 'k')) { e.preventDefault(); $('search').focus(); $('search').select(); return; }
+  if (e.key === '/' && !typing) { e.preventDefault(); $('search').focus(); $('search').select(); return; }
   if (e.key === 'Escape' && profileMenu) { profileMenu = newProfile = false; renderGame(); return; }
   if (e.key === 'Escape' && document.activeElement.id === 'search') { e.target.value = ''; render(); e.target.blur(); return; }
   if (e.altKey && e.key === 'ArrowLeft') { step(-1); return; }
@@ -780,9 +950,12 @@ const icon = (k, s = 16) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"
   if (!appWin) $('winctl').hidden = true;
   await loadState();
   await scanLibrary();
+  await loadHome();
   if (!findGame(state.game)) state.game = LIB[0]?.id ?? null;
   if (invoke) {
     state.playing = null;
+    invoke('set_close_to_tray', { enabled: state.closeToTray }).catch(console.error);
+    AUTOSTART = await invoke('get_autostart').catch(() => false);
     listen?.('game-running', e => onRunning(e.payload ?? null));
     listen?.('hotkey', e => onCombo(e.payload));
     onRunning(await invoke('running_game').catch(() => null));

@@ -22,6 +22,7 @@
       <div id="nowCard"></div>
       <div class="subnav" id="subnav">
         <button data-jump="mods"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>Mods</button>
+        <button data-jump="sessionsCard"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>Sessions</button>
         <button data-jump="activityCard"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>Activity</button>
         <button data-jump="notesCard"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H8l-4 4z"/><path d="M8 9h8M8 12h5"/></svg>Notes</button>
       </div>
@@ -46,7 +47,7 @@
       <label class="search">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
         <input id="search" type="search" placeholder="Search" autocomplete="off" spellcheck="false">
-        <kbd>/</kbd>
+        <kbd>Ctrl K</kbd>
       </label>
       <div class="spacer" data-tauri-drag-region></div>
       <div class="tb-right" data-tauri-drag-region>
@@ -73,10 +74,15 @@
       <div class="content" id="content">
         <div class="mods" id="mods"></div>
         <aside class="panel">
-          <div class="card">
+          <div class="card" id="activeCard">
             <h2>Active mods <button id="resetAll">Reset all</button></h2>
             <div class="status" id="status"></div>
             <ul class="active-list" id="activeList"></ul>
+          </div>
+          <div class="card" id="sessionsCard">
+            <h2>Sessions</h2>
+            <div class="meta-line" id="sessionsMeta"></div>
+            <ul class="active-list" id="sessions"></ul>
           </div>
           <div class="card" id="activityCard">
             <h2>Activity</h2>
@@ -90,6 +96,16 @@
       </div>
     </section>
   </main>
+</div>
+<div class="palette" id="palette" hidden>
+  <div class="pal-box" role="dialog" aria-label="Go to">
+    <div class="pal-search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input id="palInput" placeholder="Go to a game, page, mod or action" autocomplete="off" spellcheck="false">
+      <kbd>Esc</kbd>
+    </div>
+    <div class="pal-list" id="palList" role="listbox"></div>
+  </div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="data.js"></script>
