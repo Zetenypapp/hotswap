@@ -171,6 +171,7 @@ struct Session {
     /// Turbo production: each machine's (current, pending, max) clock before we raised it.
     turbo_orig: HashMap<u64, (f32, f32, f32)>,
     turbo_at: Option<Instant>,
+    turbo_cleaned: bool,
     /// God mode: each health component's real max health, to put back afterwards.
     normal_health: HashMap<u64, f32>,
     gs_search: Option<Instant>,
@@ -193,7 +194,7 @@ struct Session {
 
 impl Session {
     fn new(ue: Ue) -> Session {
-        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), turbo_orig: HashMap::new(), turbo_at: None, normal_health: HashMap::new(), gs_search: None, jetpacks: Vec::new(), jetpacks_at: None,
+        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), turbo_orig: HashMap::new(), turbo_at: None, turbo_cleaned: false, normal_health: HashMap::new(), gs_search: None, jetpacks: Vec::new(), jetpacks_at: None,
             recipe_addr: HashMap::new(), stack_sizes: HashMap::new(), add_stack_fn: None, woken: Default::default(), recipe_cache: HashMap::new(), zeroed: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None }
     }
 
@@ -343,8 +344,28 @@ impl Session {
                     }
                 }
             }
+            // Machines boosted before Hotswap restarted have no saved clock. 500% is impossible in the
+            // normal game, so anything still exactly there goes back to 100% (max 250%), once per session.
+            if !self.turbo_cleaned {
+                self.turbo_cleaned = true;
+                self.ensure_machines();
+                let mut fixed = 0;
+                for m in self.machines.clone() {
+                    let (Ok(c), Ok(p), Ok(x)) = (self.off(m, "mCurrentPotential"), self.off(m, "mPendingPotential"), self.off(m, "mMaxPotential")) else { continue };
+                    if self.ue.p.read::<f32>(m + c) == Some(TURBO) {
+                        self.ue.p.write(m + x, 2.5f32);
+                        self.ue.p.write(m + c, 1.0f32);
+                        self.ue.p.write(m + p, 1.0f32);
+                        fixed += 1;
+                    }
+                }
+                if fixed > 0 {
+                    log(&format!("turbo off: reset {fixed} leftover machines to 100%"));
+                }
+            }
             return Ok(());
         }
+        self.turbo_cleaned = false;
         if self.turbo_at.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
             return Ok(());
         }
