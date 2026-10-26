@@ -90,7 +90,7 @@ fn launch_game(launches: State<Launches>, id: String) -> Result<(), String> {
     let result = match launch {
         steam::Launch::Url(url) => std::process::Command::new("explorer.exe").arg(url).spawn(),
         steam::Launch::Exe { path, dir } => std::process::Command::new(path).current_dir(dir).spawn(),
-        steam::Launch::None => return Err("Tinker doesn't know how to start this game".into()),
+        steam::Launch::None => return Err("Hotswap doesn't know how to start this game".into()),
     };
     result.map(|_| ()).map_err(|e| e.to_string())
 }
@@ -121,6 +121,25 @@ async fn fetch_home(app_ids: Vec<u32>) -> Result<home::Home, String> {
     tauri::async_runtime::spawn_blocking(move || home::fetch(&app_ids))
         .await
         .map_err(|e| e.to_string())
+}
+
+/// Force-closes a running game. The game doesn't get a chance to save.
+#[tauri::command]
+fn close_game(watch: State<watch::Watch>, id: String) -> usize {
+    watch.kill(&id)
+}
+
+/// The app was called Tinker; carry its saved settings over to the new data folder once.
+fn migrate_old_data(app: &tauri::App) {
+    let Ok(dir) = app.path().app_data_dir() else { return };
+    let old = dir.with_file_name("app.tinker.desktop");
+    if dir.join("state.json").exists() || !old.is_dir() {
+        return;
+    }
+    let _ = fs::create_dir_all(&dir);
+    for name in ["state.json", "home_cache.json"] {
+        let _ = fs::copy(old.join(name), dir.join(name));
+    }
 }
 
 #[tauri::command]
@@ -163,11 +182,11 @@ fn fit_window(app: &tauri::App, show: bool) {
 }
 
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Open Tinker", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Tinker", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open Hotswap", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Hotswap", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quit])?;
     let mut tray = TrayIconBuilder::with_id("main")
-        .tooltip("Tinker")
+        .tooltip("Hotswap")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -241,6 +260,7 @@ fn main() {
             }
         })
         .setup(move |app| {
+            migrate_old_data(app);
             app.state::<watch::Watch>().start(app.handle().clone());
             build_tray(app)?;
             fit_window(app, !start_hidden);
@@ -248,8 +268,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
-            fetch_home, set_close_to_tray, get_autostart, set_autostart
+            fetch_home, close_game, set_close_to_tray, get_autostart, set_autostart
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Tinker");
+        .expect("error while running Hotswap");
 }

@@ -1,4 +1,4 @@
-// Tinker UI. Runs inside the Tauri window; also opens in a plain browser with demo data for quick styling work.
+// Hotswap UI. Runs inside the Tauri window; also opens in a plain browser with demo data for quick styling work.
 
 const tauri = window.__TAURI__;
 const invoke = tauri?.core?.invoke;
@@ -43,7 +43,7 @@ function comboFromEvent(e) {
 const DEFAULTS = {
   view: 'home', game: null, playing: null, fav: {}, closed: {}, notes: {}, log: [],
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
-  showSoftware: true, softOpen: false, closeToTray: true,
+  showSoftware: true, softOpen: false, closeToTray: true, paused: {},
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
 };
 let state = { ...DEFAULTS };
@@ -53,14 +53,15 @@ let RUNNING = null;          // game ID reported by the watcher (desktop app onl
 let sessionStart = null;     // when the current RUNNING session began
 let launching = null;        // { id, timer } while waiting for a launched game to appear
 let capture = null;          // { gid, mid, dir } while rebinding a key; mid is null for the panic key
-let AUTOSTART = false;       // read from Windows at boot; the setting lives there, not in state
+let stopArmed = false;       // stop button clicked once; a second click closes the game
+let AUTOSTART = false;      // read from Windows at boot; the setting lives there, not in state
 let profileMenu = false;     // profile popover open
 let newProfile = false;      // profile popover showing the name field
 
 /* ---------- Persistence ---------- */
 async function loadState() {
   try {
-    const raw = invoke ? await invoke('load_data', { name: 'state' }) : localStorage.getItem('tinker');
+    const raw = invoke ? await invoke('load_data', { name: 'state' }) : localStorage.getItem('hotswap');
     if (raw) state = { ...DEFAULTS, ...JSON.parse(raw.replace(/^﻿/, '')) };
   } catch { /* first launch or unreadable file: keep defaults */ }
   // Log lines saved while app.js was briefly mis-encoded have a mangled arrow.
@@ -77,7 +78,7 @@ function save() {
   saveTimer = setTimeout(() => {
     const data = JSON.stringify(state);
     if (invoke) invoke('save_data', { name: 'state', data }).catch(err => console.error('save failed', err));
-    else try { localStorage.setItem('tinker', data); } catch { }
+    else try { localStorage.setItem('hotswap', data); } catch { }
   }, 250);
 }
 
@@ -180,7 +181,8 @@ function syncHotkeys() {
   if (!invoke) return;
   const g = findGame(RUNNING);
   const keys = !capture && state.hotkeys && g && modsOf(g).length
-    ? [...new Set([state.panicKey, ...modsOf(g).flatMap(m => Object.values(keysOf(g, m)))].filter(Boolean))]
+    ? state.paused[g.id] ? [state.panicKey]
+      : [...new Set([state.panicKey, ...modsOf(g).flatMap(m => Object.values(keysOf(g, m)))].filter(Boolean))]
     : [];
   const sig = keys.join('|');
   if (sig === lastHotkeys) return;
@@ -236,12 +238,12 @@ function renderSide() {
   const artSrc = run && (run.art.heroBlur || run.art.hero);
   $('sideArt').classList.toggle('accent', !artSrc);
   $('sideArt').style.backgroundImage = artSrc ? `url("${artSrc}")` : '';
+  const paused = run && state.paused[run.id];
   $('nowCard').innerHTML = run
-    ? `<div class="now">${tile(run, 'md', false)}<span class="name">${esc(run.name)}</span>
-        <button class="circle" data-game="${run.id}" aria-label="Open ${esc(run.name)}" title="Open"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
-        ${modsOf(run).length ? `<button class="circle stop" id="stopBtn" aria-label="Turn off all mods" title="Turn off all mods (${esc(comboLabel(state.panicKey))})"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="4"/></svg></button>` : ''}</div>`
+    ? `<div class="now${stopArmed ? ' armed' : ''}"><button class="now-open" data-game="${run.id}" title="Open ${esc(run.name)}">${tile(run, 'md', false)}<span class="name">${stopArmed ? 'Click ■ again to close' : esc(run.name)}</span></button>
+        ${modsOf(run).length ? `<button class="circle power${paused ? ' off' : ''}" id="powerBtn" aria-pressed="${!paused}" title="${paused ? 'Mods are paused. Click to turn them back on' : 'Pause all mods'}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0"/></svg></button>` : ''}
+        <button class="circle stop" id="stopBtn" title="Close ${esc(run.name)}"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="4"/></svg></button></div>`
     : `<div class="now idle">No game running</div>`;
-  $('subnav').hidden = !run;
 
   const q = query();
   const pick = src => {
@@ -415,8 +417,8 @@ function renderSettings() {
       <div class="set-row"><div class="txt"><b>Reset all key bindings</b><span>Puts every mod back on its default hotkey.</span></div><button class="btn" id="resetBinds">Reset</button></div>
     </div>
     ${invoke ? `<div class="set-group"><h2>Startup and tray</h2>
-      <div class="set-row"><div class="txt"><b>Start with Windows</b><span>Tinker opens quietly in the tray when you sign in, so hotkeys are ready when you start a game.</span></div>${sw('setAutostart', AUTOSTART)}</div>
-      <div class="set-row"><div class="txt"><b>Close to tray</b><span>The close button hides Tinker in the tray instead of quitting. Quit from the tray icon's menu.</span></div>${sw('setTray', state.closeToTray)}</div>
+      <div class="set-row"><div class="txt"><b>Start with Windows</b><span>Hotswap opens quietly in the tray when you sign in, so hotkeys are ready when you start a game.</span></div>${sw('setAutostart', AUTOSTART)}</div>
+      <div class="set-row"><div class="txt"><b>Close to tray</b><span>The close button hides Hotswap in the tray instead of quitting. Quit from the tray icon's menu.</span></div>${sw('setTray', state.closeToTray)}</div>
     </div>` : ''}
     <div class="set-group"><h2>Library</h2>
       <div class="set-row"><div class="txt"><b>Steam install</b><span>${esc(STEAM.root || 'Not found.')}</span></div><button class="btn" id="rescanBtn">Rescan</button></div>
@@ -431,7 +433,7 @@ function renderSettings() {
       <div class="set-row"><div class="txt"><b>Reset all mod settings</b><span>Turns every mod off in every profile of every game. Profiles, notes and favorites stay.</span></div><button class="btn danger" id="wipeBtn">Reset</button></div>
     </div>
     <div class="set-group"><h2>About</h2>
-      <div class="set-row"><div class="txt"><b>Tinker 0.1.0</b><span>Interface preview. Mods don't change games yet. Game art is read from your local Steam cache. Figtree font under the SIL Open Font License.</span></div></div>
+      <div class="set-row"><div class="txt"><b>Hotswap 0.1.0</b><span>Interface preview. Mods don't change games yet. Game art is read from your local Steam cache. Figtree font under the SIL Open Font License.</span></div></div>
     </div>`;
 }
 
@@ -464,7 +466,8 @@ function renderGame() {
       <div class="gh-sub">${[
         g.software ? 'Software' : g.genre,
         g.software ? '' : g.anticheat.length ? 'Mods off' : total ? `${total} mods` : 'No mods yet',
-        g.playtime ? `${hours(g.playtime)} played` : '',
+        g.playtime ? `${hours(g.playtime)} played on Steam` : '',
+        (() => { const ms = state.sessions.filter(s => s.g === g.id).reduce((t, s) => t + s.end - s.start, 0) + (live && sessionStart ? Date.now() - sessionStart : 0); return ms ? `${duration(ms)} played with Hotswap` : ''; })(),
         g.source !== 'steam' ? SOURCES[g.source] : '',
         g.solo ? 'Solo or private sessions only' : '',
       ].filter(Boolean).join(' · ')}</div>
@@ -505,9 +508,8 @@ function modRow(g, m, clash, locked) {
   const info = m.info ? `<button class="info" data-tip="${esc(m.info)}" aria-label="${esc(m.info)}">i</button>` : '';
   let ctl;
   if (m.type === 'toggle') {
-    ctl = `<div class="seg" role="group" aria-label="${esc(m.name)}">
-      <button class="${!v ? 'sel' : ''}" data-set="${m.id}" data-v="0"${dis}>Off</button>
-      <button class="${v ? 'sel on' : ''}" data-set="${m.id}" data-v="1"${dis}>On</button></div>`;
+    ctl = `<button class="seg" role="switch" aria-checked="${!!v}" aria-label="${esc(m.name)}" data-flip="${m.id}"${dis}>
+      <span class="${!v ? 'sel' : ''}">Off</span><span class="${v ? 'sel on' : ''}">On</span></button>`;
   } else if (m.type === 'slider') {
     ctl = `<div class="slider">
       <input type="number" id="n-${g.id}-${m.id}" data-num="${m.id}" min="${m.min}" max="${m.max}" step="${m.step}" value="${fmt(m, v)}" aria-label="${esc(m.name)} value"${dis}>
@@ -525,20 +527,21 @@ function renderMods() {
   const g = game(), q = query();
   if (g.anticheat.length && !g.software) {
     $('mods').innerHTML = `<div class="nomods">${img(g.art.logo, 'logo')}<h2>Mods are off for ${esc(g.name)}</h2>
-      <p>This game uses ${esc(g.anticheat.join(' and '))}. Changing it while anti-cheat is running can get your account banned, so Tinker doesn't offer mods here.</p></div>`;
+      <p>This game uses ${esc(g.anticheat.join(' and '))}. Changing it while anti-cheat is running can get your account banned, so Hotswap doesn't offer mods here.</p></div>`;
     return;
   }
   if (!g.cats.length) {
     $('mods').innerHTML = g.software
       ? `<div class="nomods">${img(g.art.logo, 'logo')}<h2>${esc(g.name)} is software</h2>
-        <p>Steam lists this as ${g.steamType ? `a${/^[aeiou]/.test(g.steamType) ? 'n' : ''} ${esc(g.steamType)}` : 'software'}, not a game, so Tinker doesn't add mods to it.</p></div>`
+        <p>Steam lists this as ${g.steamType ? `a${/^[aeiou]/.test(g.steamType) ? 'n' : ''} ${esc(g.steamType)}` : 'software'}, not a game, so Hotswap doesn't add mods to it.</p></div>`
       : `<div class="nomods">${img(g.art.logo, 'logo')}<h2>No mods for ${esc(g.name)} yet</h2>
         <p>Mods are added game by game. This one isn't in the catalog yet, but your notes and favorites still work.</p></div>`;
     return;
   }
-  const locked = !isLive(g), clash = clashes(g);
+  const paused = isLive(g) && state.paused[g.id];
+  const locked = !isLive(g) || paused, clash = clashes(g);
   const lockbar = locked ? `<div class="lockbar"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V7a3 3 0 0 0-6 0z"/></svg>
-      <span>Start ${esc(g.name)} to change mods. You can set up hotkeys and profiles any time.</span></div>` : '';
+      <span>${paused ? 'Mods are paused. Press the power button in the sidebar to turn them back on.' : `Start ${esc(g.name)} to change mods. You can set up hotkeys and profiles any time.`}</span></div>` : '';
   const cats = g.cats.filter(c => state.cat === 'all' || c.name === state.cat).map(c => {
     const mods = c.mods.filter(m => !q || m.name.toLowerCase().includes(q) || c.name.toLowerCase().includes(q));
     if (!mods.length) return '';
@@ -567,8 +570,8 @@ function renderPanel() {
   const total = mine.reduce((sum, s) => sum + (s.end - s.start), 0) + (live && sessionStart ? Date.now() - sessionStart : 0);
   const rows = mine.slice(-5).reverse().map(s => `<li><span>${new Date(s.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${new Date(s.start).toTimeString().slice(0, 5)}</span><span>${duration(s.end - s.start)}</span></li>`);
   if (live && sessionStart) rows.unshift(`<li class="now-row"><span>Now playing</span><span>${duration(Date.now() - sessionStart)}</span></li>`);
-  $('sessionsMeta').textContent = [g.playtime ? `${hours(g.playtime)} on Steam` : '', total ? `${duration(total)} with Tinker` : ''].filter(Boolean).join(' · ');
-  $('sessions').innerHTML = rows.length ? rows.join('') : '<p class="empty">Sessions show up here after you play with Tinker open.</p>';
+  $('sessionsMeta').textContent = [g.playtime ? `${hours(g.playtime)} on Steam` : '', total ? `${duration(total)} with Hotswap` : ''].filter(Boolean).join(' · ');
+  $('sessions').innerHTML = rows.length ? rows.join('') : '<p class="empty">Sessions show up here after you play with Hotswap open.</p>';
   const ta = $('notes');
   if (document.activeElement !== ta) ta.value = state.notes[g.id] || '';
 }
@@ -604,11 +607,14 @@ function logLine(g, msg) {
 
 function setMod(g, m, v, how) {
   if (!isLive(g)) { toast(`Start ${g.name} first`, ''); return; }
+  if (state.paused[g.id]) { toast('Mods are paused', 'press ⏻ to resume'); return; }
   let shown;
   if (m.type === 'slider') {
     v = Math.min(m.max, Math.max(m.min, Math.round(v / m.step) * m.step));
+    if (v === valueOf(g, m)) { renderGame(); return; }
     vals(g)[m.id] = v; shown = fmt(m, v);
   } else if (m.type === 'toggle') {
+    if (v === valueOf(g, m)) return;
     vals(g)[m.id] = v; shown = v ? 'On' : 'Off';
   } else shown = 'applied';
   logLine(g, `${m.name} → ${shown}${how ? ' (' + how + ')' : ''}`);
@@ -805,7 +811,7 @@ document.addEventListener('click', e => {
   if (capture && !d.bind && t.id !== 'panicBind') { capture = null; lastHotkeys = ''; render(); }
   if (d.game) go('game', d.game);
   else if (d.view) go(d.view);
-  else if (d.set) setMod(game(), findMod(d.set), d.v === '1');
+  else if (d.flip) { const g = game(), m = findMod(d.flip); setMod(g, m, !valueOf(g, m)); }
   else if (d.act) setMod(game(), findMod(d.act));
   else if (d.bind) startCapture(game().id, d.bind, d.dir);
   else if (d.chip) { state.cat = d.chip; save(); renderChips(); renderMods(); }
@@ -828,7 +834,24 @@ document.addEventListener('click', e => {
   else switch (t.id) {
     case 'favBtn': state.fav[state.game] = !state.fav[state.game]; save(); renderGame(); break;
     case 'playBtn': isLive(game()) ? panic() : play(game()); break;
-    case 'stopBtn': panic(); break;
+    case 'stopBtn':
+      if (!stopArmed) { stopArmed = true; renderSide(); setTimeout(() => { stopArmed = false; renderSide(); }, 3000); }
+      else {
+        stopArmed = false;
+        const run = findGame(runningId());
+        if (!invoke) setPlaying(null);
+        else if (run) invoke('close_game', { id: run.id }).then(n => toast(run.name, n ? 'closed' : "couldn't be closed"));
+        renderSide();
+      }
+      break;
+    case 'powerBtn': {
+      const run = findGame(runningId());
+      if (!run) break;
+      state.paused[run.id] = !state.paused[run.id];
+      logLine(run, state.paused[run.id] ? 'Mods paused' : 'Mods resumed');
+      save(); render(); toast('Mods', state.paused[run.id] ? 'paused' : 'resumed');
+      break;
+    }
     case 'panelBtn': state.panel = !state.panel; save(); renderGame(); break;
     case 'resetAll': case 'resetBtn': {
       const g = game();
@@ -918,7 +941,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.activeElement.id === 'search') { e.target.value = ''; render(); e.target.blur(); return; }
   if (e.altKey && e.key === 'ArrowLeft') { step(-1); return; }
   if (e.altKey && e.key === 'ArrowRight') { step(1); return; }
-  // In the desktop app the system-wide listener handles hotkeys, even while Tinker has focus.
+  // In the desktop app the system-wide listener handles hotkeys, even while Hotswap has focus.
   if (invoke || typing) return;
   const combo = comboFromEvent(e);
   if (combo && state.playing) { e.preventDefault(); onCombo(combo); }

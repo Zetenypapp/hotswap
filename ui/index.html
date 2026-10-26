@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tinker</title>
+  <title>Hotswap</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -13,19 +13,11 @@
       <div class="bgart" id="sideArt"></div>
       <div class="brandrow" data-tauri-drag-region>
         <div class="brand" data-tauri-drag-region>
-          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="7" fill="var(--accent)"/><path d="M7 8h10M12 8v9" stroke="#1d1404" stroke-width="2.6" stroke-linecap="round"/></svg>
-          tinker
-        </div>
+          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="7" fill="var(--accent)"/><path d="M6.5 9.5h10l-3-3M17.5 14.5h-10l3 3" fill="none" stroke="var(--accent-ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>hotswap</div>
         <button class="ghost" id="backBtn" aria-label="Back" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
         <button class="ghost" id="fwdBtn" aria-label="Forward" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
       </div>
       <div id="nowCard"></div>
-      <div class="subnav" id="subnav">
-        <button data-jump="mods"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>Mods</button>
-        <button data-jump="sessionsCard"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>Sessions</button>
-        <button data-jump="activityCard"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>Activity</button>
-        <button data-jump="notesCard"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H8l-4 4z"/><path d="M8 9h8M8 12h5"/></svg>Notes</button>
-      </div>
     </div>
     <nav class="mainnav">
       <button data-view="home"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 10.5L12 3l9 7.5V21h-6v-6H9v6H3z"/></svg>Home</button>

@@ -1,7 +1,7 @@
 [package]
-name = "tinker"
+name = "hotswap"
 version = "0.1.0"
-description = "Tinker desktop app"
+description = "Hotswap desktop app"
 edition = "2021"
 
 [build-dependencies]

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Tinker",
+  "productName": "Hotswap",
   "version": "0.1.0",
-  "identifier": "app.tinker.desktop",
+  "identifier": "app.hotswap.desktop",
   "build": {
     "frontendDist": "../ui"
   },
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Tinker",
+        "title": "Hotswap",
         "width": 1440,
         "height": 880,
         "minWidth": 1000,

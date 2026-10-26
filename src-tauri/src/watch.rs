@@ -57,6 +57,18 @@ impl Watch {
         });
     }
 
+    /// Ends every process running from the game's install folder. Returns how many were ended.
+    pub fn kill(&self, id: &str) -> usize {
+        let Some((_, dir)) = self.targets.lock().unwrap().iter().find(|(gid, _)| gid == id).cloned() else { return 0 };
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing().with_exe(UpdateKind::Always));
+        sys.processes()
+            .values()
+            .filter(|p| p.exe().is_some_and(|e| e.to_string_lossy().to_lowercase().starts_with(&dir)))
+            .filter(|p| p.kill())
+            .count()
+    }
+
     fn detect(&self, sys: &mut System) -> Option<String> {
         let targets = self.targets.lock().unwrap().clone();
         if targets.is_empty() {

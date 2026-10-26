@@ -179,11 +179,11 @@ img { display: block; }
 .info { width: 18px; height: 18px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--glass-2); color: var(--muted); font-size: 11px; font-weight: 800; position: relative; }
 .info:hover::after, .info:focus-visible::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); width: 230px; padding: 9px 11px; border-radius: 12px; background: #2a2e34; color: var(--fg); font-weight: 500; font-size: 12px; line-height: 1.45; text-align: left; z-index: 5; box-shadow: 0 8px 24px rgba(0, 0, 0, .4); }
 
-.seg { justify-self: end; display: inline-flex; padding: 3px; border-radius: 12px; background: var(--well); }
-.seg button { border: 0; background: transparent; padding: 5px 16px; border-radius: 9px; color: var(--dim); font-size: 13px; font-weight: 700; transition: background .15s, color .15s; }
-.seg button:hover { color: var(--soft); }
-.seg button.sel { background: var(--glass-2); color: var(--fg); }
-.seg button.sel.on { background: var(--accent); color: var(--accent-ink); }
+.seg { justify-self: end; display: inline-flex; padding: 3px; border: 0; border-radius: 12px; background: var(--well); cursor: pointer; }
+.seg span { background: transparent; padding: 5px 16px; border-radius: 9px; color: var(--dim); font-size: 13px; font-weight: 700; transition: background .15s, color .15s; }
+.seg:hover span:not(.sel) { color: var(--soft); }
+.seg span.sel { background: var(--glass-2); color: var(--fg); }
+.seg span.sel.on { background: var(--accent); color: var(--accent-ink); }
 .slider { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .slider input[type=number] { width: 76px; height: 32px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--well); font-weight: 700; font-variant-numeric: tabular-nums; outline: none; }
 .slider input[type=number]:focus { box-shadow: inset 0 0 0 1px var(--glass-3); }
@@ -389,3 +389,10 @@ textarea:focus { box-shadow: inset 0 0 0 1px var(--glass-3); }
   .row { grid-template-columns: minmax(130px, 1fr) minmax(0, 220px); }
   .keys { grid-column: 2; }
 }
+
+.now-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; border: 0; padding: 0; background: transparent; text-align: left; }
+.now-open:hover .name { text-decoration: underline; }
+.now.armed { box-shadow: inset 0 0 0 2px var(--danger); }
+.now.armed .name { color: #ffb3b5; }
+.circle.power { color: var(--accent); }
+.circle.power.off { color: var(--dim); background: var(--glass); }
