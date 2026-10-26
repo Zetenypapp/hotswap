@@ -5,6 +5,7 @@ mod epic;
 mod gog;
 mod home;
 mod steam;
+mod ue;
 mod vdf;
 mod watch;
 
@@ -227,6 +228,47 @@ fn main() {
     if std::env::args().any(|a| a == "--home") {
         let ids: Vec<u32> = steam::scan().games.iter().filter(|g| g.kind == "game").map(|g| g.app_id).filter(|&id| id != 0).take(6).collect();
         println!("{}", serde_json::to_string_pretty(&home::fetch(&ids)).unwrap_or_default());
+        return;
+    }
+    // Dev aid: `hotswap --pdb <file.pdb> <name>` prints a symbol's RVA.
+    if let Some(i) = std::env::args().position(|a| a == "--pdb") {
+        let a: Vec<String> = std::env::args().collect();
+        let t = std::time::Instant::now();
+        match ue::symbols::find_rva(std::path::Path::new(&a[i + 1]), &a[i + 2]) {
+            Ok(rva) => println!("{} = 0x{rva:X} ({:?})", a[i + 2], t.elapsed()),
+            Err(e) => println!("error: {e} ({:?})", t.elapsed()),
+        }
+        return;
+    }
+    // Dev aid: `hotswap --ue-dump [ClassName]` attaches to a running Unreal game and lists objects.
+    if let Some(i) = std::env::args().position(|a| a == "--ue-dump") {
+        let class = std::env::args().nth(i + 1);
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let Some(pid) = sys.processes().values().find(|p| p.name().to_string_lossy().contains("Win64-Shipping")).map(|p| p.pid().as_u32()) else {
+            println!("No *-Win64-Shipping.exe game running");
+            return;
+        };
+        match ue::objects::Ue::attach(pid) {
+            Err(e) => println!("attach failed: {e}"),
+            Ok(u) => {
+                println!("attached to {pid}: {} objects", u.count());
+                for i in 0..12 {
+                    if let Some(o) = u.object(i) {
+                        let cls = u.class_of(o).and_then(|c| u.name_of(c)).unwrap_or_default();
+                        println!("  [{i}] {} : {cls}", u.name_of(o).unwrap_or_default());
+                    }
+                }
+                if let Some(c) = class {
+                    let found = u.find_by_class(&c);
+                    println!("{c}: {} found", found.len());
+                    for o in found.iter().take(5) {
+                        let outer = u.outer_of(*o).and_then(|x| u.name_of(x)).unwrap_or_default();
+                        println!("  0x{o:X} {} (in {outer})", u.name_of(*o).unwrap_or_default());
+                    }
+                }
+            }
+        }
         return;
     }
     let start_hidden = std::env::args().any(|a| a == "--minimized");
