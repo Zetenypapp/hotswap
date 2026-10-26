@@ -164,12 +164,16 @@ struct Session {
     held: HashMap<u64, (u64, i32)>,
     held_for: u64,
     fuel_max: HashMap<u64, f32>,
+    /// Turbo production: each machine's (current, pending, max) clock before we raised it.
+    turbo_orig: HashMap<u64, (f32, f32, f32)>,
+    turbo_at: Option<Instant>,
     /// God mode: each health component's real max health, to put back afterwards.
     normal_health: HashMap<u64, f32>,
     gs_search: Option<Instant>,
     jetpacks: Vec<u64>,
     jetpacks_at: Option<Instant>,
     recipe_addr: HashMap<u64, u64>,
+    recipe_cache: HashMap<u64, Vec<(u64, i32)>>,
     /// Recipes made ingredient-free: count address -> (real count, [by workbench, by machines]).
     zeroed: HashMap<u64, (i32, [bool; 2])>,
     benches: Vec<u64>,
@@ -181,8 +185,8 @@ struct Session {
 
 impl Session {
     fn new(ue: Ue) -> Session {
-        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), normal_health: HashMap::new(), gs_search: None, jetpacks: Vec::new(), jetpacks_at: None,
-            recipe_addr: HashMap::new(), zeroed: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None }
+        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), turbo_orig: HashMap::new(), turbo_at: None, normal_health: HashMap::new(), gs_search: None, jetpacks: Vec::new(), jetpacks_at: None,
+            recipe_addr: HashMap::new(), recipe_cache: HashMap::new(), zeroed: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None }
     }
 
     fn off(&mut self, obj: u64, name: &'static str) -> Result<u64, String> {
@@ -297,7 +301,74 @@ impl Session {
         Ok(())
     }
 
-    /// Free production: every machine's current recipe needs no ingredients.
+    /// Ingredients of a recipe object as (item class, amount). Cached per recipe; uses the real
+    /// count even if Easy Crafting has zeroed it.
+    fn recipe_items(&mut self, recipe: u64) -> Vec<(u64, i32)> {
+        if let Some(v) = self.recipe_cache.get(&recipe) {
+            return v.clone();
+        }
+        let mut out = Vec::new();
+        if let Ok(o) = self.off(recipe, "mIngredients") {
+            let count_addr = recipe + o + 8;
+            let n = self.zeroed.get(&count_addr).map(|z| z.0).or_else(|| self.ue.p.read::<i32>(count_addr)).unwrap_or(0).clamp(0, 16) as u64;
+            let data = self.ue.p.ptr(recipe + o).unwrap_or(0);
+            for i in 0..n {
+                let item = self.ue.p.read::<u64>(data + i * 0x10).unwrap_or(0);
+                let amount = self.ue.p.read::<i32>(data + i * 0x10 + 8).unwrap_or(0);
+                if item != 0 && amount > 0 {
+                    out.push((item, amount));
+                }
+            }
+        }
+        self.recipe_cache.insert(recipe, out.clone());
+        out
+    }
+
+    /// Turbo production: run every machine at 500% clock speed. Each machine's own clock comes back when off.
+    fn turbo_machines(&mut self, on: bool) -> Result<(), String> {
+        const TURBO: f32 = 5.0;
+        if !on {
+            for (m, (cur, pending, max)) in std::mem::take(&mut self.turbo_orig) {
+                for (name, v) in [("mMaxPotential", max), ("mCurrentPotential", cur), ("mPendingPotential", pending)] {
+                    if let Ok(o) = self.off(m, name) {
+                        self.ue.p.write(m + o, v);
+                    }
+                }
+            }
+            return Ok(());
+        }
+        if self.turbo_at.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
+            return Ok(());
+        }
+        self.turbo_at = Some(Instant::now());
+        self.ensure_machines();
+        for m in self.machines.clone() {
+            let (Ok(c), Ok(p), Ok(x)) = (self.off(m, "mCurrentPotential"), self.off(m, "mPendingPotential"), self.off(m, "mMaxPotential")) else { continue };
+            let read = |o: u64| self.ue.p.read::<f32>(m + o).unwrap_or(1.0);
+            if !self.turbo_orig.contains_key(&m) {
+                let orig = (read(c), read(p), read(x));
+                self.turbo_orig.insert(m, orig);
+            }
+            for o in [x, c, p] {
+                if self.ue.p.read::<f32>(m + o) != Some(TURBO) {
+                    self.ue.p.write(m + o, TURBO);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The list of production machines, refreshed every 30 seconds.
+    fn ensure_machines(&mut self) {
+        if self.machines_at.map_or(true, |t| t.elapsed() > Duration::from_secs(30)) {
+            const KINDS: [&str; 11] = ["Smelter", "Foundry", "Constructor", "Assembler", "Manufacturer", "Refinery", "Blender", "Packager", "HadronCollider", "QuantumEncoder", "Converter"];
+            self.machines = self.ue.find_by_classes(|n| n.starts_with("Build_") && KINDS.iter().any(|k| n.contains(k)));
+            self.machines_at = Some(Instant::now());
+            log(&format!("machines: {}", self.machines.len()));
+        }
+    }
+
+    /// Free production: keep every machine stocked with its recipe's ingredients.
     fn free_machines(&mut self) -> Result<(), String> {
         if self.fed_at.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
             return Ok(());
@@ -309,13 +380,26 @@ impl Session {
             self.machines_at = Some(Instant::now());
             log(&format!("free production: {} machines", self.machines.len()));
         }
+        // Machines keep their own copy of the ingredient list, so instead of changing the recipe,
+        // keep each input slot stocked with what the machine's cached recipe asks for.
+        const STACK: u64 = 0x30;
         for m in self.machines.clone() {
-            let Ok(ro) = self.off(m, "mCurrentRecipe") else { continue };
-            if let Some(recipe) = self.ue.p.ptr(m + ro) {
-                self.zero_recipe(recipe, 1);
+            let (Ok(ro), Ok(io)) = (self.off(m, "mCachedRecipe"), self.off(m, "mInputInventory")) else { continue };
+            let (Some(recipe), Some(inv)) = (self.ue.p.ptr(m + ro), self.ue.p.ptr(m + io)) else { continue };
+            let arr = inv + self.off(inv, "mInventoryStacks")?;
+            let (data, n) = (self.ue.p.ptr(arr).unwrap_or(0), self.ue.p.read::<i32>(arr + 8).unwrap_or(0).clamp(0, 16) as u64);
+            for (i, (item, amount)) in self.recipe_items(recipe).into_iter().enumerate() {
+                if i as u64 >= n {
+                    break;
+                }
+                let slot = data + i as u64 * STACK;
+                let want = amount.saturating_mul(4);
+                if self.ue.p.read::<i32>(slot + 0x28).unwrap_or(0) < want {
+                    self.ue.p.write(slot + 8, item);
+                    self.ue.p.write(slot + 0x28, want);
+                }
             }
-        }
-        Ok(())
+        }        Ok(())
     }
     /// Unlimited jetpack fuel: fuel never drops below the highest level seen.
     fn hold_jetpack_fuel(&mut self) -> Result<(), String> {
@@ -487,9 +571,8 @@ impl Session {
         }
         if get("free-production", 0.0) != 0.0 {
             self.free_machines()?;
-        } else {
-            self.restore_recipes(1);
         }
+        self.turbo_machines(get("turbo-production", 0.0) != 0.0)?;
         if get("unlimited-jetpack-fuel", 0.0) != 0.0 {
             self.hold_jetpack_fuel()?;
         }
