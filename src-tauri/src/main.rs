@@ -277,6 +277,42 @@ fn main() {
         }
         return;
     }
+    // Dev aid: `hotswap --machine-peek <Build_X_C>` shows a machine's recipe and input slots.
+    if let Some(i) = std::env::args().position(|a| a == "--machine-peek") {
+        let cls_name = std::env::args().nth(i + 1).unwrap_or_default();
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let pid = sys.processes().values().find(|p| p.name().to_string_lossy().contains("FactoryGameSteam-Win64-Shipping")).map(|p| p.pid().as_u32());
+        let Some(u) = pid.and_then(|p| ue::objects::Ue::attach(p).ok()) else { println!("not attached"); return };
+        for m in u.find_by_class(&cls_name).into_iter().take(2) {
+            let cls = u.class_of(m).unwrap();
+            let get = |n: &str| u.prop(cls, n).map(|p| m + p.offset as u64);
+            let recipe = get("mCachedRecipe").and_then(|a| u.p.ptr(a));
+            let cur = get("mCurrentRecipe").and_then(|a| u.p.ptr(a)).and_then(|c| u.name_of(c));
+            println!("machine 0x{m:X} current={cur:?} cached={recipe:X?} ({:?})", recipe.and_then(|r| u.name_of(r)));
+            if let Some(r) = recipe {
+                let rc = u.class_of(r).unwrap();
+                if let Some(p) = u.prop(rc, "mIngredients") {
+                    let (data, n) = (u.p.ptr(r + p.offset as u64).unwrap_or(0), u.p.read::<i32>(r + p.offset as u64 + 8).unwrap_or(0));
+                    for k in 0..n.clamp(0, 8) as u64 {
+                        let item = u.p.read::<u64>(data + k * 16).unwrap_or(0);
+                        println!("  needs {} x{}", u.name_of(item).unwrap_or_default(), u.p.read::<i32>(data + k * 16 + 8).unwrap_or(0));
+                    }
+                }
+            }
+            if let Some(inv) = get("mInputInventory").and_then(|a| u.p.ptr(a)) {
+                let ic = u.class_of(inv).unwrap();
+                let arr = inv + u.prop(ic, "mInventoryStacks").unwrap().offset as u64;
+                let (data, n) = (u.p.ptr(arr).unwrap_or(0), u.p.read::<i32>(arr + 8).unwrap_or(0));
+                for k in 0..n.clamp(0, 8) as u64 {
+                    let s = data + k * 0x30;
+                    let item = u.p.read::<u64>(s + 8).unwrap_or(0);
+                    println!("  slot {k}: {} x{}", u.name_of(item).unwrap_or("empty".into()), u.p.read::<i32>(s + 0x28).unwrap_or(0));
+                }
+            }
+        }
+        return;
+    }
     if std::env::args().any(|a| a == "--trainer-test") {
         let mut sys = sysinfo::System::new();
         sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);

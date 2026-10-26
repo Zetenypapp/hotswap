@@ -10,7 +10,7 @@ const CATALOG = {
     { name: 'Player', mods: [T('Infinite Health'), T('Unlimited Jetpack Fuel'), T('No Fall Damage')] },
     { name: 'Inventory', mods: [T('Infinite Items', 'Stacks in your inventory never go down, and used-up items come back.'), T('Easy Crafting', 'Building and workbench crafting need no materials at all. Reopen the workbench after picking a recipe.'), A('Add 1,000 Coupons')] },
     { name: 'Physics', mods: [S('Walking Speed', 10, 1000, 10, 100, 'Percent of normal speed. 100 is the game default.'), S('Jump Height', 10, 1000, 10, 100, 'Percent of normal jump height.'), S('Game Speed', 0.1, 5, 0.1, 1), T('Super Speed'), S('Gravity Strength', 0, 200, 5, 100, 'Percent of normal gravity. 0 lets you float.')] },
-    { name: 'Building', mods: [T('Free Production', 'Machines need no ingredients. Their outputs are real items.'), T('No Power Required'), T('No Fuel Needed', 'Generators and vehicles run without fuel.'), T('Turbo Production', 'Machines produce much faster.'), T('Turbo Building', 'Buildings go up instantly.')] },
+    { name: 'Building', mods: [T('Free Production', 'Machines need no ingredients. Their outputs are real items.'), T('No Power Required'), T('No Fuel Needed', 'Generators and vehicles run without fuel.'), T('Turbo Production', 'Machines produce much faster.')] },
   ]},
   3241660: { genre: 'Horror co-op', solo: true, cats: [
     { name: 'Player', mods: [T('Infinite Health'), T('Infinite Stamina'), S('Movement Speed', 50, 300, 10, 100)] },
@@ -44,7 +44,7 @@ const LIVE = {
   526870: [
     'infinite-health', 'unlimited-jetpack-fuel', 'no-fall-damage', 'infinite-items', 'easy-crafting', 'add-1-000-coupons',
     'walking-speed', 'jump-height', 'game-speed', 'super-speed', 'gravity-strength',
-    'free-production', 'no-power-required', 'no-fuel-needed', 'turbo-production', 'turbo-building',
+    'free-production', 'no-power-required', 'no-fuel-needed', 'turbo-production',
   ],
 };
 

@@ -548,7 +548,6 @@ impl Session {
                 ("no-power-required", "mCheatNoPower"),
                 ("no-fuel-needed", "mCheatNoFuel"),
                 ("turbo-production", "mCheatTurboProductionMode"),
-                ("turbo-building", "mCheatTurboBuildMode"),
             ] {
                 let addr = gs + self.off(gs, name)?;
                 let current = self.ue.p.read::<u8>(addr).unwrap_or(0);
