@@ -382,7 +382,8 @@ impl Session {
         n
     }
 
-    /// Free production: keep every machine stocked with its recipe's ingredients.    fn free_machines(&mut self) -> Result<(), String> {
+    /// Free production: keep every machine stocked with its recipe's ingredients.
+    fn free_machines(&mut self) -> Result<(), String> {
         if self.fed_at.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
             return Ok(());
         }
