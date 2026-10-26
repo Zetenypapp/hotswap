@@ -626,9 +626,11 @@ function logLine(g, msg) {
 }
 
 function setMod(g, m, v, how) {
-  if (!m.live) { toast(m.name, 'coming soon'); return; }
-  if (!isLive(g)) { toast(`Start ${g.name} first`, ''); return; }
-  if (state.paused[g.id]) { toast('Mods are paused', 'press ⏻ to resume'); return; }
+  // A rejected change must also snap the control back, or it shows a value that was never saved.
+  const reject = (a, b) => { toast(a, b); if (state.view === 'game') renderGame(); };
+  if (!m.live) return reject(m.name, 'coming soon');
+  if (!isLive(g)) return reject(`Start ${g.name} first`, '');
+  if (state.paused[g.id]) return reject('Mods are paused', 'press ⏻ to resume');
   let shown;
   if (m.type === 'slider') {
     v = Math.min(m.max, Math.max(m.min, Math.round(v / m.step) * m.step));

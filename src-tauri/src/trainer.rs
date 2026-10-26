@@ -33,8 +33,20 @@ struct Status {
     message: String,
 }
 
+/// Appends a line to %APPDATA%\app.hotswap.desktop\trainer.log (for debugging).
+pub fn log(msg: &str) {
+    use std::io::Write;
+    let Ok(appdata) = std::env::var("APPDATA") else { return };
+    let path = std::path::Path::new(&appdata).join("app.hotswap.desktop").join("trainer.log");
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        let _ = writeln!(f, "{t} {msg}");
+    }
+}
+
 impl Trainer {
     pub fn set(&self, game: Option<String>, paused: bool, values: HashMap<String, f64>) {
+        log(&format!("set game={game:?} paused={paused} values={values:?}"));
         let mut w = self.0.lock().unwrap();
         w.game = game;
         w.paused = paused;
@@ -79,6 +91,7 @@ impl Trainer {
                     }
                 };
                 if status != last {
+                    log(&format!("status connected={} msg={}", status.connected, status.message));
                     let _ = app.emit("trainer-status", &status);
                     last = status;
                 }
@@ -299,7 +312,11 @@ impl Session {
         ];
         for (name, factor) in scaled {
             let o = self.off(movement, name)?;
-            self.ue.p.write(movement + o, (self.base[name] as f64 * factor) as f32);
+            let want = (self.base[name] as f64 * factor) as f32;
+            if self.ue.p.read::<f32>(movement + o) != Some(want) {
+                let ok = self.ue.p.write(movement + o, want);
+                log(&format!("write {name} = {want} at 0x{:X} ok={ok}", movement + o));
+            }
         }
         if world != 0 {
             let o = self.off(world, "TimeDilation")?;

@@ -253,6 +253,22 @@ fn main() {
         }
         return;
     }
+    // Dev aid: `hotswap --trainer-peek` prints the player's live movement values without writing.
+    if std::env::args().any(|a| a == "--trainer-peek") {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let pid = sys.processes().values().find(|p| p.name().to_string_lossy().contains("FactoryGameSteam-Win64-Shipping")).map(|p| p.pid().as_u32());
+        let Some(u) = pid.and_then(|p| ue::objects::Ue::attach(p).ok()) else { println!("not attached"); return };
+        for p in u.find_by_class("Char_Player_C") {
+            let cls = u.class_of(p).unwrap();
+            let ctrl = u.prop(cls, "Controller").and_then(|o| u.p.ptr(p + o.offset as u64));
+            let Some(m) = u.prop(cls, "CharacterMovement").and_then(|o| u.p.ptr(p + o.offset as u64)) else { continue };
+            let mc = u.class_of(m).unwrap();
+            let read = |n: &str| u.prop(mc, n).and_then(|o| u.p.read::<f32>(m + o.offset as u64));
+            println!("player 0x{p:X} ctrl={ctrl:X?} walk={:?} sprint={:?} jump={:?} gravity={:?}", read("MaxWalkSpeed"), read("mMaxSprintSpeed"), read("JumpZVelocity"), read("GravityScale"));
+        }
+        return;
+    }
     if std::env::args().any(|a| a == "--trainer-test") {
         let mut sys = sysinfo::System::new();
         sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
