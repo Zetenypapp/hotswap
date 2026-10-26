@@ -642,6 +642,7 @@ function setMod(g, m, v, how) {
   } else { shown = 'applied'; invoke?.('trainer_action', { id: m.id }); }
   logLine(g, `${m.name} → ${shown}${how ? ' (' + how + ')' : ''}`);
   save();
+  syncTrainer();
   toast(m.name, shown);
   renderSide();
   if (state.view === 'game' && state.game === g.id) renderGame();
