@@ -175,6 +175,8 @@ struct Session {
     recipe_addr: HashMap<u64, u64>,
     stack_sizes: HashMap<u64, i32>,
     add_stack_fn: Option<Option<crate::ue::call::Func>>,
+    /// Machines that got at least one AddStack (so the game knows their inputs changed).
+    woken: std::collections::HashSet<u64>,
     recipe_cache: HashMap<u64, Vec<(u64, i32)>>,
     /// Recipes made ingredient-free: count address -> (real count, [by workbench, by machines]).
     zeroed: HashMap<u64, (i32, [bool; 2])>,
@@ -188,7 +190,7 @@ struct Session {
 impl Session {
     fn new(ue: Ue) -> Session {
         Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), turbo_orig: HashMap::new(), turbo_at: None, normal_health: HashMap::new(), gs_search: None, jetpacks: Vec::new(), jetpacks_at: None,
-            recipe_addr: HashMap::new(), stack_sizes: HashMap::new(), add_stack_fn: None, recipe_cache: HashMap::new(), zeroed: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None }
+            recipe_addr: HashMap::new(), stack_sizes: HashMap::new(), add_stack_fn: None, woken: Default::default(), recipe_cache: HashMap::new(), zeroed: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None }
     }
 
     fn off(&mut self, obj: u64, name: &'static str) -> Result<u64, String> {
@@ -437,12 +439,25 @@ impl Session {
                 let want = self.stack_size(item).max(amount);
                 let have = self.ue.p.read::<i32>(slot + 0x28).unwrap_or(0);
                 if have >= want {
+                    // Full but maybe never woken (filled by a plain write earlier): take one item
+                    // out by memory and add it back through the game, once per machine.
+                    if i == 0 && calls < 40 && !self.woken.contains(&m) && have > 0 {
+                        self.ue.p.write(slot + 0x28, have - 1);
+                        if self.add_stack(inv, item, 1) {
+                            calls += 1;
+                            self.woken.insert(m);
+                        } else {
+                            self.ue.p.write(slot + 0x28, have);
+                        }
+                    }
                     continue;
                 }
+                self.woken.insert(m);
                 // Add through the game's own AddStack so the machine notices and starts.
                 // Plain memory write as a fallback, capped per cycle to go easy on the game.
                 if calls < 40 && self.add_stack(inv, item, want - have) {
                     calls += 1;
+                    if calls == 1 { log(&format!("AddStack ok: +{} into 0x{inv:X} (had {have})", want - have)); }
                 } else {
                     self.ue.p.write(slot + 8, item);
                     self.ue.p.write(slot + 0x28, want);

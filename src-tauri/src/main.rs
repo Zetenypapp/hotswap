@@ -313,12 +313,18 @@ fn main() {
         sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
         let pid = sys.processes().values().find(|p| p.name().to_string_lossy().contains("FactoryGameSteam-Win64-Shipping")).map(|p| p.pid().as_u32());
         let Some(u) = pid.and_then(|p| ue::objects::Ue::attach(p).ok()) else { println!("not attached"); return };
-        for m in u.find_by_class(&cls_name).into_iter().take(2) {
+        let recipe_filter = std::env::args().nth(i + 2).unwrap_or_default();
+        let all = u.find_by_class(&cls_name);
+        let pick: Vec<u64> = all.into_iter().filter(|&m| recipe_filter.is_empty() || u.class_of(m).and_then(|c| u.prop(c, "mCurrentRecipe")).and_then(|p| u.p.ptr(m + p.offset as u64)).and_then(|r| u.name_of(r)).is_some_and(|n| n.contains(&recipe_filter))).take(2).collect();
+        for m in pick {
             let cls = u.class_of(m).unwrap();
             let get = |n: &str| u.prop(cls, n).map(|p| m + p.offset as u64);
             let recipe = get("mCachedRecipe").and_then(|a| u.p.ptr(a));
             let cur = get("mCurrentRecipe").and_then(|a| u.p.ptr(a)).and_then(|c| u.name_of(c));
             println!("machine 0x{m:X} current={cur:?} cached={recipe:X?} ({:?})", recipe.and_then(|r| u.name_of(r)));
+            let f = |n: &str| get(n).and_then(|a| u.p.read::<f32>(a));
+            let b = |n: &str| get(n).and_then(|a| u.p.read::<u8>(a));
+            println!("  progress={:?} potential cur={:?} pending={:?} max={:?} paused={:?}", f("mCurrentManufacturingProgress"), f("mCurrentPotential"), f("mPendingPotential"), f("mMaxPotential"), b("mIsProductionPaused"));
             if let Some(r) = recipe {
                 let rc = u.class_of(r).unwrap();
                 if let Some(p) = u.prop(rc, "mIngredients") {
@@ -326,6 +332,18 @@ fn main() {
                     for k in 0..n.clamp(0, 8) as u64 {
                         let item = u.p.read::<u64>(data + k * 16).unwrap_or(0);
                         println!("  needs {} x{}", u.name_of(item).unwrap_or_default(), u.p.read::<i32>(data + k * 16 + 8).unwrap_or(0));
+                    }
+                }
+            }
+            for (label, prop) in [("out", "mOutputInventory")] {
+                if let Some(inv) = get(prop).and_then(|a| u.p.ptr(a)) {
+                    let ic = u.class_of(inv).unwrap();
+                    let arr = inv + u.prop(ic, "mInventoryStacks").unwrap().offset as u64;
+                    let (data, n) = (u.p.ptr(arr).unwrap_or(0), u.p.read::<i32>(arr + 8).unwrap_or(0));
+                    for k in 0..n.clamp(0, 8) as u64 {
+                        let s = data + k * 0x30;
+                        let item = u.p.read::<u64>(s + 8).unwrap_or(0);
+                        println!("  {label} {k}: {} x{}", u.name_of(item).unwrap_or("empty".into()), u.p.read::<i32>(s + 0x28).unwrap_or(0));
                     }
                 }
             }
