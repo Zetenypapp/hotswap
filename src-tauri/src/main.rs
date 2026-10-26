@@ -5,6 +5,7 @@ mod epic;
 mod gog;
 mod home;
 mod steam;
+mod trainer;
 mod ue;
 mod vdf;
 mod watch;
@@ -124,6 +125,18 @@ async fn fetch_home(app_ids: Vec<u32>) -> Result<home::Home, String> {
         .map_err(|e| e.to_string())
 }
 
+/// The mod values the running game should have. `values` are numbers: toggles 0/1, sliders their value.
+#[tauri::command]
+fn trainer_set(trainer: State<trainer::Trainer>, game: Option<String>, paused: bool, values: HashMap<String, f64>) {
+    trainer.set(game, paused, values);
+}
+
+/// One-shot mods like "Add 1,000 Coupons".
+#[tauri::command]
+fn trainer_action(trainer: State<trainer::Trainer>, id: String) {
+    trainer.action(id);
+}
+
 /// Force-closes a running game. The game doesn't get a chance to save.
 #[tauri::command]
 fn close_game(watch: State<watch::Watch>, id: String) -> usize {
@@ -240,6 +253,20 @@ fn main() {
         }
         return;
     }
+    // Dev aid: `hotswap --ue-props <ClassName> [filter]` lists a class's properties in the running game.
+    if let Some(i) = std::env::args().position(|a| a == "--ue-props") {
+        let a: Vec<String> = std::env::args().collect();
+        let filter = a.get(i + 2).map(|s| s.to_lowercase()).unwrap_or_default();
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let pid = sys.processes().values().find(|p| p.name().to_string_lossy().contains("Win64-Shipping")).map(|p| p.pid().as_u32());
+        let Some(u) = pid.and_then(|pid| ue::objects::Ue::attach(pid).ok()) else { println!("no game"); return };
+        let Some(cls) = u.find_class(&a[i + 1]) else { println!("class not found"); return };
+        for p in u.props(cls).iter().filter(|p| p.name.to_lowercase().contains(&filter)) {
+            println!("  {:<40} {:<18} +0x{:<5X} {}", p.name, p.kind, p.offset, p.owner);
+        }
+        return;
+    }
     // Dev aid: `hotswap --ue-dump [ClassName]` attaches to a running Unreal game and lists objects.
     if let Some(i) = std::env::args().position(|a| a == "--ue-dump") {
         let class = std::env::args().nth(i + 1);
@@ -278,6 +305,7 @@ fn main() {
         .manage(watch::Watch::default())
         .manage(Hotkeys::default())
         .manage(Launches::default())
+        .manage(trainer::Trainer::default())
         .manage(CloseToTray(AtomicBool::new(true)))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
@@ -304,13 +332,15 @@ fn main() {
         .setup(move |app| {
             migrate_old_data(app);
             app.state::<watch::Watch>().start(app.handle().clone());
+            let watch = app.state::<watch::Watch>().inner().clone();
+            app.state::<trainer::Trainer>().start(app.handle().clone(), move |id| watch.pid_of(id));
             build_tray(app)?;
             fit_window(app, !start_hidden);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
-            fetch_home, close_game, set_close_to_tray, get_autostart, set_autostart
+            fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hotswap");

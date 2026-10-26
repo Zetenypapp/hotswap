@@ -10,6 +10,29 @@ const ITEM_SIZE: u64 = 0x18; // FUObjectItem: Object, Flags, ClusterRootIndex, S
 const OBJ_CLASS: u64 = 0x10;
 const OBJ_NAME: u64 = 0x18;
 const OBJ_OUTER: u64 = 0x20;
+// UStruct (after UField::Next and FStructBaseChain)
+const STRUCT_SUPER: u64 = 0x40;
+const STRUCT_CHILD_PROPS: u64 = 0x50;
+// FField / FProperty / FBoolProperty (UE 5.3+: FFieldVariant Owner is 8 bytes)
+const FIELD_CLASS: u64 = 0x08;
+const FIELD_NEXT: u64 = 0x18;
+const FIELD_NAME: u64 = 0x20;
+const PROP_OFFSET: u64 = 0x44;
+const BOOL_BYTE_OFFSET: u64 = 0x71;
+const BOOL_FIELD_MASK: u64 = 0x73;
+
+/// A reflected property: where it lives inside an object and what type it is.
+#[derive(Debug, Clone)]
+pub struct Prop {
+    pub name: String,
+    /// FField class name, e.g. "FloatProperty", "BoolProperty", "ObjectProperty"
+    pub kind: String,
+    pub offset: i32,
+    pub bool_byte: u8,
+    pub bool_mask: u8,
+    /// Class that declares it
+    pub owner: String,
+}
 
 pub struct Ue {
     pub p: Proc,
@@ -94,11 +117,70 @@ impl Ue {
         self.p.ptr(obj + OBJ_OUTER)
     }
 
+    /// Every live object address, read a whole chunk (64k slots) at a time.
+    pub fn all_objects(&self) -> Vec<u64> {
+        let (count, Some(chunks)) = (self.count() as u64, self.p.ptr(self.objects + 0x10)) else { return vec![] };
+        let mut out = Vec::with_capacity(count as usize);
+        for c in 0..count.div_ceil(CHUNK) {
+            let Some(chunk) = self.p.ptr(chunks + c * 8) else { continue };
+            let n = CHUNK.min(count - c * CHUNK);
+            let mut buf = vec![0u8; (n * ITEM_SIZE) as usize];
+            if !self.p.read_into(chunk, &mut buf) {
+                continue;
+            }
+            out.extend(buf.chunks(ITEM_SIZE as usize).map(|it| u64::from_le_bytes(it[..8].try_into().unwrap())).filter(|&o| o != 0));
+        }
+        out
+    }
+
+    /// Class object named `name` (a UClass or BlueprintGeneratedClass).
+    pub fn find_class(&self, name: &str) -> Option<u64> {
+        self.all_objects().into_iter().find(|&o| {
+            self.name_of(o).as_deref() == Some(name)
+                && self.class_of(o).and_then(|c| self.name_of(c)).is_some_and(|c| c.ends_with("Class"))
+        })
+    }
+
+    pub fn super_of(&self, cls: u64) -> Option<u64> {
+        self.p.ptr(cls + STRUCT_SUPER)
+    }
+
+    /// Every property on `cls` and its parents, nearest class first.
+    pub fn props(&self, cls: u64) -> Vec<Prop> {
+        let mut out = Vec::new();
+        let mut cur = Some(cls);
+        // Hard limits so a wrong layout guess can't loop forever.
+        let mut depth = 0;
+        while let Some(c) = cur.filter(|_| depth < 32) {
+            depth += 1;
+            let mut f = self.p.ptr(c + STRUCT_CHILD_PROPS);
+            let mut n = 0;
+            while let Some(field) = f.filter(|_| n < 2000) {
+                n += 1;
+                let kind = self.p.ptr(field + FIELD_CLASS).and_then(|fc| self.name_at(fc)).unwrap_or_default();
+                out.push(Prop {
+                    name: self.name_at(field + FIELD_NAME).unwrap_or_default(),
+                    kind,
+                    offset: self.p.read::<i32>(field + PROP_OFFSET).unwrap_or(-1),
+                    bool_byte: self.p.read::<u8>(field + BOOL_BYTE_OFFSET).unwrap_or(0),
+                    bool_mask: self.p.read::<u8>(field + BOOL_FIELD_MASK).unwrap_or(0),
+                    owner: self.name_of(c).unwrap_or_default(),
+                });
+                f = self.p.ptr(field + FIELD_NEXT);
+            }
+            cur = self.super_of(c);
+        }
+        out
+    }
+
+    pub fn prop(&self, cls: u64, name: &str) -> Option<Prop> {
+        self.props(cls).into_iter().find(|p| p.name == name && p.offset >= 0)
+    }
+
     /// All live objects whose class is exactly `class_name`, skipping class default objects.
     pub fn find_by_class(&self, class_name: &str) -> Vec<u64> {
         let mut out = Vec::new();
-        for i in 0..self.count() {
-            let Some(obj) = self.object(i) else { continue };
+        for obj in self.all_objects() {
             let Some(cls) = self.class_of(obj) else { continue };
             if self.name_of(cls).as_deref() == Some(class_name) && !self.name_of(obj).is_some_and(|n| n.starts_with("Default__")) {
                 out.push(obj);

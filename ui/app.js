@@ -107,6 +107,7 @@ function buildGame(raw) {
   g.cats.forEach(cat => cat.mods.forEach(m => {
     m.id = m.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     m.key = KEY_POOL[i++ % KEY_POOL.length];
+    m.live = !!LIVE[appId]?.includes(m.id);
   }));
   return g;
 }
@@ -182,7 +183,7 @@ function syncHotkeys() {
   const g = findGame(RUNNING);
   const keys = !capture && state.hotkeys && g && modsOf(g).length
     ? state.paused[g.id] ? [state.panicKey]
-      : [...new Set([state.panicKey, ...modsOf(g).flatMap(m => Object.values(keysOf(g, m)))].filter(Boolean))]
+      : [...new Set([state.panicKey, ...modsOf(g).filter(m => m.live).flatMap(m => Object.values(keysOf(g, m)))].filter(Boolean))]
     : [];
   const sig = keys.join('|');
   if (sig === lastHotkeys) return;
@@ -190,6 +191,21 @@ function syncHotkeys() {
   invoke('set_hotkeys', { keys }).then(failed => {
     if (failed.length) toast(`Couldn't use ${failed.map(comboLabel).join(', ')}`, 'another app has it');
   }).catch(console.error);
+}
+
+// Tells the trainer which values the running game should have.
+let lastTrainer = '';
+let TRAINER = { connected: false, message: '' };
+function syncTrainer() {
+  if (!invoke) return;
+  const g = findGame(RUNNING);
+  const values = {};
+  if (g) for (const m of modsOf(g)) if (m.live && m.type !== 'action') values[m.id] = m.type === 'toggle' ? (valueOf(g, m) ? 1 : 0) : valueOf(g, m);
+  const args = { game: g?.id ?? null, paused: !!(g && state.paused[g.id]), values };
+  const sig = JSON.stringify(args);
+  if (sig === lastTrainer) return;
+  lastTrainer = sig;
+  invoke('trainer_set', args).catch(console.error);
 }
 
 /* ---------- Tiles ---------- */
@@ -504,6 +520,7 @@ function keyChip(g, m, dir, clash) {
 }
 
 function modRow(g, m, clash, locked) {
+  if (!m.live) locked = true;
   const v = valueOf(g, m), dis = locked ? ' disabled' : '';
   const info = m.info ? `<button class="info" data-tip="${esc(m.info)}" aria-label="${esc(m.info)}">i</button>` : '';
   let ctl;
@@ -519,7 +536,7 @@ function modRow(g, m, clash, locked) {
   }
   const keys = keyChip(g, m, 'up', clash) + (m.type === 'slider' ? keyChip(g, m, 'down', clash) : '');
   return `<div class="row${isActive(g, m) ? ' active' : ''}${locked ? ' locked' : ''}" data-mod="${m.id}">
-    <div class="label"><svg class="bolt" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>${esc(m.name)}${info}</div>
+    <div class="label"><svg class="bolt" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>${esc(m.name)}${info}${m.live ? '' : '<span class="soon">Soon</span>'}</div>
     ${ctl}<div class="keys">${keys}</div></div>`;
 }
 
@@ -558,7 +575,9 @@ function renderPanel() {
   const g = game(), live = isLive(g), act = modsOf(g).filter(m => isActive(g, m));
   $('status').className = 'status' + (live ? ' live' : '');
   $('status').innerHTML = `<span class="d"></span>${live
-    ? (state.hotkeys ? 'Running. Hotkeys work inside the game.' : 'Running. Hotkeys are off in Settings.')
+    ? (modsOf(g).some(m => m.live) && invoke
+        ? (TRAINER.connected ? 'Connected. Mods are live in the game.' : esc(TRAINER.message || 'Connecting to the game…'))
+        : state.hotkeys ? 'Running. Hotkeys work inside the game.' : 'Running. Hotkeys are off in Settings.')
     : invoke ? 'Not running. Press Play to launch it through Steam.' : 'Press Play to start a session.'}`;
   $('activeList').innerHTML = act.length
     ? act.map(m => `<li><span>${esc(m.name)}</span><span>${m.type === 'toggle' ? 'On' : fmt(m, valueOf(g, m))}</span></li>`).join('')
@@ -590,6 +609,7 @@ function render() {
   renderSide();
   ({ home: renderHome, library: renderLibrary, maps: () => setAmbient(null), settings: renderSettings, game: renderGame })[state.view]();
   syncHotkeys();
+  syncTrainer();
 }
 
 /* ---------- Actions ---------- */
@@ -606,6 +626,7 @@ function logLine(g, msg) {
 }
 
 function setMod(g, m, v, how) {
+  if (!m.live) { toast(m.name, 'coming soon'); return; }
   if (!isLive(g)) { toast(`Start ${g.name} first`, ''); return; }
   if (state.paused[g.id]) { toast('Mods are paused', 'press ⏻ to resume'); return; }
   let shown;
@@ -616,7 +637,7 @@ function setMod(g, m, v, how) {
   } else if (m.type === 'toggle') {
     if (v === valueOf(g, m)) return;
     vals(g)[m.id] = v; shown = v ? 'On' : 'Off';
-  } else shown = 'applied';
+  } else { shown = 'applied'; invoke?.('trainer_action', { id: m.id }); }
   logLine(g, `${m.name} → ${shown}${how ? ' (' + how + ')' : ''}`);
   save();
   toast(m.name, shown);
@@ -981,6 +1002,7 @@ const icon = (k, s = 16) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"
     AUTOSTART = await invoke('get_autostart').catch(() => false);
     listen?.('game-running', e => onRunning(e.payload ?? null));
     listen?.('hotkey', e => onCombo(e.payload));
+    listen?.('trainer-status', e => { TRAINER = e.payload; if (state.view === 'game') renderPanel(); });
     onRunning(await invoke('running_game').catch(() => null));
   } else if (state.playing && !findGame(state.playing)) state.playing = null;
   nav.stack = [{ view: state.view, game: state.game }]; nav.i = 0;

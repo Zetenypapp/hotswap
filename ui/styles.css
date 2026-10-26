@@ -395,4 +395,4 @@ textarea:focus { box-shadow: inset 0 0 0 1px var(--glass-3); }
 .now.armed { box-shadow: inset 0 0 0 2px var(--danger); }
 .now.armed .name { color: #ffb3b5; }
 .circle.power { color: var(--accent); }
-.circle.power.off { color: var(--dim); background: var(--glass); }
+.circle.power.off { color: var(--dim); background: var(--glass); }.soon { margin-left: 4px; padding: 1px 7px; border-radius: 6px; background: var(--glass); color: var(--dim); font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }

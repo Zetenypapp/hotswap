@@ -39,6 +39,11 @@ const CATALOG = {
   ]},
 };
 
+// Mods the trainer can actually apply, by Steam app ID. Everything else shows as "Soon".
+const LIVE = {
+  526870: ['infinite-health', 'no-fall-damage', 'add-1-000-coupons', 'walking-speed', 'jump-height', 'game-speed', 'super-speed', 'gravity-strength'],
+};
+
 // Used when the page is opened outside the app (no Steam scan available).
 const DEMO_LIBRARY = [
   { appId: 526870, name: 'Satisfactory' }, { appId: 1962700, name: 'Subnautica 2' }, { appId: 227300, name: 'Euro Truck Simulator 2' },

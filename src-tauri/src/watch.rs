@@ -57,6 +57,19 @@ impl Watch {
         });
     }
 
+    /// Process ID of the game's main Unreal executable (`*-Win64-Shipping.exe` in its folder).
+    pub fn pid_of(&self, id: &str) -> Option<u32> {
+        let (_, dir) = self.targets.lock().unwrap().iter().find(|(gid, _)| gid == id).cloned()?;
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing().with_exe(UpdateKind::Always));
+        sys.processes().values().find(|p| {
+            p.exe().is_some_and(|e| {
+                let e = e.to_string_lossy().to_lowercase();
+                e.starts_with(&dir) && e.ends_with("-win64-shipping.exe")
+            })
+        }).map(|p| p.pid().as_u32())
+    }
+
     /// Ends every process running from the game's install folder. Returns how many were ended.
     pub fn kill(&self, id: &str) -> usize {
         let Some((_, dir)) = self.targets.lock().unwrap().iter().find(|(gid, _)| gid == id).cloned() else { return 0 };
