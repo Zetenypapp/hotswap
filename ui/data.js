@@ -7,10 +7,10 @@ const A = (name, info) => ({ type: 'action', name, info });
 // Keyed by Steam app ID.
 const CATALOG = {
   526870: { genre: 'Factory building', cats: [
-    { name: 'Player', mods: [T('Infinite Health'), T('Unlimited Jetpack Fuel'), T('No Fall Damage'), T('Instant Pod Return', 'Drop pods and crates return to you immediately.')] },
-    { name: 'Inventory', mods: [T('Infinite Items'), T('Free Crafting', 'Craft at the workbench without consuming parts.'), A('Add 1,000 Coupons')] },
+    { name: 'Player', mods: [T('Infinite Health'), T('Unlimited Jetpack Fuel'), T('No Fall Damage')] },
+    { name: 'Inventory', mods: [T('Infinite Items', 'Stacks in your inventory never go down, and used-up items come back.'), T('Easy Crafting', 'Craft at the workbench and build machines without needing any items. The game uses one setting for both.'), A('Add 1,000 Coupons')] },
     { name: 'Physics', mods: [S('Walking Speed', 10, 1000, 10, 100, 'Percent of normal speed. 100 is the game default.'), S('Jump Height', 10, 1000, 10, 100, 'Percent of normal jump height.'), S('Game Speed', 0.1, 5, 0.1, 1), T('Super Speed'), S('Gravity Strength', 0, 200, 5, 100, 'Percent of normal gravity. 0 lets you float.')] },
-    { name: 'Building', mods: [T('Free Building'), T('No Power Required'), T('Unlock All Milestones', 'Changes your save. Back it up first.')] },
+    { name: 'Building', mods: [T('No Power Required'), T('No Fuel Needed', 'Generators and vehicles run without fuel.'), T('Turbo Production', 'Machines produce much faster.'), T('Turbo Building', 'Buildings go up instantly.')] },
   ]},
   3241660: { genre: 'Horror co-op', solo: true, cats: [
     { name: 'Player', mods: [T('Infinite Health'), T('Infinite Stamina'), S('Movement Speed', 50, 300, 10, 100)] },
@@ -41,7 +41,11 @@ const CATALOG = {
 
 // Mods the trainer can actually apply, by Steam app ID. Everything else shows as "Soon".
 const LIVE = {
-  526870: ['infinite-health', 'no-fall-damage', 'add-1-000-coupons', 'walking-speed', 'jump-height', 'game-speed', 'super-speed', 'gravity-strength'],
+  526870: [
+    'infinite-health', 'unlimited-jetpack-fuel', 'no-fall-damage', 'infinite-items', 'easy-crafting', 'add-1-000-coupons',
+    'walking-speed', 'jump-height', 'game-speed', 'super-speed', 'gravity-strength',
+    'no-power-required', 'no-fuel-needed', 'turbo-production', 'turbo-building',
+  ],
 };
 
 // Used when the page is opened outside the app (no Steam scan available).

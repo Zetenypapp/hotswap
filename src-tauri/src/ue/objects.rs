@@ -137,7 +137,7 @@ impl Ue {
     pub fn find_class(&self, name: &str) -> Option<u64> {
         self.all_objects().into_iter().find(|&o| {
             self.name_of(o).as_deref() == Some(name)
-                && self.class_of(o).and_then(|c| self.name_of(c)).is_some_and(|c| c.ends_with("Class"))
+                && self.class_of(o).and_then(|c| self.name_of(c)).is_some_and(|c| c.ends_with("Class") || c == "ScriptStruct")
         })
     }
 

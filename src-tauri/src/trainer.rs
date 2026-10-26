@@ -88,6 +88,34 @@ impl Trainer {
     }
 }
 
+/// Dev aid (`hotswap --trainer-test`): shows what the trainer finds and whether a write sticks.
+pub fn debug(pid: u32) {
+    let ue = match Ue::attach(pid) {
+        Ok(u) => u,
+        Err(e) => return println!("attach failed: {e}"),
+    };
+    let mut s = Session::new(ue);
+    for p in s.ue.find_by_class("Char_Player_C") {
+        let ctrl = s.off(p, "Controller").ok().and_then(|o| s.ue.p.ptr(p + o));
+        println!("player 0x{p:X} {} controller={ctrl:X?}", s.ue.name_of(p).unwrap_or_default());
+    }
+    if let Err(e) = s.resolve() {
+        return println!("resolve failed: {e}");
+    }
+    let m = s.t.movement;
+    println!("chosen player 0x{:X}, movement 0x{m:X} ({})", s.t.player, s.ue.name_of(m).unwrap_or_default());
+    for name in ["MaxWalkSpeed", "mMaxSprintSpeed", "JumpZVelocity", "GravityScale"] {
+        let o = s.off(m, name).unwrap_or(0);
+        println!("  {name} @+0x{o:X} = {:?}", s.ue.p.read::<f32>(m + o));
+    }
+    let o = s.off(m, "JumpZVelocity").unwrap_or(0);
+    let before = s.ue.p.read::<f32>(m + o).unwrap_or(0.0);
+    println!("write JumpZVelocity {before} -> {} : ok={}", before * 3.0, s.ue.p.write(m + o, before * 3.0));
+    thread::sleep(Duration::from_secs(1));
+    println!("1s later: {:?}", s.ue.p.read::<f32>(m + o));
+    s.ue.p.write(m + o, before);
+}
+
 /// Addresses of the objects mods touch, found by class and property name.
 #[derive(Default, Clone, Copy)]
 struct Targets {
@@ -106,11 +134,18 @@ struct Session {
     /// Game defaults read from the movement component, so sliders are percentages of them.
     base: HashMap<&'static str, f32>,
     base_for: u64,
+    gs: u64,
+    /// The save's own value of each cheat switch, restored when a mod is turned off.
+    orig_bools: HashMap<&'static str, u8>,
+    /// Infinite items: inventory slot -> (item class, highest count seen).
+    held: HashMap<u64, (u64, i32)>,
+    held_for: u64,
+    fuel_max: HashMap<u64, f32>,
 }
 
 impl Session {
     fn new(ue: Ue) -> Session {
-        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0 }
+        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new() }
     }
 
     fn off(&mut self, obj: u64, name: &'static str) -> Result<u64, String> {
@@ -121,6 +156,66 @@ impl Session {
         let p = self.ue.prop(cls, name).ok_or(format!("{name} not found"))?;
         self.offsets.insert(name, p.offset as u64);
         Ok(p.offset as u64)
+    }
+
+    /// The world's game state (holds the built-in cheat switches). Found once, re-found if it goes away.
+    fn game_state(&mut self) -> Option<u64> {
+        let ok = |s: &Self, gs: u64| s.ue.class_of(gs).and_then(|c| s.ue.name_of(c)).is_some_and(|n| n.contains("GameState"));
+        if self.gs != 0 && ok(self, self.gs) {
+            return Some(self.gs);
+        }
+        self.gs = ["BP_GameState_C", "FGGameState"].iter().find_map(|c| self.ue.find_by_class(c).first().copied()).unwrap_or(0);
+        (self.gs != 0).then_some(self.gs)
+    }
+
+    /// Infinite items: stacks in the player's inventory never go down, and used-up stacks come back.
+    fn hold_inventory(&mut self) -> Result<(), String> {
+        const STACK: u64 = 0x30; // FInventoryStack: Item { _, ItemClass @0x8, ... }, NumItems @0x28
+        let player = self.t.player;
+        let io = self.off(player, "mInventory")?;
+        let inv = self.ue.p.ptr(player + io).ok_or("no inventory")?;
+        let arr = inv + self.off(inv, "mInventoryStacks")?;
+        let (data, num) = (self.ue.p.ptr(arr).unwrap_or(0), self.ue.p.read::<i32>(arr + 8).unwrap_or(0).clamp(0, 500) as u64);
+        if self.held_for != inv {
+            self.held.clear();
+            self.held_for = inv;
+        }
+        for i in 0..num {
+            let slot = data + i * STACK;
+            let class = self.ue.p.read::<u64>(slot + 0x8).unwrap_or(0);
+            let count = self.ue.p.read::<i32>(slot + 0x28).unwrap_or(0);
+            match self.held.get(&i).copied() {
+                // Same item, fewer than before: top it back up.
+                Some((c, max)) if c == class && count < max => {
+                    self.ue.p.write(slot + 0x28, max);
+                }
+                // Slot was emptied by using the last item: put the item back.
+                Some((c, max)) if class == 0 && count == 0 => {
+                    self.ue.p.write(slot + 0x8, c);
+                    self.ue.p.write(slot + 0x28, max);
+                }
+                _ if class != 0 && count > 0 => {
+                    self.held.insert(i, (class, count.max(self.held.get(&i).filter(|h| h.0 == class).map_or(0, |h| h.1))));
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Unlimited jetpack fuel: fuel never drops below the highest level seen.
+    fn hold_jetpack_fuel(&mut self) -> Result<(), String> {
+        for jp in self.ue.find_by_class("Equip_JetPack_C") {
+            let addr = jp + self.off(jp, "mCurrentFuel")?;
+            let cur = self.ue.p.read::<f32>(addr).unwrap_or(0.0);
+            let max = self.fuel_max.entry(jp).or_insert(cur);
+            if cur > *max {
+                *max = cur;
+            } else if cur < *max {
+                self.ue.p.write(addr, *max);
+            }
+        }
+        Ok(())
     }
 
     fn still_valid(&self) -> bool {
@@ -201,6 +296,32 @@ impl Session {
             if let Some(m) = self.ue.p.read::<f32>(health + max) {
                 self.ue.p.write(health + cur, m);
             }
+        }
+        // The game's own cheat switches. When a mod is off, put back what the save had.
+        if let Some(gs) = self.game_state() {
+            for (id, name) in [
+                ("easy-crafting", "mCheatNoCost"),
+                ("no-power-required", "mCheatNoPower"),
+                ("no-fuel-needed", "mCheatNoFuel"),
+                ("turbo-production", "mCheatTurboProductionMode"),
+                ("turbo-building", "mCheatTurboBuildMode"),
+            ] {
+                let addr = gs + self.off(gs, name)?;
+                let current = self.ue.p.read::<u8>(addr).unwrap_or(0);
+                let original = *self.orig_bools.entry(name).or_insert(current);
+                let want = if get(id, 0.0) != 0.0 { 1 } else { original };
+                if self.ue.p.read::<u8>(addr) != Some(want) {
+                    self.ue.p.write(addr, want);
+                }
+            }
+        }
+        if get("infinite-items", 0.0) != 0.0 {
+            self.hold_inventory()?;
+        } else {
+            self.held.clear();
+        }
+        if get("unlimited-jetpack-fuel", 0.0) != 0.0 {
+            self.hold_jetpack_fuel()?;
         }
         for a in actions {
             if a == "add-1-000-coupons" && sink != 0 {

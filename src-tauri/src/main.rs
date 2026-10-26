@@ -253,6 +253,15 @@ fn main() {
         }
         return;
     }
+    if std::env::args().any(|a| a == "--trainer-test") {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        match sys.processes().values().find(|p| p.name().to_string_lossy().contains("FactoryGameSteam-Win64-Shipping")) {
+            Some(p) => trainer::debug(p.pid().as_u32()),
+            None => println!("Satisfactory isn't running"),
+        }
+        return;
+    }
     // Dev aid: `hotswap --ue-props <ClassName> [filter]` lists a class's properties in the running game.
     if let Some(i) = std::env::args().position(|a| a == "--ue-props") {
         let a: Vec<String> = std::env::args().collect();
