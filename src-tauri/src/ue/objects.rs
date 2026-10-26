@@ -179,10 +179,13 @@ impl Ue {
 
     /// All live objects whose class is exactly `class_name`, skipping class default objects.
     pub fn find_by_class(&self, class_name: &str) -> Vec<u64> {
+        // Many objects share a class, so name each class pointer only once.
+        let mut is_match: HashMap<u64, bool> = HashMap::new();
         let mut out = Vec::new();
         for obj in self.all_objects() {
             let Some(cls) = self.class_of(obj) else { continue };
-            if self.name_of(cls).as_deref() == Some(class_name) && !self.name_of(obj).is_some_and(|n| n.starts_with("Default__")) {
+            let hit = *is_match.entry(cls).or_insert_with(|| self.name_of(cls).as_deref() == Some(class_name));
+            if hit && !self.name_of(obj).is_some_and(|n| n.starts_with("Default__")) {
                 out.push(obj);
             }
         }

@@ -75,7 +75,15 @@ impl Trainer {
                             last_attach = Some(Instant::now());
                             session = pid_of(SATISFACTORY).and_then(|pid| Ue::attach(pid).ok()).map(Session::new);
                         }
-                        match session.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions)) {
+                        let started = Instant::now();
+                        let result = session.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions));
+                        if started.elapsed() > Duration::from_millis(400) {
+                            log(&format!("slow tick: {:?}", started.elapsed()));
+                        }
+                        if let Some(Err(e)) = &result {
+                            log(&format!("tick error: {e}"));
+                        }
+                        match result {
                             Some(Ok(true)) => Status { game: game.clone(), connected: true, message: "Connected".into() },
                             Some(Ok(false)) => Status { game: game.clone(), connected: false, message: "Waiting for the game to load".into() },
                             Some(Err(e)) => {
@@ -158,11 +166,14 @@ struct Session {
     fuel_max: HashMap<u64, f32>,
     /// God mode: each health component's real max health, to put back afterwards.
     normal_health: HashMap<u64, f32>,
+    gs_search: Option<Instant>,
+    jetpacks: Vec<u64>,
+    jetpacks_at: Option<Instant>,
 }
 
 impl Session {
     fn new(ue: Ue) -> Session {
-        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), normal_health: HashMap::new() }
+        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), normal_health: HashMap::new(), gs_search: None, jetpacks: Vec::new(), jetpacks_at: None }
     }
 
     fn off(&mut self, obj: u64, name: &'static str) -> Result<u64, String> {
@@ -181,7 +192,12 @@ impl Session {
         if self.gs != 0 && ok(self, self.gs) {
             return Some(self.gs);
         }
-        self.gs = ["BP_GameState_C", "FGGameState"].iter().find_map(|c| self.ue.find_by_class(c).first().copied()).unwrap_or(0);
+        // Not found: searching is expensive, so only retry every 10 seconds.
+        if self.gs_search.is_some_and(|t| t.elapsed() < Duration::from_secs(10)) {
+            return None;
+        }
+        self.gs_search = Some(Instant::now());
+        self.gs =["BP_GameState_C", "FGGameState"].iter().find_map(|c| self.ue.find_by_class(c).first().copied()).unwrap_or(0);
         (self.gs != 0).then_some(self.gs)
     }
 
@@ -222,7 +238,11 @@ impl Session {
 
     /// Unlimited jetpack fuel: fuel never drops below the highest level seen.
     fn hold_jetpack_fuel(&mut self) -> Result<(), String> {
-        for jp in self.ue.find_by_class("Equip_JetPack_C") {
+        if self.jetpacks_at.map_or(true, |t| t.elapsed() > Duration::from_secs(10)) {
+            self.jetpacks = self.ue.find_by_class("Equip_JetPack_C");
+            self.jetpacks_at = Some(Instant::now());
+        }
+        for jp in self.jetpacks.clone() {
             let addr = jp + self.off(jp, "mCurrentFuel")?;
             let cur = self.ue.p.read::<f32>(addr).unwrap_or(0.0);
             let max = self.fuel_max.entry(jp).or_insert(cur);
