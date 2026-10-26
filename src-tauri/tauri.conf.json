@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Tinker",
+  "version": "0.1.0",
+  "identifier": "app.tinker.desktop",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Tinker",
+        "width": 1440,
+        "height": 880,
+        "minWidth": 1000,
+        "minHeight": 600,
+        "center": true,
+        "visible": false,
+        "decorations": false,
+        "backgroundColor": "#111316"
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.ico"]
+  }
+}

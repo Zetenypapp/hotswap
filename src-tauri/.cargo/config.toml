@@ -1,0 +1,3 @@
+# rustc overflowed its default stack compiling the larger Tauri/windows crates on this machine.
+[env]
+RUST_MIN_STACK = "67108864"
