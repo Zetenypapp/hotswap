@@ -104,6 +104,8 @@ pub fn debug(pid: u32) {
     }
     let m = s.t.movement;
     println!("chosen player 0x{:X}, movement 0x{m:X} ({})", s.t.player, s.ue.name_of(m).unwrap_or_default());
+    let _ = s.tick(Some(&HashMap::new()), &[]);
+    println!("  defaults from game: {:?}", s.base);
     for name in ["MaxWalkSpeed", "mMaxSprintSpeed", "JumpZVelocity", "GravityScale"] {
         let o = s.off(m, name).unwrap_or(0);
         println!("  {name} @+0x{o:X} = {:?}", s.ue.p.read::<f32>(m + o));
@@ -262,10 +264,23 @@ impl Session {
         // Remember the game's own movement values once per movement component.
         const MOVE: [&str; 4] = ["MaxWalkSpeed", "mMaxSprintSpeed", "JumpZVelocity", "GravityScale"];
         if self.base_for != movement {
+            // Read the defaults from the class default object, not the live component:
+            // the live one may still carry values from an earlier session.
+            // The player blueprint's template component (same name, owned by Default__Char_Player_C)
+            // has the character's real defaults; the component class default is only a fallback.
+            let comp = self.ue.name_of(movement);
+            let cdo_name = self.ue.class_of(movement).and_then(|c| self.ue.name_of(c)).map(|c| format!("Default__{c}"));
+            let all = self.ue.all_objects();
+            let template = all.iter().copied().find(|&o| {
+                o != movement && self.ue.name_of(o) == comp
+                    && self.ue.outer_of(o).and_then(|x| self.ue.name_of(x)).is_some_and(|n| n.starts_with("Default__Char_Player"))
+            });
+            let cdo = template.or_else(|| cdo_name.and_then(|n| all.iter().copied().find(|&o| self.ue.name_of(o).as_deref() == Some(n.as_str()))));
             self.base.clear();
             for name in MOVE {
                 let o = self.off(movement, name)?;
-                self.base.insert(name, self.ue.p.read::<f32>(movement + o).unwrap_or(0.0));
+                let v = cdo.and_then(|c| self.ue.p.read::<f32>(c + o)).filter(|v| *v > 0.0 || name == "GravityScale");
+                self.base.insert(name, v.unwrap_or_else(|| self.ue.p.read::<f32>(movement + o).unwrap_or(0.0)));
             }
             self.base_for = movement;
         }
