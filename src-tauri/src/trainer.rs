@@ -173,6 +173,7 @@ struct Session {
     jetpacks: Vec<u64>,
     jetpacks_at: Option<Instant>,
     recipe_addr: HashMap<u64, u64>,
+    stack_sizes: HashMap<u64, i32>,
     recipe_cache: HashMap<u64, Vec<(u64, i32)>>,
     /// Recipes made ingredient-free: count address -> (real count, [by workbench, by machines]).
     zeroed: HashMap<u64, (i32, [bool; 2])>,
@@ -186,7 +187,7 @@ struct Session {
 impl Session {
     fn new(ue: Ue) -> Session {
         Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), turbo_orig: HashMap::new(), turbo_at: None, normal_health: HashMap::new(), gs_search: None, jetpacks: Vec::new(), jetpacks_at: None,
-            recipe_addr: HashMap::new(), recipe_cache: HashMap::new(), zeroed: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None }
+            recipe_addr: HashMap::new(), stack_sizes: HashMap::new(), recipe_cache: HashMap::new(), zeroed: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None }
     }
 
     fn off(&mut self, obj: u64, name: &'static str) -> Result<u64, String> {
@@ -368,8 +369,20 @@ impl Session {
         }
     }
 
-    /// Free production: keep every machine stocked with its recipe's ingredients.
-    fn free_machines(&mut self) -> Result<(), String> {
+    /// Full stack size of an item (e.g. 100 for ingots, 50000 for fluids), from its descriptor. Cached.
+    fn stack_size(&mut self, item_cls: u64) -> i32 {
+        if let Some(&n) = self.stack_sizes.get(&item_cls) {
+            return n;
+        }
+        let n = self.ue.default_object(item_cls)
+            .and_then(|cdo| self.off(cdo, "mCachedStackSize").ok().and_then(|o| self.ue.p.read::<i32>(cdo + o)))
+            .filter(|&n| n > 0)
+            .unwrap_or(100);
+        self.stack_sizes.insert(item_cls, n);
+        n
+    }
+
+    /// Free production: keep every machine stocked with its recipe's ingredients.    fn free_machines(&mut self) -> Result<(), String> {
         if self.fed_at.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
             return Ok(());
         }
@@ -393,7 +406,7 @@ impl Session {
                     break;
                 }
                 let slot = data + i as u64 * STACK;
-                let want = amount.saturating_mul(4);
+                let want = self.stack_size(item).max(amount);
                 if self.ue.p.read::<i32>(slot + 0x28).unwrap_or(0) < want {
                     self.ue.p.write(slot + 8, item);
                     self.ue.p.write(slot + 0x28, want);
