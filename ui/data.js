@@ -7,7 +7,7 @@ const A = (name, info) => ({ type: 'action', name, info });
 // Keyed by Steam app ID.
 const CATALOG = {
   526870: { genre: 'Factory building', cats: [
-    { name: 'Player', mods: [T('Infinite Health'), T('Unlimited Jetpack Fuel'), T('No Fall Damage')] },
+    { name: 'Player', mods: [T('Infinite Health', 'You can''t die from damage. Falling off the map still kills you.'), T('Unlimited Jetpack Fuel'), T('No Fall Damage', 'Landing from any height does no damage.')] },
     { name: 'Inventory', mods: [T('Infinite Items', 'Stacks in your inventory never go down, and used-up items come back.'), T('Easy Crafting', 'Building and workbench crafting need no materials at all. Reopen the workbench after picking a recipe.')] },
     { name: 'Physics', mods: [S('Walking Speed', 10, 1000, 10, 100, 'Percent of normal speed. 100 is the game default.'), S('Jump Height', 10, 1000, 10, 100, 'Percent of normal jump height.'), S('Game Speed', 0.1, 5, 0.1, 1), T('Super Speed'), S('Gravity Strength', 0, 200, 5, 100, 'Percent of normal gravity. 0 lets you float.')] },
     { name: 'Building', mods: [T('Free Production', 'Machines need no ingredients. Their outputs are real items.'), T('No Power Required'), T('No Fuel Needed', 'Generators and vehicles run without fuel.'), T('Turbo Production', 'Machines produce much faster.')] },

@@ -174,6 +174,8 @@ struct Session {
     turbo_cleaned: bool,
     /// God mode: each health component's real max health, to put back afterwards.
     normal_health: HashMap<u64, f32>,
+    /// No fall damage: (player, fall damage curve, override curve) to put back.
+    fall_curves: Option<(u64, u64, u64)>,
     gs_search: Option<Instant>,
     jetpacks: Vec<u64>,
     jetpacks_at: Option<Instant>,
@@ -194,7 +196,7 @@ struct Session {
 
 impl Session {
     fn new(ue: Ue) -> Session {
-        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), turbo_orig: HashMap::new(), turbo_at: None, turbo_cleaned: false, normal_health: HashMap::new(), gs_search: None, jetpacks: Vec::new(), jetpacks_at: None,
+        Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), turbo_orig: HashMap::new(), turbo_at: None, turbo_cleaned: false, normal_health: HashMap::new(), fall_curves: None, gs_search: None, jetpacks: Vec::new(), jetpacks_at: None,
             recipe_addr: HashMap::new(), stack_sizes: HashMap::new(), add_stack_fn: None, woken: Default::default(), recipe_cache: HashMap::new(), zeroed: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None }
     }
 
@@ -598,7 +600,7 @@ impl Session {
             let o = self.off(world, "TimeDilation")?;
             self.ue.p.write(world + o, get("game-speed", 1.0).clamp(0.1, 5.0) as f32);
         }
-        let god = get("infinite-health", 0.0) != 0.0 || get("no-fall-damage", 0.0) != 0.0;
+        let god = get("infinite-health", 0.0) != 0.0;
         // True god mode: the engine skips all damage for actors with bCanBeDamaged off.
         let player = self.t.player;
         if let Some(p) = self.ue.class_of(player).and_then(|c| self.ue.prop(c, "bCanBeDamaged")) {
@@ -629,6 +631,32 @@ impl Session {
             self.ue.p.write(health + max_o, normal);
             self.ue.p.write(health + cur_o, normal);
             log(&format!("god health off (max back to {normal})"));
+        } else if max >= GOD_HEALTH {
+            // Left over from before a Hotswap restart: back to the player's normal 100.
+            self.ue.p.write(health + max_o, 100.0f32);
+            self.ue.p.write(health + cur_o, 100.0f32);
+            log("god health off (leftover reset to 100)");
+        }
+
+        // No fall damage: the character has no fall damage curve while on; the original comes back when off.
+        let (fc, fo) = (self.off(player, "mFallDamageCurve")?, self.off(player, "mFallDamageCurveOverride")?);
+        if get("no-fall-damage", 0.0) != 0.0 {
+            if self.fall_curves.map_or(true, |f| f.0 != player) {
+                let orig = (player, self.ue.p.read::<u64>(player + fc).unwrap_or(0), self.ue.p.read::<u64>(player + fo).unwrap_or(0));
+                if orig.1 != 0 || orig.2 != 0 {
+                    self.fall_curves = Some(orig);
+                }
+            }
+            for o in [fc, fo] {
+                if self.ue.p.read::<u64>(player + o) != Some(0) {
+                    self.ue.p.write(player + o, 0u64);
+                }
+            }
+        } else if let Some((p, curve, over)) = self.fall_curves.take() {
+            if p == player {
+                self.ue.p.write(player + fc, curve);
+                self.ue.p.write(player + fo, over);
+            }
         }
         // The game's own cheat switches. When a mod is off, put back what the save had.
         if let Some(gs) = self.game_state() {
