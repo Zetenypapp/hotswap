@@ -30,6 +30,17 @@ All of these work live while you play. Hotswap connects to the running game, and
 
 Everything happens in the game's memory only. Nothing is written to your save file: restart the game and it's all back to normal. Still, **keep a backup save** while experimenting.
 
+## 🗺️ Live map
+
+Maps → Satisfactory opens a map drawn from your running game:
+
+- 🏔️ **Real terrain**, read from the game's own map texture in your install (never bundled)
+- ⛏️ **Every resource node** by type and purity, plus wells, geysers and deposits
+- 💎 **Collectibles:** power slugs, somersloops, mercer spheres and unopened crash sites
+- 🏭 **Your factory:** buildings, belts, pipes, rails and power lines
+- 📍 **Live position and trail**, pins, and **right-click teleport**
+- 🌐 A **Detailed map** tab with Satisfactory Calculator's interactive map
+
 ## ✨ App features
 
 - 🎮 **Your real library:** finds installed Steam, Epic and GOG games, with artwork read from Steam's local cache
