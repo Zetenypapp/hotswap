@@ -4,7 +4,10 @@
 //! current value at +0xC), and both are written so the game's own logic sees the new value.
 
 use crate::{trainer::log, ue::objects::Ue};
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 pub const SUBNAUTICA2: &str = "1962700";
 pub const MODULE: &str = "Subnautica2-Win64-Shipping";
@@ -21,11 +24,21 @@ pub struct Session {
     /// The character movement component and its own speed values before we scaled them.
     movement: u64,
     move_orig: HashMap<&'static str, f32>,
+    /// Crafting recipes (data assets), refreshed now and then.
+    recipes: Vec<u64>,
+    /// Energy attribute sets: tools, vehicles, batteries and the player's suit.
+    energy_sets: Vec<u64>,
+    scanned_at: Option<Instant>,
+    /// Free crafting: recipe -> its real number of ingredients.
+    req_orig: HashMap<u64, i32>,
+    /// Instant crafting: recipe -> its real crafting time.
+    time_orig: HashMap<u64, f32>,
 }
 
 impl Session {
     pub fn new(ue: Ue) -> Session {
-        Session { ue, controller: 0, pawn: 0, sets: HashMap::new(), offs: HashMap::new(), orig: HashMap::new(), movement: 0, move_orig: HashMap::new() }
+        Session { ue, controller: 0, pawn: 0, sets: HashMap::new(), offs: HashMap::new(), orig: HashMap::new(), movement: 0, move_orig: HashMap::new(),
+            recipes: Vec::new(), energy_sets: Vec::new(), scanned_at: None, req_orig: HashMap::new(), time_orig: HashMap::new() }
     }
 
     fn prop_off(&mut self, obj: u64, name: &'static str) -> Option<u64> {
@@ -94,6 +107,68 @@ impl Session {
         }
     }
 
+    /// Recipes and energy holders, found again every 10 seconds (new tools and vehicles appear).
+    fn rescan(&mut self) {
+        if self.scanned_at.is_some_and(|t| t.elapsed() < Duration::from_secs(10)) {
+            return;
+        }
+        self.scanned_at = Some(Instant::now());
+        self.recipes = self.ue.find_by_classes(|n| n == "UWECraftingRecipe");
+        self.energy_sets = self.ue.find_by_classes(|n| n == "UWEMechanicalAttributeSet");
+    }
+
+    /// Free crafting empties every recipe's ingredient list (the list itself stays, only its
+    /// count changes) and puts the real count back when turned off.
+    fn free_crafting(&mut self, on: bool) {
+        if !on {
+            for (r, n) in std::mem::take(&mut self.req_orig) {
+                if let Some(o) = self.prop_off(r, "Requirements") {
+                    self.ue.p.write(r + o + 8, n);
+                }
+            }
+            return;
+        }
+        for r in self.recipes.clone() {
+            let Some(o) = self.prop_off(r, "Requirements") else { continue };
+            let Some(n) = self.ue.p.read::<i32>(r + o + 8) else { continue };
+            if n > 0 && (0..64).contains(&n) {
+                self.req_orig.entry(r).or_insert(n);
+                self.ue.p.write(r + o + 8, 0i32);
+            }
+        }
+    }
+
+    fn instant_crafting(&mut self, on: bool) {
+        if !on {
+            for (r, t) in std::mem::take(&mut self.time_orig) {
+                if let Some(o) = self.prop_off(r, "CraftingTime") {
+                    self.ue.p.write(r + o, t);
+                }
+            }
+            return;
+        }
+        for r in self.recipes.clone() {
+            let Some(o) = self.prop_off(r, "CraftingTime") else { continue };
+            let Some(t) = self.ue.p.read::<f32>(r + o) else { continue };
+            if t > 0.0 {
+                self.time_orig.entry(r).or_insert(t);
+                self.ue.p.write(r + o, 0.0f32);
+            }
+        }
+    }
+
+    /// Keeps every tool, vehicle and battery charged.
+    fn infinite_energy(&mut self) {
+        for s in self.energy_sets.clone() {
+            let (Some(e), Some(m)) = (self.prop_off(s, "Energy"), self.prop_off(s, "MaxEnergy")) else { continue };
+            let max = self.ue.p.read::<f32>(s + m + 12).unwrap_or(0.0);
+            if max > 0.0 && self.ue.p.read::<f32>(s + e + 12).is_some_and(|c| c < max) {
+                self.ue.p.write(s + e + 8, max);
+                self.ue.p.write(s + e + 12, max);
+            }
+        }
+    }
+
     /// Ok(true) when values were applied, Ok(false) while loading; Err when the game is gone.
     pub fn tick(&mut self, values: Option<&HashMap<String, f64>>) -> Result<bool, String> {
         if self.ue.count() == 0 {
@@ -134,14 +209,15 @@ impl Session {
         let temp = on("no-temperature-damage");
         self.hold(temp, H, "DamageMultiplierCold", 0.0);
         self.hold(temp, H, "DamageMultiplierHeat", 0.0);
-        let rad = on("no-radiation");
-        self.hold(rad, H, "DamageMultiplierRadiation", 0.0);
-        if rad {
-            self.put(H, "Radiation", 0.0);
-        }
         self.hold(on("free-dash"), M, "DashOxygenCost", 0.0);
         // Speeds are percentages of the game's own value. The movement component has its own copy of
         // each speed that the attribute only updates when the game changes it, so scale both.
+        self.rescan();
+        self.free_crafting(on("free-crafting"));
+        self.instant_crafting(on("instant-crafting"));
+        if on("infinite-energy") {
+            self.infinite_energy();
+        }
         let (walk, swim) = (pct("walk-speed"), pct("swim-speed"));
         if self.movement != 0 {
             for (name, f) in [("MaxWalkSpeed", walk), ("MaxSwimSpeed", swim), ("MaxCustomMovementSpeed", swim)] {

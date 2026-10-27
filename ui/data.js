@@ -32,9 +32,9 @@ const CATALOG = {
     { name: 'Building', mods: [T('Free Crafting'), T('Infinite Components'), T('Infinite Batteries')] },
   ]},
   1962700: { genre: 'Underwater survival', cats: [
-    { name: 'Player', mods: [T('Infinite Health', 'Health stays full and damage is ignored.'), T('Infinite Oxygen'), T('No Hunger'), T('No Thirst'), T('No Temperature Damage', 'Heat and cold do no damage.'), T('No Radiation'), T('Free Dash', 'Dashing costs no oxygen.')] },
+    { name: 'Player', mods: [T('Infinite Health', 'Health stays full and damage is ignored.'), T('Infinite Oxygen'), T('No Hunger'), T('No Thirst'), T('No Temperature Damage', 'Heat and cold do no damage.'), T('Free Dash', 'Dashing costs no oxygen.')] },
     { name: 'Movement', mods: [S('Swim Speed', 10, 500, 10, 100, 'Percent of normal swim speed.'), S('Walk Speed', 10, 500, 10, 100, 'Percent of normal walking speed.')] },
-    { name: 'Crafting', mods: [T('Free Crafting'), T('Free Building'), T('Infinite Battery')] },
+    { name: 'Crafting', mods: [T('Free Crafting', 'Crafting and building need no materials. Reopen the crafting menu after turning it on.'), T('Instant Crafting'), T('Infinite Energy', 'Tools, vehicles and batteries never run out.')] },
   ]},
   227300: { genre: 'Driving sim', cats: [
     { name: 'Truck', mods: [T('No Damage'), T('Infinite Fuel'), T('No Fatigue')] },
@@ -51,8 +51,8 @@ const LIVE = {
     'save-position', 'teleport-to-saved-position',
   ],
   1962700: [
-    'infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'no-temperature-damage', 'no-radiation', 'free-dash',
-    'swim-speed', 'walk-speed',
+    'infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'no-temperature-damage', 'free-dash',
+    'swim-speed', 'walk-speed', 'free-crafting', 'instant-crafting', 'infinite-energy',
   ],
 };
 
