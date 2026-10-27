@@ -55,6 +55,7 @@
     "allow-fmods-downloads",
     "allow-fmods-pick",
     "allow-nexus-search",
-    "allow-radar-show"
+    "allow-radar-show",
+    "allow-set-mini"
   ]
 }

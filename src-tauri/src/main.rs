@@ -48,6 +48,95 @@ struct Launches(Mutex<HashMap<String, steam::Launch>>);
 /// When true, closing the window hides it to the tray instead of quitting.
 struct CloseToTray(AtomicBool);
 
+/// The main window's normal size and position, remembered between runs (logical pixels).
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
+struct Geometry {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    max: bool,
+}
+
+/// Mini mode: a small always-on-top window. `back` is where the window was before.
+#[derive(Default)]
+struct Mini {
+    on: AtomicBool,
+    back: Mutex<Option<Geometry>>,
+}
+
+const MIN_SIZE: (f64, f64) = (1000.0, 600.0);
+
+fn geometry_file(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_data_dir().ok().map(|d| d.join("window.json"))
+}
+
+fn geometry_of(win: &tauri::WebviewWindow) -> Option<Geometry> {
+    let s = win.scale_factor().ok()?;
+    let p = win.outer_position().ok()?.to_logical::<f64>(s);
+    let z = win.inner_size().ok()?.to_logical::<f64>(s);
+    Some(Geometry { x: p.x, y: p.y, w: z.width, h: z.height, max: win.is_maximized().unwrap_or(false) })
+}
+
+/// Saves the main window's geometry after a move or resize (not while minimized or in mini mode;
+/// while maximized only the flag changes, so un-maximizing next run goes back to the old size).
+fn remember_geometry(win: &tauri::Window) {
+    let app = win.app_handle();
+    if app.state::<Mini>().on.load(Ordering::Relaxed) || win.is_minimized().unwrap_or(true) || !win.is_visible().unwrap_or(false) {
+        return;
+    }
+    let Some(webview) = app.get_webview_window("main") else { return };
+    let Some(mut g) = geometry_of(&webview) else { return };
+    let Some(file) = geometry_file(app) else { return };
+    if g.max {
+        let Some(old) = fs::read_to_string(&file).ok().and_then(|s| serde_json::from_str::<Geometry>(&s).ok()) else { return };
+        g = Geometry { max: true, ..old };
+    }
+    if let Ok(json) = serde_json::to_string(&g) {
+        let _ = fs::write(file, json);
+    }
+}
+
+/// Turns mini mode on or off.
+#[tauri::command]
+fn set_mini(app: AppHandle, mini: State<Mini>, on: bool) -> Result<(), String> {
+    let win = app.get_webview_window("main").ok_or("no window")?;
+    let e = |e: tauri::Error| e.to_string();
+    if on {
+        if !mini.on.swap(true, Ordering::Relaxed) {
+            *mini.back.lock().unwrap() = geometry_of(&win);
+        }
+        let back = *mini.back.lock().unwrap();
+        let _ = win.unmaximize();
+        win.set_min_size(Some(tauri::LogicalSize::new(300.0, 260.0))).map_err(e)?;
+        win.set_size(tauri::LogicalSize::new(340.0, 520.0)).map_err(e)?;
+        // Top-right of where the big window was.
+        if let Some(b) = back {
+            win.set_position(tauri::LogicalPosition::new(b.x + b.w - 340.0 - 16.0, b.y + 16.0)).map_err(e)?;
+        }
+        win.set_always_on_top(true).map_err(e)?;
+    } else {
+        win.set_always_on_top(false).map_err(e)?;
+        win.set_min_size(Some(tauri::LogicalSize::new(MIN_SIZE.0, MIN_SIZE.1))).map_err(e)?;
+        let back = mini.back.lock().unwrap().take();
+        match back {
+            Some(b) => {
+                win.set_size(tauri::LogicalSize::new(b.w.max(MIN_SIZE.0), b.h.max(MIN_SIZE.1))).map_err(e)?;
+                win.set_position(tauri::LogicalPosition::new(b.x, b.y)).map_err(e)?;
+                if b.max {
+                    let _ = win.maximize();
+                }
+            }
+            None => {
+                win.set_size(tauri::LogicalSize::new(1440.0, 880.0)).map_err(e)?;
+                let _ = win.center();
+            }
+        }
+        mini.on.store(false, Ordering::Relaxed);
+    }
+    Ok(())
+}
+
 /// Files the UI may read and write in the app data folder.
 fn data_file(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
     let file = match name {
@@ -388,16 +477,34 @@ async fn mods_updates(watch: State<'_, watch::Watch>, game: String) -> Result<Ha
     tauri::async_runtime::spawn_blocking(move || modloader::updates(&install)).await.map_err(|e| e.to_string())?
 }
 
-/// Shows a mod change in the overlay over the game (created on first use, then kept: a
-/// transparent, click-through, always-on-top window across the top of the main monitor).
+/// Where a window of size w x h goes on the main monitor: "top" (centered), "top-left",
+/// "top-right", "bottom-left" or "bottom-right" (logical pixels; bottom stays clear of the taskbar).
+fn corner_pos(app: &AppHandle, corner: &str, w: f64, h: f64, margin: f64) -> Result<(f64, f64), String> {
+    let m = app.primary_monitor().ok().flatten().ok_or("no monitor")?;
+    let s = m.scale_factor();
+    let (mx, my) = (m.position().x as f64 / s, m.position().y as f64 / s);
+    let (mw, mh) = (m.size().width as f64 / s, m.size().height as f64 / s);
+    let x = if corner.ends_with("left") {
+        mx + margin
+    } else if corner.ends_with("right") {
+        mx + mw - w - margin
+    } else {
+        mx + mw / 2.0 - w / 2.0
+    };
+    let y = if corner.starts_with("bottom") { my + mh - h - margin - 48.0 } else { my + margin };
+    Ok((x, y))
+}
+
+/// Shows a mod change (or the hotkey cheat sheet) in the overlay over the game. Created on first
+/// use, then kept: a transparent, click-through, always-on-top window in the chosen corner.
 #[tauri::command]
 async fn overlay_notify(app: AppHandle, note: serde_json::Value) -> Result<(), String> {
-    if app.get_webview_window("overlay").is_none() {
-        let monitor = app.primary_monitor().ok().flatten().ok_or("no monitor")?;
-        let scale = monitor.scale_factor();
-        let (w, h) = (460.0, 220.0);
-        let x = monitor.position().x as f64 / scale + monitor.size().width as f64 / scale / 2.0 - w / 2.0;
-        let y = monitor.position().y as f64 / scale;
+    let corner = note.get("corner").and_then(|c| c.as_str()).unwrap_or("top").to_string();
+    let (w, h) = (460.0, 600.0);
+    let (x, y) = corner_pos(&app, &corner, w, h, 0.0)?;
+    if let Some(win) = app.get_webview_window("overlay") {
+        let _ = win.set_position(tauri::LogicalPosition::new(x, y));
+    } else {
         let win = tauri::WebviewWindowBuilder::new(&app, "overlay", tauri::WebviewUrl::App("overlay.html".into()))
             .title("Hotswap overlay")
             .inner_size(w, h)
@@ -415,6 +522,7 @@ async fn overlay_notify(app: AppHandle, note: serde_json::Value) -> Result<(), S
         // Give the page a moment to start listening before the first note.
         tokio_sleep(400).await;
     }
+
     app.emit_to("overlay", "overlay", note).map_err(|e| e.to_string())
 }
 
@@ -422,9 +530,9 @@ async fn tokio_sleep(ms: u64) {
     let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(std::time::Duration::from_millis(ms))).await;
 }
 
-/// Shows or closes the radar: a small transparent, click-through window in the top-right corner.
+/// Shows, moves or closes the radar: a small transparent, click-through window in a corner.
 #[tauri::command]
-async fn radar_show(app: AppHandle, show: bool) -> Result<(), String> {
+async fn radar_show(app: AppHandle, show: bool, corner: Option<String>) -> Result<(), String> {
     let existing = app.get_webview_window("radar");
     if !show {
         if let Some(w) = existing {
@@ -432,14 +540,12 @@ async fn radar_show(app: AppHandle, show: bool) -> Result<(), String> {
         }
         return Ok(());
     }
-    if existing.is_some() {
+    let size = 260.0;
+    let (x, y) = corner_pos(&app, corner.as_deref().unwrap_or("top-right"), size, size, 24.0)?;
+    if let Some(w) = existing {
+        let _ = w.set_position(tauri::LogicalPosition::new(x, y));
         return Ok(());
     }
-    let monitor = app.primary_monitor().ok().flatten().ok_or("no monitor")?;
-    let scale = monitor.scale_factor();
-    let size = 260.0;
-    let x = monitor.position().x as f64 / scale + monitor.size().width as f64 / scale - size - 24.0;
-    let y = monitor.position().y as f64 / scale + 24.0;
     let win = tauri::WebviewWindowBuilder::new(&app, "radar", tauri::WebviewUrl::App("radar.html".into()))
         .title("Hotswap radar")
         .inner_size(size, size)
@@ -520,7 +626,23 @@ fn show_main(app: &AppHandle) {
 /// than the screen). The window starts hidden to avoid a visible jump.
 fn fit_window(app: &tauri::App, show: bool) {
     let Some(win) = app.get_webview_window("main") else { return };
-    if let Ok(Some(monitor)) = win.current_monitor() {
+    // The size and place it had last time, if that's still on a connected monitor.
+    let saved = geometry_file(app.handle()).and_then(|f| fs::read_to_string(f).ok()).and_then(|s| serde_json::from_str::<Geometry>(&s).ok());
+    let on_screen = |g: &Geometry| {
+        win.available_monitors().unwrap_or_default().iter().any(|m| {
+            let s = m.scale_factor();
+            let (mx, my) = (m.position().x as f64 / s, m.position().y as f64 / s);
+            let (mw, mh) = (m.size().width as f64 / s, m.size().height as f64 / s);
+            g.x + 60.0 >= mx && g.x + 60.0 < mx + mw && g.y + 10.0 >= my && g.y + 10.0 < my + mh
+        })
+    };
+    if let Some(g) = saved.filter(|g| g.w >= MIN_SIZE.0 && g.h >= MIN_SIZE.1 && on_screen(g)) {
+        let _ = win.set_size(tauri::LogicalSize::new(g.w, g.h));
+        let _ = win.set_position(tauri::LogicalPosition::new(g.x, g.y));
+        if g.max {
+            let _ = win.maximize();
+        }
+    } else if let Ok(Some(monitor)) = win.current_monitor() {
         let screen = monitor.size().to_logical::<f64>(monitor.scale_factor());
         let size = tauri::LogicalSize::new((screen.width * 0.9).min(1440.0), (screen.height * 0.88).min(880.0));
         let _ = win.set_size(size);
@@ -1036,6 +1158,7 @@ fn main() {
         .manage(Launches::default())
         .manage(trainer::Trainer::default())
         .manage(CloseToTray(AtomicBool::new(true)))
+        .manage(Mini::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -1043,16 +1166,19 @@ fn main() {
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
-                    if event.state() == ShortcutState::Pressed {
-                        let combo = app.state::<Hotkeys>().0.lock().unwrap().get(&shortcut.id()).cloned();
-                        if let Some(combo) = combo {
-                            let _ = app.emit("hotkey", combo);
-                        }
+                    let combo = app.state::<Hotkeys>().0.lock().unwrap().get(&shortcut.id()).cloned();
+                    if let Some(combo) = combo {
+                        // Releases matter for keys you hold, like the cheat sheet.
+                        let name = if event.state() == ShortcutState::Pressed { "hotkey" } else { "hotkey-up" };
+                        let _ = app.emit(name, combo);
                     }
                 })
                 .build(),
         )
         .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
+                remember_geometry(window);
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" && window.app_handle().state::<CloseToTray>().0.load(Ordering::Relaxed) {
                     api.prevent_close();
@@ -1072,7 +1198,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
             fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart,
-            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, radar_show, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
+            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, radar_show, set_mini, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hotswap");

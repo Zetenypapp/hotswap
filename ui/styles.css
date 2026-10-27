@@ -497,3 +497,61 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; color:
 .mods-dl-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-top: 1px solid rgba(255,255,255,.05); }
 .mods-dl .meta { margin: 0; }
 .mods-warn a { color: inherit; text-decoration: underline; }
+
+/* Pins and live dots on mod rows */
+.pin { width: 24px; height: 24px; margin-left: auto; border: 0; border-radius: 7px; display: grid; place-items: center; background: transparent; color: var(--dim); opacity: 0; transition: opacity .15s, background .15s, color .15s; flex: none; }
+.row:hover .pin, .pin:focus-visible, .pin.on { opacity: 1; }
+.pin:hover { background: var(--glass-2); color: var(--fg); }
+.pin.on { color: var(--accent); }
+.mdot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.mdot.ok { background: #3ddc84; box-shadow: 0 0 0 3px rgba(61, 220, 132, .18); }
+.mdot.wait { background: #f3b73f; animation: pulse 1.2s ease-in-out infinite; }
+
+/* Corner picker: five little screens */
+.corners { display: flex; gap: 6px; }
+.corner { width: 38px; height: 26px; border: 0; border-radius: 7px; background: var(--glass); position: relative; padding: 0; transition: background .15s; }
+.corner:hover { background: var(--glass-2); }
+.corner span { position: absolute; width: 11px; height: 6px; border-radius: 2px; background: var(--muted); }
+.corner.on { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.corner.on span { background: var(--accent); }
+.c-top span { top: 4px; left: 50%; transform: translateX(-50%); }
+.c-top-left span { top: 4px; left: 5px; }
+.c-top-right span { top: 4px; right: 5px; }
+.c-bottom-left span { bottom: 4px; left: 5px; }
+.c-bottom-right span { bottom: 4px; right: 5px; }
+.btnrow { display: flex; gap: 8px; flex: none; }
+a.btn { display: inline-flex; align-items: center; text-decoration: none; color: inherit; }
+.nomods a.btn { margin-top: 6px; }
+
+/* What's new */
+.wn-box { width: min(560px, calc(100% - 48px)); display: flex; flex-direction: column; max-height: 76vh; }
+.wn-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 18px 8px 22px; }
+.wn-head h2 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -.01em; }
+.wn-body { overflow-y: auto; padding: 0 22px 8px; color: var(--soft); font-weight: 500; line-height: 1.55; user-select: text; }
+.wn-body h3 { margin: 14px 0 4px; font-size: 14px; font-weight: 800; color: var(--fg); }
+.wn-body ul { margin: 4px 0; padding-left: 20px; }
+.wn-body li.sub { margin-left: 18px; list-style: circle; }
+.wn-body p { margin: 6px 0; }
+.wn-body code { font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--glass); }
+.wn-foot { display: flex; justify-content: flex-end; padding: 10px 18px 18px; }
+
+/* Mini mode */
+.minibox { display: none; }
+body.mini .app, body.mini .palette:not(#whatsNew) { display: none; }
+body.mini .minibox { display: flex; flex-direction: column; height: 100%; background: var(--bg); }
+.mhead { display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 12px; border-bottom: 1px solid var(--glass); }
+.mtitle { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.mtitle b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mtitle span { font-size: 12px; color: var(--muted); }
+.mtitle span.ok { color: #3ddc84; }
+.mlist { flex: 1; overflow-y: auto; padding: 6px; }
+.mrow { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 10px; }
+.mrow:hover { background: var(--glass); }
+.mlabel { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mlabel span { display: flex; align-items: center; gap: 6px; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mrow.active .mlabel span { color: var(--fg); }
+.mlabel small { font-size: 11px; color: var(--dim); font-weight: 700; }
+.mpin { width: 6px; height: 6px; border-radius: 2px; background: var(--accent); flex: none; }
+.seg.sm span { padding: 4px 10px; font-size: 12px; }
+.slider.sm input[type=number] { width: 64px; height: 30px; }
+.apply.sm { height: 30px; padding: 0 12px; }

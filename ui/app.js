@@ -45,7 +45,11 @@ const DEFAULTS = {
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
   showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, sounds: true, overlay: true, paused: {},
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
+  pinned: {}, sheetKey: 'Ctrl+F1', overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
 };
+const CORNERS = [['top-left', 'Top left'], ['top', 'Top'], ['top-right', 'Top right'], ['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right']];
+const SHEET = '__sheet'; // capture.mid while rebinding the cheat sheet key
+const REPO_URL = 'https://github.com/Zetenypapp/hotswap';
 let state = { ...DEFAULTS };
 let LIB = [];
 let STEAM = { root: null, libraries: [] };
@@ -58,6 +62,7 @@ let VERSION = '', UPDATE = null, UPDATE_MSG = ''; // app version and a newer rel
 let AUTOSTART = false;      // read from Windows at boot; the setting lives there, not in state
 let profileMenu = false;     // profile popover open
 let newProfile = false;      // profile popover showing the name field
+let importProfile = false;   // profile popover showing the share code field
 
 /* ---------- Persistence ---------- */
 async function loadState() {
@@ -74,6 +79,11 @@ async function loadState() {
   }
 }
 let saveTimer;
+function saveNow() {
+  clearTimeout(saveTimer);
+  const data = JSON.stringify(state);
+  return invoke ? invoke('save_data', { name: 'state', data }).catch(console.error) : Promise.resolve();
+}
 function save() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
@@ -167,11 +177,13 @@ function keysOf(g, m) {
 // Combos used more than once in a game (the panic key counts too).
 function clashes(g) {
   const seen = new Map([[state.panicKey, 1]]);
+  if (state.sheetKey) seen.set(state.sheetKey, (seen.get(state.sheetKey) || 0) + 1);
   for (const m of modsOf(g)) for (const k of Object.values(keysOf(g, m))) if (k) seen.set(k, (seen.get(k) || 0) + 1);
   return new Set([...seen].filter(([, n]) => n > 1).map(([k]) => k));
 }
 function whoUses(g, combo, except) {
   if (combo === state.panicKey && except !== 'panic') return 'the panic key';
+  if (combo === state.sheetKey && except !== 'sheet') return 'the cheat sheet key';
   for (const m of modsOf(g)) {
     for (const [dir, k] of Object.entries(keysOf(g, m))) if (k === combo && `${m.id}/${dir}` !== except) return m.name;
   }
@@ -184,7 +196,7 @@ function syncHotkeys() {
   const g = findGame(RUNNING);
   const keys = !capture && state.hotkeys && g && modsOf(g).length
     ? state.paused[g.id] ? [state.panicKey]
-      : [...new Set([state.panicKey, ...modsOf(g).filter(m => m.live).flatMap(m => Object.values(keysOf(g, m)))].filter(Boolean))]
+      : [...new Set([state.panicKey, state.overlay && state.sheetKey, ...modsOf(g).filter(m => m.live).flatMap(m => Object.values(keysOf(g, m)))].filter(Boolean))]
     : [];
   const sig = keys.join('|');
   if (sig === lastHotkeys) return;
@@ -210,7 +222,7 @@ function syncTrainer() {
   invoke('trainer_set', args).catch(console.error);
   // The radar window lives while a game with the radar mod has it on.
   const radar = !!values['enemy-radar'] && !args.paused;
-  if (radar !== radarOpen) { radarOpen = radar; invoke('radar_show', { show: radar }).catch(console.error); }
+  if (radar !== radarOpen) { radarOpen = radar; invoke('radar_show', { show: radar, corner: state.radarCorner }).catch(console.error); }
 }
 
 /* ---------- Tiles ---------- */
@@ -229,7 +241,7 @@ const nav = { stack: [], i: -1 };
 function go(view, gameId, push = true) {
   state.view = view;
   if (gameId != null) state.game = String(gameId);
-  profileMenu = newProfile = false;
+  profileMenu = newProfile = importProfile = false;
   if (push) {
     nav.stack = nav.stack.slice(0, nav.i + 1);
     nav.stack.push({ view, game: state.game });
@@ -498,8 +510,12 @@ function renderSettings() {
       <div class="set-row"><div class="txt"><b>Enable hotkeys</b><span>While a game with mods is running, its hotkeys work everywhere, including inside the game. They're released again when the game closes.</span></div>${sw('setHotkeys', state.hotkeys)}</div>
       <div class="set-row"><div class="txt"><b>Panic key</b><span>Turns off every mod in the running game at once. Click to change it.</span></div>
         <button class="key bindable${listeningPanic ? ' listening' : ''}" id="panicBind">${listeningPanic ? 'Press a key…' : esc(comboLabel(state.panicKey))}</button></div>
+      ${invoke ? `<div class="set-row"><div class="txt"><b>Cheat sheet key</b><span>Hold it in game to see every mod and its hotkey on the overlay. Click to change.</span></div>
+        <button class="key bindable${capture?.mid === SHEET ? ' listening' : ''}${state.sheetKey ? '' : ' unbound'}" id="sheetBind">${capture?.mid === SHEET ? 'Press a key…' : esc(comboLabel(state.sheetKey))}</button></div>` : ''}
       <div class="set-row"><div class="txt"><b>Sounds</b><span>A short chime when a mod turns on or off.</span></div>${sw('setSounds', state.sounds)}</div>
       ${invoke ? `<div class="set-row"><div class="txt"><b>In-game overlay</b><span>Shows mod changes from hotkeys at the top of the screen, over the game. Works with borderless and windowed games, not exclusive fullscreen.</span></div><button class="btn" id="testOverlay">Test</button>${sw('setOverlay', state.overlay)}</div>` : ''}
+      ${invoke ? `<div class="set-row"><div class="txt"><b>Overlay position</b><span>Where mod changes and the cheat sheet show up.</span></div>${cornerPicker('ocorner', state.overlayCorner)}</div>
+      <div class="set-row"><div class="txt"><b>Radar position</b><span>Where the enemy radar sits, in games that have one.</span></div>${cornerPicker('rcorner', state.radarCorner)}</div>` : ''}
       <div class="set-row"><div class="txt"><b>Reset all key bindings</b><span>Puts every mod back on its default hotkey.</span></div><button class="btn" id="resetBinds">Reset</button></div>
     </div>
     ${invoke ? `<div class="set-group"><h2>Startup and tray</h2>
@@ -521,6 +537,9 @@ function renderSettings() {
     <div class="set-group"><h2>About and updates</h2>
       <div class="set-row"><div class="txt"><b>Hotswap ${esc(VERSION || '')}</b><span>${UPDATE ? `Version ${esc(UPDATE.version)} is available.` : esc(UPDATE_MSG || 'Free, open source, no ads.')} Game art is read from your local Steam cache. Figtree font under the SIL Open Font License.</span></div>
         ${invoke ? (UPDATE ? '<button class="btn" id="updateBtn">Update now</button>' : '<button class="btn" id="checkUpdateBtn">Check now</button>') : ''}</div>
+      <div class="set-row"><div class="txt"><b>What's new</b><span>The release notes for this version.</span></div><button class="btn" id="whatsNewBtn">Show</button></div>
+      <div class="set-row"><div class="txt"><b>Found a bug or want a game added?</b><span>Opens a GitHub issue with your Hotswap version already filled in.</span></div>
+        <div class="btnrow"><a class="btn" href="${esc(bugUrl())}" ${ext}>Report a bug</a><a class="btn" href="${esc(requestUrl())}" ${ext}>Request a game</a></div></div>
       ${invoke ? `<div class="set-row"><div class="txt"><b>Check for updates automatically</b><span>Looks for a new release on GitHub when Hotswap starts. Updates are signed, and nothing installs without your click.</span></div>${sw('setAutoUpdate', state.autoUpdate)}</div>` : ''}
     </div>`;
 }
@@ -531,6 +550,10 @@ function profileControl(g) {
       ${list.map(p => `<div class="pitem${p === cur ? ' on' : ''}"><button data-profile="${esc(p.name)}">${p === cur ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>' : '<span class="sp"></span>'}${esc(p.name)}</button>
         ${list.length > 1 ? `<button class="pdel" data-delprofile="${esc(p.name)}" aria-label="Delete ${esc(p.name)}" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>` : ''}</div>`).join('')}
       <div class="psep"></div>
+      <button class="padd" id="copyProfile"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>Copy share code</button>
+      ${importProfile
+        ? `<form class="pnew" id="pimportForm"><input id="pimportCode" placeholder="Paste a share code" autocomplete="off" spellcheck="false"><button class="btn" type="submit">Add</button></form>`
+        : `<button class="padd" id="importProfile"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Add from share code</button>`}
       ${newProfile
         ? `<form class="pnew" id="pnewForm"><input id="pnewName" maxlength="24" placeholder="Profile name" autocomplete="off"><button class="btn" type="submit">Save</button></form>`
         : `<button class="padd" id="addProfile"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Save current as new profile</button>`}
@@ -602,13 +625,15 @@ function modRow(g, m, clash, locked) {
   } else if (m.type === 'slider') {
     ctl = `<div class="slider">
       <input type="number" id="n-${g.id}-${m.id}" data-num="${m.id}" min="${m.min}" max="${m.max}" step="${m.step}" value="${fmt(m, v)}" aria-label="${esc(m.name)} value"${dis}>
-      <input type="range" id="r-${g.id}-${m.id}" data-range="${m.id}" min="${m.min}" max="${m.max}" step="${m.step}" value="${v}" style="--p:${pct(m, v)}" aria-label="${esc(m.name)}"${dis}></div>`;
+      <input type="range" id="r-${g.id}-${m.id}" data-range="${m.id}" title="Double-click to reset" min="${m.min}" max="${m.max}" step="${m.step}" value="${v}" style="--p:${pct(m, v)}" aria-label="${esc(m.name)}"${dis}></div>`;
   } else {
     ctl = `<button class="apply" data-act="${m.id}"${dis}>Apply</button>`;
   }
   const keys = keyChip(g, m, 'up', clash) + (m.type === 'slider' ? keyChip(g, m, 'down', clash) : '');
+  const pinned = !!state.pinned[g.id]?.[m.id];
   return `<div class="row${isActive(g, m) ? ' active' : ''}${locked ? ' locked' : ''}" data-mod="${m.id}">
-    <div class="label"><svg class="bolt" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>${esc(m.name)}${info}${m.live ? '' : '<span class="soon">Soon</span>'}</div>
+    <div class="label"><svg class="bolt" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>${esc(m.name)}${info}${m.live ? '' : '<span class="soon">Soon</span>'}${modDot(g, m)}
+      <button class="pin${pinned ? ' on' : ''}" data-pin="${m.id}" aria-pressed="${pinned}" aria-label="${pinned ? 'Unpin' : 'Pin to top'}" title="${pinned ? 'Unpin' : 'Pin to top'}"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M15 3l6 6-3 1-4 4 1 5-2 2-4-4-5 5H3v-1l5-5-4-4 2-2 5 1 4-4z"/></svg></button></div>
     ${ctl}<div class="keys">${keys}</div></div>`;
 }
 
@@ -624,15 +649,20 @@ function renderMods() {
       ? `<div class="nomods">${img(g.art.logo, 'logo')}<h2>${esc(g.name)} is software</h2>
         <p>Steam lists this as ${g.steamType ? `a${/^[aeiou]/.test(g.steamType) ? 'n' : ''} ${esc(g.steamType)}` : 'software'}, not a game, so Hotswap doesn't add mods to it.</p></div>`
       : `<div class="nomods">${img(g.art.logo, 'logo')}<h2>No mods for ${esc(g.name)} yet</h2>
-        <p>Mods are added game by game. This one isn't in the catalog yet, but your notes and favorites still work.</p></div>`;
+        <p>Mods are added game by game. This one isn't in the catalog yet, but your notes and favorites still work.</p>
+        <a class="btn accent" href="${esc(requestUrl(g))}" ${ext}>Request mods for ${esc(g.name)}</a></div>`;
     return;
   }
   const paused = isLive(g) && state.paused[g.id];
   const locked = !isLive(g) || paused, clash = clashes(g);
   const lockbar = locked ? `<div class="lockbar"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V7a3 3 0 0 0-6 0z"/></svg>
       <span>${paused ? 'Mods are paused. Press the power button in the sidebar to turn them back on.' : `Start ${esc(g.name)} to change mods. You can set up hotkeys and profiles any time.`}</span></div>` : '';
-  const cats = g.cats.filter(c => state.cat === 'all' || c.name === state.cat).map(c => {
-    const mods = c.mods.filter(m => !q || m.name.toLowerCase().includes(q) || c.name.toLowerCase().includes(q));
+  // Pinned mods get their own section at the top of All (and leave their category there).
+  const pins = state.pinned[g.id] || {};
+  const pinCat = state.cat === 'all' ? [{ name: 'Pinned', mods: modsOf(g).filter(m => pins[m.id]) }] : [];
+  const cats = [...pinCat, ...g.cats.filter(c => state.cat === 'all' || c.name === state.cat)].map(c => {
+    const mods = c.mods.filter(m => (!q || m.name.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
+      && (c.name === 'Pinned' || state.cat !== 'all' || !pins[m.id]));
     if (!mods.length) return '';
     const key = g.id + '/' + c.name, closed = state.closed[key] && !q;
     return `<section class="cat${closed ? ' closed' : ''}">
@@ -680,6 +710,7 @@ function render() {
   Object.entries(views).forEach(([v, id]) => $(id).hidden = v !== state.view);
   renderSide();
   ({ home: renderHome, library: renderLibrary, maps: renderMaps, mods: () => Mods.render(), settings: renderSettings, game: renderGame })[state.view]();
+  if (state.mini) renderMini();
   syncHotkeys();
   syncTrainer();
   syncMap();
@@ -720,6 +751,7 @@ function setMod(g, m, v, how) {
   feedback(g, m.name, shown, m.type === 'toggle' ? !!v : true, !!how);
   renderSide();
   if (state.view === 'game' && state.game === g.id) renderGame();
+  if (state.mini) renderMini();
 }
 
 // Panic key, the Playing pill's ✕ and the sidebar stop button: every mod off in the running game.
@@ -757,7 +789,7 @@ function chime(on) {
 function feedback(g, title, value, on, hotkey) {
   if (state.sounds) chime(on);
   if (state.overlay && hotkey && invoke && isLive(g)) {
-    invoke('overlay_notify', { note: { title, value, on, game: g.name, accent: state.accent } }).catch(console.error);
+    invoke('overlay_notify', { note: { title, value, on, game: g.name, accent: state.accent, corner: state.overlayCorner } }).catch(console.error);
   }
 }
 
@@ -813,10 +845,12 @@ async function checkUpdate(manual) {
   if (UPDATE) pill.textContent = `Update to ${UPDATE.version}`;
   if (state.view === 'settings') renderSettings();
 }
-function installUpdate() {
+async function installUpdate() {
   if (!UPDATE) return;
   toast('Downloading update', UPDATE.version);
   $('updatePill').textContent = 'Updating…';
+  state.pendingNotes = { version: UPDATE.version, notes: UPDATE.notes || '' };
+  await saveNow();
   // Hotswap closes and the installer reopens it on the new version.
   invoke('install_update').catch(e => { toast("Update failed", String(e)); $('updatePill').textContent = `Update to ${UPDATE.version}`; });
 }
@@ -825,6 +859,7 @@ function installUpdate() {
 function onCombo(combo) {
   if (capture) return;
   if (combo === state.panicKey) { panic(comboLabel(combo)); return; }
+  if (combo === state.sheetKey) { showSheet(true); return; }
   const g = findGame(runningId());
   if (!g || !state.hotkeys) return;
   for (const m of modsOf(g)) {
@@ -848,7 +883,13 @@ function finishCapture(combo) {
   const c = capture;
   capture = null;
   if (combo !== undefined) {
-    if (c.mid === null) {
+    if (c.mid === SHEET) {
+      const g = findGame(runningId()) || game();
+      const used = combo && g && whoUses(g, combo, 'sheet');
+      state.sheetKey = combo;
+      toast('Cheat sheet key', combo ? comboLabel(combo) : 'unbound');
+      if (used) setTimeout(() => toast(`${comboLabel(combo)} is also used by`, used), 900);
+    } else if (c.mid === null) {
       if (!combo) { toast('The panic key needs a key', ''); }
       else {
         const g = findGame(runningId()) || game();
@@ -879,6 +920,145 @@ function switchProfile(g, name) {
   render();
 }
 
+/* ---------- Status dots, corners and links ---------- */
+// Green: on and live in the game. Amber: on, but Hotswap is still connecting.
+function modDot(g, m) {
+  if (!invoke || !m.live || !isActive(g, m) || !isLive(g) || state.paused[g.id]) return '';
+  return TRAINER.connected
+    ? '<span class="mdot ok" title="Live in the game"></span>'
+    : `<span class="mdot wait" title="${esc(TRAINER.message || 'Connecting to the game…')}"></span>`;
+}
+const cornerPicker = (kind, cur) => `<div class="corners">${CORNERS.map(([k, l]) =>
+  `<button class="corner c-${k}${cur === k ? ' on' : ''}" data-${kind}="${k}" aria-label="${l}" title="${l}"><span></span></button>`).join('')}</div>`;
+
+const openUrl = url => invoke ? invoke('plugin:opener|open_url', { url }).catch(console.error) : window.open(url, '_blank');
+const issueUrl = (title, body, label) => `${REPO_URL}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}${label ? '&labels=' + encodeURIComponent(label) : ''}`;
+function bugUrl() {
+  const run = findGame(runningId());
+  return issueUrl('Bug: ', [
+    '**What happened?**', '', '', '**What did you expect?**', '', '', '**Steps to reproduce**', '1. ', '', '---',
+    `Hotswap ${VERSION || '(browser preview)'}`, `Game: ${run ? `${run.name} (${run.id})` : 'none running'}`,
+    `Trainer: ${run ? TRAINER.connected ? 'connected' : TRAINER.message || 'not connected' : '-'}`,
+  ].join('\n'), 'bug');
+}
+function requestUrl(g) {
+  return issueUrl(`Game request: ${g?.name || ''}`, [
+    `**Game:** ${g?.name || ''}`, `**Store:** ${g ? SOURCES[g.source] : ''}${g?.appId ? ` (app ${g.appId})` : ''}`, '',
+    '**Mods you would like:**', '- ', '', '---', `Hotswap ${VERSION || ''}`,
+  ].join('\n'), 'game request');
+}
+
+/* ---------- Cheat sheet: every mod's hotkey on the overlay while the key is held ---------- */
+function showSheet(on) {
+  const g = findGame(runningId());
+  if (!invoke || !state.overlay || !g || !modsOf(g).length) return;
+  const pins = state.pinned[g.id] || {};
+  const items = modsOf(g).filter(m => m.live).sort((a, b) => !!pins[b.id] - !!pins[a.id]).map(m => {
+    const k = keysOf(g, m);
+    return {
+      name: m.name, on: isActive(g, m),
+      value: m.type === 'toggle' ? (valueOf(g, m) ? 'On' : 'Off') : m.type === 'slider' ? fmt(m, valueOf(g, m)) : '',
+      keys: [k.up && (m.type === 'slider' ? '↑ ' : '') + comboLabel(k.up), k.down && '↓ ' + comboLabel(k.down)].filter(Boolean),
+    };
+  });
+  invoke('overlay_notify', { note: { kind: 'sheet', show: on, items, game: g.name, accent: state.accent, corner: state.overlayCorner } }).catch(console.error);
+}
+
+/* ---------- Share codes: a profile as a short string ---------- */
+function shareCode(g) {
+  const p = activeProf(g);
+  const json = JSON.stringify({ g: g.id, n: p.name, v: p.values || {} });
+  return 'HS1-' + btoa(String.fromCharCode(...new TextEncoder().encode(json)));
+}
+async function copyText(s) {
+  try { await navigator.clipboard.writeText(s); return true; } catch { }
+  const ta = Object.assign(document.createElement('textarea'), { value: s });
+  document.body.append(ta); ta.select();
+  const ok = document.execCommand('copy'); ta.remove(); return ok;
+}
+function importCode(g, code) {
+  let data;
+  try {
+    const b = atob(code.trim().replace(/^HS1-/, ''));
+    data = JSON.parse(new TextDecoder().decode(Uint8Array.from(b, c => c.charCodeAt(0))));
+  } catch { toast("That isn't a Hotswap share code", ''); return; }
+  if (String(data.g) !== g.id) { toast('That code is for', findGame(data.g)?.name || 'another game'); return; }
+  // Only mods this game has, with values they accept.
+  const values = {};
+  for (const m of modsOf(g)) {
+    const v = data.v?.[m.id];
+    if (m.type === 'toggle' && typeof v === 'boolean') values[m.id] = v;
+    if (m.type === 'slider' && typeof v === 'number' && isFinite(v)) values[m.id] = Math.min(m.max, Math.max(m.min, v));
+  }
+  const list = profilesOf(g), base = String(data.n || 'Shared').slice(0, 20);
+  let name = base;
+  for (let i = 2; list.some(p => p.name.toLowerCase() === name.toLowerCase()); i++) name = `${base} ${i}`;
+  list.push({ name, values });
+  importProfile = false;
+  switchProfile(g, name);
+}
+
+/* ---------- What's new: release notes after an update ---------- */
+function mdLite(s) {
+  const inline = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>').replace(/`(.+?)`/g, '<code>$1</code>');
+  let html = '', list = false;
+  for (const raw of s.replace(/\r/g, '').split('\n')) {
+    const line = raw.trimEnd(), li = line.match(/^(\s*)[-*] (.*)/);
+    if (li) { if (!list) { html += '<ul>'; list = true; } html += `<li${li[1].length ? ' class="sub"' : ''}>${inline(li[2])}</li>`; continue; }
+    if (list) { html += '</ul>'; list = false; }
+    if (!line.trim()) continue;
+    const h = line.match(/^#{1,4} (.*)/);
+    if (h) { if (!/^#{1,2} /.test(line)) html += `<h3>${inline(h[1])}</h3>`; continue; }
+    html += `<p>${inline(line.replace(/^> ?/, ''))}</p>`;
+  }
+  return html + (list ? '</ul>' : '');
+}
+async function showWhatsNew(manual) {
+  let notes = '';
+  try {
+    const r = await fetch(`https://api.github.com/repos/Zetenypapp/hotswap/releases/tags/v${VERSION}`);
+    if (r.ok) notes = (await r.json()).body || '';
+  } catch { }
+  if (!notes && state.pendingNotes?.version === VERSION) notes = state.pendingNotes.notes;
+  state.pendingNotes = null; save();
+  if (!notes) { if (manual) toast("Couldn't load the release notes", 'check your connection'); return; }
+  $('wnTitle').textContent = `What's new in Hotswap ${VERSION}`;
+  $('wnBody').innerHTML = mdLite(notes.split(/\n### 📦 Install/)[0]);
+  $('wnLink').href = `${REPO_URL}/releases/tag/v${VERSION}`;
+  $('whatsNew').hidden = false;
+}
+
+/* ---------- Mini mode: a small always-on-top window with the running game's mods ---------- */
+function setMini(on) {
+  state.mini = on;
+  if (on) { const run = runningId(); if (run && findGame(run) && modsOf(findGame(run)).length) state.game = run; closePalette?.(); }
+  document.body.classList.toggle('mini', on);
+  invoke?.('set_mini', { on }).catch(err => toast("Couldn't switch modes", String(err)));
+  save();
+  render();
+}
+function renderMini() {
+  const g = game();
+  if (!g) return;
+  const live = isLive(g), paused = live && state.paused[g.id], locked = !live || paused;
+  const pins = state.pinned[g.id] || {};
+  const mods = modsOf(g).filter(m => m.live).sort((a, b) => !!pins[b.id] - !!pins[a.id]);
+  const row = m => {
+    const v = valueOf(g, m), dis = locked ? ' disabled' : '', k = keysOf(g, m);
+    const ctl = m.type === 'toggle'
+      ? `<button class="seg sm" role="switch" aria-checked="${!!v}" aria-label="${esc(m.name)}" data-flip="${m.id}"${dis}><span class="${!v ? 'sel' : ''}">Off</span><span class="${v ? 'sel on' : ''}">On</span></button>`
+      : m.type === 'slider'
+        ? `<div class="slider sm"><input type="number" data-num="${m.id}" min="${m.min}" max="${m.max}" step="${m.step}" value="${fmt(m, v)}" aria-label="${esc(m.name)}"${dis}></div>`
+        : `<button class="apply sm" data-act="${m.id}"${dis}>Apply</button>`;
+    return `<div class="mrow${isActive(g, m) ? ' active' : ''}"><div class="mlabel"><span>${pins[m.id] ? '<i class="mpin"></i>' : ''}${esc(m.name)}${modDot(g, m)}</span><small>${esc([k.up && comboLabel(k.up), k.down && comboLabel(k.down)].filter(Boolean).join(' / ') || 'No hotkey')}</small></div>${ctl}</div>`;
+  };
+  $('mini').innerHTML = `<div class="mhead" data-tauri-drag-region>${tile(g, 'md')}<div class="mtitle" data-tauri-drag-region><b data-tauri-drag-region>${esc(g.name)}</b>
+      <span class="${live && TRAINER.connected ? 'ok' : ''}" data-tauri-drag-region>${!live ? 'Not running' : paused ? 'Mods paused' : invoke && !TRAINER.connected ? esc(TRAINER.message || 'Connecting…') : `${activeCount(g)} on`}</span></div>
+      <button class="ghost" id="miniExit" aria-label="Back to the full window" title="Back to the full window"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+      <button class="ghost" id="winClose" aria-label="Close" title="Close"><svg width="12" height="12" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1.4"/></svg></button></div>
+    <div class="mlist">${mods.length ? mods.map(row).join('') : `<p class="empty">${esc(g.name)} has no mods yet.</p>`}</div>`;
+}
+
 /* ---------- Command palette (Ctrl+K) ---------- */
 let pal = null; // { q, sel, items }
 const PAGE_ICONS = {
@@ -906,6 +1086,10 @@ function paletteItems(q) {
   if (invoke) add('Action', 'Refresh Home', 'News and deals', () => { go('home'); refreshHome(true); }, palIcon('action'));
   add('Action', 'Rescan library', 'Steam, Epic and GOG', () => scanLibrary().then(() => { render(); toast('Found', `${LIB.length} games`); }), palIcon('action'));
   add('Action', state.panel ? 'Hide side panel' : 'Show side panel', '', () => { state.panel = !state.panel; save(); render(); }, palIcon('action'));
+  if (invoke) add('Action', state.mini ? 'Leave mini mode' : 'Mini mode', 'Small window that stays on top', () => setMini(!state.mini), palIcon('action'));
+  add('Action', "What's new", `Hotswap ${VERSION}`, () => showWhatsNew(true), palIcon('action'));
+  add('Action', 'Report a bug', 'Opens GitHub', () => openUrl(bugUrl()), palIcon('action'));
+  add('Action', 'Request a game', 'Opens GitHub', () => openUrl(requestUrl()), palIcon('action'));
   if (!q) return items;
   // Name starts with the query, then contains it, then only the subtitle matches.
   return items
@@ -950,7 +1134,8 @@ let wipeArmed = false;
 document.addEventListener('click', e => {
   const a = e.target.closest('a[target="_blank"]');
   if (a && invoke) { e.preventDefault(); invoke('plugin:opener|open_url', { url: a.href }).catch(console.error); return; }
-  if (profileMenu && !e.target.closest('.profile')) { profileMenu = newProfile = false; renderGame(); }
+  if (e.target.closest('#whatsNew') && (e.target.id === 'whatsNew' || e.target.closest('#wnClose'))) { $('whatsNew').hidden = true; return; }
+  if (profileMenu && !e.target.closest('.profile')) { profileMenu = newProfile = importProfile = false; renderGame(); }
   if (pal) {
     const item = e.target.closest('[data-pal]');
     if (item) runPalette(+item.dataset.pal);
@@ -960,7 +1145,7 @@ document.addEventListener('click', e => {
   const t = e.target.closest('button');
   if (!t) return;
   const d = t.dataset;
-  if (capture && !d.bind && t.id !== 'panicBind') { capture = null; lastHotkeys = ''; render(); }
+  if (capture && !d.bind && t.id !== 'panicBind' && t.id !== 'sheetBind') { capture = null; lastHotkeys = ''; render(); }
   if (d.game) go('game', d.game);
   else if (d.view) go(d.view);
   else if (d.flip) { const g = game(), m = findMod(d.flip); setMod(g, m, !valueOf(g, m)); }
@@ -971,6 +1156,14 @@ document.addEventListener('click', e => {
   else if (d.libfilter) { state.libFilter = d.libfilter; save(); renderLibrary(); }
   else if (d.accent) { state.accent = d.accent; save(); render(); }
   else if (d.profile) switchProfile(game(), d.profile);
+  else if (d.pin) {
+    const g = game(), p = (state.pinned[g.id] ||= {});
+    if (p[d.pin]) delete p[d.pin]; else p[d.pin] = true;
+    save(); renderMods(); if (state.mini) renderMini();
+    toast(findMod(d.pin).name, p[d.pin] ? 'pinned' : 'unpinned');
+  }
+  else if (d.ocorner) { state.overlayCorner = d.ocorner; save(); renderSettings(); invoke?.('overlay_notify', { note: { title: 'Overlay', value: 'Here', on: true, game: 'Mod changes show up here', accent: state.accent, corner: state.overlayCorner } }); }
+  else if (d.rcorner) { state.radarCorner = d.rcorner; save(); renderSettings(); if (radarOpen) invoke?.('radar_show', { show: true, corner: state.radarCorner }); else toast('Radar position', CORNERS.find(c => c[0] === d.rcorner)[1]); }
   else if (d.delprofile) {
     const g = game(), list = profilesOf(g);
     state.profiles[g.id] = list.filter(p => p.name !== d.delprofile);
@@ -1009,8 +1202,14 @@ document.addEventListener('click', e => {
       const g = game();
       activeProf(g).values = {}; logLine(g, 'All mods → Off'); save(); render(); toast('All mods', 'off'); break;
     }
-    case 'profileBtn': profileMenu = !profileMenu; newProfile = false; renderGame(); break;
-    case 'addProfile': newProfile = true; renderGame(); $('pnewName')?.focus(); break;
+    case 'profileBtn': profileMenu = !profileMenu; newProfile = importProfile = false; renderGame(); break;
+    case 'addProfile': newProfile = true; importProfile = false; renderGame(); $('pnewName')?.focus(); break;
+    case 'importProfile': importProfile = true; newProfile = false; renderGame(); $('pimportCode')?.focus(); break;
+    case 'copyProfile': copyText(shareCode(game())).then(ok => toast(ok ? 'Share code copied' : "Couldn't copy", activeProf(game()).name)); profileMenu = false; renderGame(); break;
+    case 'sheetBind': startCapture(null, SHEET, 'up'); break;
+    case 'whatsNewBtn': showWhatsNew(true); break;
+    case 'winMini': setMini(true); break;
+    case 'miniExit': setMini(false); break;
     case 'panicBind': startCapture(null, null, 'up'); break;
     case 'resetBinds': state.binds = {}; save(); lastHotkeys = ''; render(); toast('Key bindings', 'reset'); break;
     case 'sortBtn': state.sortAZ = !state.sortAZ; save(); renderSide(); toast('Games sorted', state.sortAZ ? 'A–Z' : 'recently played'); break;
@@ -1030,7 +1229,7 @@ document.addEventListener('click', e => {
     case 'setAutoUpdate': state.autoUpdate = !state.autoUpdate; save(); render(); break;
     case 'setSounds': state.sounds = !state.sounds; save(); render(); if (state.sounds) chime(true); break;
     case 'setOverlay': state.overlay = !state.overlay; save(); render(); if (!state.overlay) invoke?.('overlay_close'); break;
-    case 'testOverlay': invoke?.('overlay_notify', { note: { title: 'Hotswap overlay', value: 'On', on: true, game: 'This is how mod changes look in game', accent: state.accent } }); chime(true); break;
+    case 'testOverlay': invoke?.('overlay_notify', { note: { title: 'Hotswap overlay', value: 'On', on: true, game: 'This is how mod changes look in game', accent: state.accent, corner: state.overlayCorner } }); chime(true); break;
     case 'checkUpdateBtn': checkUpdate(true); break;
     case 'updateBtn': case 'updatePill': installUpdate(); break;
     case 'softToggle': state.softOpen = !state.softOpen; save(); renderSide(); break;
@@ -1050,6 +1249,7 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('submit', e => {
+  if (e.target.id === 'pimportForm') { e.preventDefault(); importCode(game(), $('pimportCode').value); return; }
   if (e.target.id !== 'pnewForm') return;
   e.preventDefault();
   const g = game(), name = $('pnewName').value.trim();
@@ -1063,6 +1263,10 @@ document.addEventListener('submit', e => {
 document.addEventListener('change', e => {
   const id = e.target.dataset.num || e.target.dataset.range;
   if (id) setMod(game(), findMod(id), parseFloat(e.target.value));
+});
+document.addEventListener('dblclick', e => {
+  const id = e.target.dataset?.range;
+  if (id) { const m = findMod(id); setMod(game(), m, m.def); }
 });
 document.addEventListener('input', e => {
   if (e.target.dataset.range) {
@@ -1095,7 +1299,8 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); return; }
   const typing = /INPUT|TEXTAREA/.test(document.activeElement.tagName);
   if (e.key === '/' && !typing) { e.preventDefault(); $('search').focus(); $('search').select(); return; }
-  if (e.key === 'Escape' && profileMenu) { profileMenu = newProfile = false; renderGame(); return; }
+  if (e.key === 'Escape' && !$('whatsNew').hidden) { $('whatsNew').hidden = true; return; }
+  if (e.key === 'Escape' && profileMenu) { profileMenu = newProfile = importProfile = false; renderGame(); return; }
   if (e.key === 'Escape' && document.activeElement.id === 'search') { e.target.value = ''; render(); e.target.blur(); return; }
   if (e.altKey && e.key === 'ArrowLeft') { step(-1); return; }
   if (e.altKey && e.key === 'ArrowRight') { step(1); return; }
@@ -1124,6 +1329,7 @@ const ICONS = {
   dot: '<circle cx="12" cy="12" r="5"/>',
 };
 ICONS.world = ICONS.resources;
+ICONS.pinned = '<path d="M15 3l6 6-3 1-4 4 1 5-2 2-4-4-5 5H3v-1l5-5-4-4 2-2 5 1 4-4z"/>';
 const icon = (k, s = 16) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${ICONS[k] || ICONS.dot}</svg>`;
 
 /* ---------- Boot ---------- */
@@ -1139,14 +1345,19 @@ const icon = (k, s = 16) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"
     AUTOSTART = await invoke('get_autostart').catch(() => false);
     VERSION = await invoke('app_version').catch(() => '');
     if (state.autoUpdate) setTimeout(() => checkUpdate(false), 4000);
+    // First start after an update: show what changed.
+    if (VERSION && state.lastVersion && state.lastVersion !== VERSION) setTimeout(() => showWhatsNew(false), 800);
+    if (VERSION) { state.lastVersion = VERSION; save(); }
     listen?.('game-running', e => onRunning(e.payload ?? null));
     listen?.('hotkey', e => onCombo(e.payload));
     listen?.('mod-progress', e => Mods.onProgress(e.payload));
-    listen?.('trainer-status', e => { TRAINER = e.payload; if (state.view === 'game') renderPanel(); });
+    listen?.('trainer-status', e => { TRAINER = e.payload; if (state.view === 'game') { renderMods(); renderPanel(); } if (state.mini) renderMini(); });
+    listen?.('hotkey-up', e => { if (e.payload === state.sheetKey) showSheet(false); });
     onRunning(await invoke('running_game').catch(() => null));
   } else if (state.playing && !findGame(state.playing)) state.playing = null;
   nav.stack = [{ view: state.view, game: state.game }]; nav.i = 0;
   render();
+  if (state.mini) setMini(true);
 })().catch(err => {
   console.error(err);
   document.querySelectorAll('.view').forEach(v => v.hidden = v.id !== 'mapsView');

@@ -1,27 +1,58 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>Hotswap overlay</title>
 <style>
-  html, body { margin: 0; background: transparent; overflow: hidden; font-family: Figtree, system-ui, sans-serif; user-select: none; }
-  #stack { position: fixed; top: 14px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; font-family: Figtree, system-ui, sans-serif; user-select: none; }
+  #wrap { position: fixed; inset: 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  body.left #wrap { align-items: flex-start; }
+  body.right #wrap { align-items: flex-end; }
+  body.bottom #wrap { flex-direction: column-reverse; }
+  #stack { display: flex; flex-direction: column; align-items: inherit; gap: 8px; }
+  body.bottom #stack { flex-direction: column-reverse; }
   .note { display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 12px; border-radius: 18px; color: #f2f4f7;
     background: rgba(14, 16, 20, .88); box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.08);
     animation: in .22s ease-out; transition: opacity .3s, transform .3s; }
   .note.out { opacity: 0; transform: translateY(-8px); }
-  .logo { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; background: var(--c, #3ddc84); color: #0d1f14; font-weight: 900; font-size: 15px; }
+  .logo { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; background: var(--c, #3ddc84); color: #0d1f14; font-weight: 900; font-size: 15px; flex: none; }
   .t { display: flex; flex-direction: column; line-height: 1.2; }
   .t b { font-size: 14px; }
   .t span { font-size: 12px; color: #a3aab3; }
   .v { margin-left: 8px; padding: 4px 10px; border-radius: 10px; font-size: 12px; font-weight: 800; background: rgba(255,255,255,.1); }
   .v.on { background: var(--c, #3ddc84); color: #0d1f14; }
+  /* Cheat sheet: every mod and its hotkey, while the key is held. */
+  #sheet { width: 400px; max-height: 520px; overflow: hidden; padding: 12px; border-radius: 18px; color: #f2f4f7;
+    background: rgba(14, 16, 20, .92); box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.08); animation: in .16s ease-out; }
+  #sheet .hd { display: flex; align-items: center; gap: 10px; margin: 0 2px 8px; }
+  #sheet .hd b { font-size: 14px; }
+  #sheet .hd span { font-size: 12px; color: #a3aab3; }
+  #sheet .r { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 9px; font-size: 13px; }
+  #sheet .r.on { background: rgba(255,255,255,.06); }
+  #sheet .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #d9dde2; }
+  #sheet .r.on .n { color: #fff; }
+  #sheet .val { font-size: 11px; font-weight: 800; color: #a3aab3; }
+  #sheet .r.on .val { color: var(--c, #3ddc84); }
+  #sheet kbd { font: inherit; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 6px; background: rgba(255,255,255,.1); color: #f2f4f7; white-space: nowrap; }
   @keyframes in { from { opacity: 0; transform: translateY(-10px) scale(.97); } }
 </style></head>
-<body><div id="stack"></div>
+<body><div id="wrap"><div id="sheet" hidden></div><div id="stack"></div></div>
 <script>
-  // Shows mod changes over the game; the window itself is transparent and ignores the mouse.
-  const stack = document.getElementById('stack');
+  // Shows mod changes and the hotkey cheat sheet over the game; the window is transparent and ignores the mouse.
+  const stack = document.getElementById('stack'), sheet = document.getElementById('sheet');
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let sheetTimer;
   window.__TAURI__.event.listen('overlay', ({ payload: p }) => {
     document.documentElement.style.setProperty('--c', p.accent || '#3ddc84');
+    const corner = p.corner || 'top';
+    document.body.className = [corner.startsWith('bottom') && 'bottom', corner.endsWith('left') && 'left', corner.endsWith('right') && 'right'].filter(Boolean).join(' ');
+    if (p.kind === 'sheet') {
+      clearTimeout(sheetTimer);
+      sheet.hidden = !p.show;
+      if (!p.show) return;
+      sheet.innerHTML = `<div class="hd"><span class="logo">⇄</span><span class="t"><b>Hotkeys</b><span>${esc(p.game)}</span></span></div>`
+        + p.items.map(i => `<div class="r${i.on ? ' on' : ''}"><span class="n">${esc(i.name)}</span><span class="val">${esc(i.value)}</span>${i.keys.map(k => `<kbd>${esc(k)}</kbd>`).join('')}</div>`).join('');
+      // In case the release never arrives.
+      sheetTimer = setTimeout(() => { sheet.hidden = true; }, 10000);
+      return;
+    }
     const n = document.createElement('div');
     n.className = 'note';
     n.innerHTML = `<span class="logo">⇄</span><span class="t"><b>${esc(p.title)}</b><span>${esc(p.game)}</span></span><span class="v${p.on ? ' on' : ''}">${esc(p.value)}</span>`;
