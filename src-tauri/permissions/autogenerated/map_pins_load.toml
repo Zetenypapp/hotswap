@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-map-pins-load"
+description = "Enables the map_pins_load command without any pre-configured scope."
+commands.allow = ["map_pins_load"]
+
+[[permission]]
+identifier = "deny-map-pins-load"
+description = "Denies the map_pins_load command without any pre-configured scope."
+commands.deny = ["map_pins_load"]

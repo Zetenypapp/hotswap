@@ -43,6 +43,7 @@ fn data_file(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
     let file = match name {
         "state" => "state.json",
         "home" => "home_cache.json",
+        "pins" => "map_pins.json",
         _ => return Err(format!("Unknown data file: {name}")),
     };
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -154,6 +155,58 @@ fn migrate_old_data(app: &tauri::App) {
     for name in ["state.json", "home_cache.json"] {
         let _ = fs::copy(old.join(name), dir.join(name));
     }
+}
+
+/// Interactive maps, opened in their own window. The map page is someone else's site, so that
+/// window may only call the `map_*` commands (see capabilities/map.json).
+const MAPS: [(&str, &str); 1] = [(trainer::SATISFACTORY, "https://satisfactory-calculator.com/en/interactive-map")];
+
+#[tauri::command]
+fn open_map(app: AppHandle, game: String) -> Result<(), String> {
+    let url = MAPS.iter().find(|m| m.0 == game).ok_or("No map for this game")?.1;
+    if let Some(w) = app.get_webview_window("map") {
+        let _ = w.unminimize();
+        return w.set_focus().map_err(|e| e.to_string());
+    }
+    let main = app.get_webview_window("main").ok_or("no main window")?;
+    let size = main.inner_size().map_err(|e| e.to_string())?;
+    let scale = main.scale_factor().unwrap_or(1.0);
+    tauri::WebviewWindowBuilder::new(&app, "map", tauri::WebviewUrl::External(url.parse().map_err(|e| format!("{e}"))?))
+        .title("Hotswap · Satisfactory map")
+        .inner_size(size.width as f64 / scale * 0.9, size.height as f64 / scale * 0.9)
+        .center()
+        .initialization_script(include_str!("../../ui/map-overlay.js"))
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// The player's x, y, z and yaw while a supported game is running and connected.
+#[tauri::command]
+fn map_player(trainer: State<trainer::Trainer>) -> Option<[f64; 4]> {
+    trainer.position()
+}
+
+/// Teleports the player. Without a height, drops them from high above (fall damage is off for a bit).
+#[tauri::command]
+fn map_teleport(trainer: State<trainer::Trainer>, x: f64, y: f64, z: Option<f64>) -> Result<(), String> {
+    if ![x, y, z.unwrap_or(0.0)].iter().all(|v| v.is_finite() && v.abs() < 1e6) {
+        return Err("Out of the map".into());
+    }
+    trainer.position().ok_or("Not connected to the game")?;
+    trainer.teleport([x, y, z.unwrap_or(60_000.0)]);
+    Ok(())
+}
+
+#[tauri::command]
+fn map_pins_load(app: AppHandle) -> Result<Option<String>, String> {
+    load_data(app, "pins".into())
+}
+
+#[tauri::command]
+fn map_pins_save(app: AppHandle, data: String) -> Result<(), String> {
+    serde_json::from_str::<serde_json::Value>(&data).map_err(|e| e.to_string())?;
+    save_data(app, "pins".into(), data)
 }
 
 #[tauri::command]
@@ -439,7 +492,7 @@ fn main() {
         )
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.app_handle().state::<CloseToTray>().0.load(Ordering::Relaxed) {
+                if window.label() == "main" && window.app_handle().state::<CloseToTray>().0.load(Ordering::Relaxed) {
                     api.prevent_close();
                     let _ = window.hide();
                 }
@@ -456,7 +509,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
-            fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart
+            fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart,
+            open_map, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hotswap");

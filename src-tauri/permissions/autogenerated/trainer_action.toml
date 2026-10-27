@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-trainer-action"
+description = "Enables the trainer_action command without any pre-configured scope."
+commands.allow = ["trainer_action"]
+
+[[permission]]
+identifier = "deny-trainer-action"
+description = "Denies the trainer_action command without any pre-configured scope."
+commands.deny = ["trainer_action"]

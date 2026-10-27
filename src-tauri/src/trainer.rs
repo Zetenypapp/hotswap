@@ -21,6 +21,10 @@ struct Wanted {
     paused: bool,
     values: HashMap<String, f64>,
     actions: Vec<String>,
+    /// Map: where to teleport the player (x, y, z in game units).
+    teleport: Option<[f64; 3]>,
+    /// Map: the player's last known x, y, z and yaw.
+    pos: Option<[f64; 4]>,
 }
 
 #[derive(Clone, Default)]
@@ -57,6 +61,14 @@ impl Trainer {
         self.0.lock().unwrap().actions.push(id);
     }
 
+    pub fn position(&self) -> Option<[f64; 4]> {
+        self.0.lock().unwrap().pos
+    }
+
+    pub fn teleport(&self, to: [f64; 3]) {
+        self.0.lock().unwrap().teleport = Some(to);
+    }
+
     pub fn start(&self, app: AppHandle, pid_of: impl Fn(&str) -> Option<u32> + Send + 'static) {
         let me = self.clone();
         thread::spawn(move || {
@@ -64,10 +76,13 @@ impl Trainer {
             let mut last_attach: Option<Instant> = None;
             let mut last = Status { game: None, connected: false, message: String::new() };
             loop {
-                let (game, paused, values, actions) = {
+                let (game, paused, values, actions, teleport) = {
                     let mut w = me.0.lock().unwrap();
-                    (w.game.clone(), w.paused, w.values.clone(), std::mem::take(&mut w.actions))
+                    (w.game.clone(), w.paused, w.values.clone(), std::mem::take(&mut w.actions), w.teleport.take())
                 };
+                if let Some(s) = session.as_mut() {
+                    s.teleport = teleport;
+                }
                 let status = match game.as_deref() {
                     Some(SATISFACTORY) => {
                         // Attaching is the expensive part; try at most every 3 seconds.
@@ -81,6 +96,7 @@ impl Trainer {
                             session.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions))
                         }))
                         .unwrap_or_else(|_| Some(Err("Lost track of the game, reconnecting".into())));
+                        me.0.lock().unwrap().pos = session.as_ref().and_then(|s| s.pos);
                         if started.elapsed() > Duration::from_millis(400) {
                             log(&format!("slow tick: {:?}", started.elapsed()));
                         }
@@ -99,6 +115,7 @@ impl Trainer {
                     }
                     _ => {
                         session = None;
+                        me.0.lock().unwrap().pos = None;
                         Status { game: game.clone(), connected: false, message: String::new() }
                     }
                 };
@@ -192,12 +209,18 @@ struct Session {
     machines: Vec<u64>,
     machines_at: Option<Instant>,
     fed_at: Option<Instant>,
+    pos: Option<[f64; 4]>,
+    teleport: Option<[f64; 3]>,
+    teleport_fn: Option<Option<crate::ue::call::Func>>,
+    /// After a map teleport, fall damage stays off until then (you may drop from high up).
+    fall_guard: Option<Instant>,
 }
 
 impl Session {
     fn new(ue: Ue) -> Session {
         Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), turbo_orig: HashMap::new(), turbo_at: None, turbo_cleaned: false, normal_health: HashMap::new(), fall_curves: None, gs_search: None, jetpacks: Vec::new(), jetpacks_at: None,
-            recipe_addr: HashMap::new(), stack_sizes: HashMap::new(), add_stack_fn: None, woken: Default::default(), recipe_cache: HashMap::new(), zeroed: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None }
+            recipe_addr: HashMap::new(), stack_sizes: HashMap::new(), add_stack_fn: None, woken: Default::default(), recipe_cache: HashMap::new(), zeroed: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None,
+            pos: None, teleport: None, teleport_fn: None, fall_guard: None }
     }
 
     fn off(&mut self, obj: u64, name: &'static str) -> Result<u64, String> {
@@ -412,6 +435,42 @@ impl Session {
         n
     }
 
+    /// The player's x, y, z (from the root component) and facing yaw.
+    fn locate(&mut self) -> Option<[f64; 4]> {
+        let player = self.t.player;
+        let ro = self.off(player, "RootComponent").ok()?;
+        let root = self.ue.p.ptr(player + ro)?;
+        let loc = root + self.off(root, "RelativeLocation").ok()?;
+        let rot = root + self.off(root, "RelativeRotation").ok()?;
+        let [x, y, z] = [0, 8, 16].map(|o| self.ue.p.read::<f64>(loc + o).unwrap_or(f64::NAN));
+        let yaw = self.ue.p.read::<f64>(rot + 8)?; // FRotator: Pitch, Yaw, Roll
+        [x, y, z].iter().all(|v| v.is_finite()).then_some([x, y, z, yaw])
+    }
+
+    /// Moves the player with the engine's own `AActor::K2_TeleportTo`, keeping the facing direction.
+    fn teleport_to(&mut self, to: [f64; 3]) {
+        if self.ue.process_event == 0 {
+            return;
+        }
+        if self.teleport_fn.is_none() {
+            self.teleport_fn = Some(self.ue.func("Actor", "K2_TeleportTo"));
+        }
+        let Some(Some(f)) = &self.teleport_fn else { return log("K2_TeleportTo not found") };
+        let find = |n: &str| f.params.iter().find(|p| p.0 == n).map(|p| p.1 as usize);
+        let (Some(lo), Some(ro)) = (find("DestLocation"), find("DestRotation")) else { return };
+        let mut params = vec![0u8; f.size as usize];
+        for (i, v) in to.iter().enumerate() {
+            params[lo + i * 8..lo + i * 8 + 8].copy_from_slice(&v.to_le_bytes());
+        }
+        let yaw = self.pos.map_or(0.0, |p| p[3]);
+        params[ro + 8..ro + 16].copy_from_slice(&yaw.to_le_bytes());
+        self.fall_guard = Some(Instant::now() + Duration::from_secs(30));
+        match self.ue.call(self.ue.process_event, self.t.player, f, &params) {
+            Ok(r) => log(&format!("teleport to {to:?} ok={}", find("ReturnValue").is_some_and(|o| r.get(o) == Some(&1)))),
+            Err(e) => log(&format!("teleport failed: {e}")),
+        }
+    }
+
     /// Adds items to an inventory through the game's own `UFGInventoryComponent::AddStack`.
     fn add_stack(&mut self, inv: u64, item: u64, count: i32) -> bool {
         if self.ue.process_event == 0 {
@@ -561,6 +620,10 @@ impl Session {
             }
         }
         let Targets { movement, health, world, sink, .. } = self.t;
+        self.pos = self.locate();
+        if let Some(to) = self.teleport.take() {
+            self.teleport_to(to);
+        }
 
         // Remember the game's own movement values once per movement component.
         const MOVE: [&str; 4] = ["MaxWalkSpeed", "mMaxSprintSpeed", "JumpZVelocity", "GravityScale"];
@@ -650,7 +713,8 @@ impl Session {
 
         // No fall damage: the character has no fall damage curve while on; the original comes back when off.
         let (fc, fo) = (self.off(player, "mFallDamageCurve")?, self.off(player, "mFallDamageCurveOverride")?);
-        if get("no-fall-damage", 0.0) != 0.0 {
+        let guarded = self.fall_guard.is_some_and(|t| Instant::now() < t);
+        if get("no-fall-damage", 0.0) != 0.0 || guarded {
             if self.fall_curves.map_or(true, |f| f.0 != player) {
                 let orig = (player, self.ue.p.read::<u64>(player + fc).unwrap_or(0), self.ue.p.read::<u64>(player + fo).unwrap_or(0));
                 if orig.1 != 0 || orig.2 != 0 {

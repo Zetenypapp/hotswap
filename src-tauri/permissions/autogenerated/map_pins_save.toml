@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-map-pins-save"
+description = "Enables the map_pins_save command without any pre-configured scope."
+commands.allow = ["map_pins_save"]
+
+[[permission]]
+identifier = "deny-map-pins-save"
+description = "Denies the map_pins_save command without any pre-configured scope."
+commands.deny = ["map_pins_save"]

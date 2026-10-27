@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fetch-home"
+description = "Enables the fetch_home command without any pre-configured scope."
+commands.allow = ["fetch_home"]
+
+[[permission]]
+identifier = "deny-fetch-home"
+description = "Denies the fetch_home command without any pre-configured scope."
+commands.deny = ["fetch_home"]

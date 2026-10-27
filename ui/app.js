@@ -414,6 +414,25 @@ function renderLibrary() {
     }).join('') || '<p class="empty">Nothing here yet.</p>'}</div>`;
 }
 
+/* ---------- Maps ---------- */
+// Steam app IDs with an interactive map (opened in its own window by the backend).
+const MAP_GAMES = ['526870'];
+
+function renderMaps() {
+  setAmbient(null);
+  const list = MAP_GAMES.map(id => LIB.find(g => String(g.appId) === id) || buildGame({ appId: +id, name: CATALOG[id]?.name || 'Satisfactory' }));
+  $('mapsBody').innerHTML = `
+    <div class="lib-head"><h1>Maps</h1><span class="meta">Zoom, pin spots and teleport. Right-click the map to teleport or drop a pin.</span></div>
+    <div class="lib-grid">${list.map(g => `<button class="lib-item" data-map="${g.appId}"><span class="art">${capsule(g)}</span>
+      <span class="nm">${esc(g.name)}</span><span class="sub">Interactive map${RUNNING === g.id ? ' · live' : ''}</span></button>`).join('')}</div>
+    <p class="meta" style="margin-top:22px">Maps by <a href="https://satisfactory-calculator.com" ${ext}>Satisfactory Calculator</a>, shown as-is in a Hotswap window. Hotswap adds your live position, pins and teleporting on top.</p>`;
+}
+
+document.addEventListener('click', e => {
+  const m = e.target.closest('[data-map]');
+  if (m && invoke) invoke('open_map', { game: m.dataset.map }).catch(err => toast(String(err)));
+});
+
 function renderSettings() {
   setAmbient(null);
   const sw = (id, on) => `<button class="switch" role="switch" id="${id}" aria-checked="${on}"></button>`;
@@ -607,7 +626,7 @@ function render() {
   if (state.view === 'game' && !game()) state.view = 'home';
   Object.entries(views).forEach(([v, id]) => $(id).hidden = v !== state.view);
   renderSide();
-  ({ home: renderHome, library: renderLibrary, maps: () => setAmbient(null), settings: renderSettings, game: renderGame })[state.view]();
+  ({ home: renderHome, library: renderLibrary, maps: renderMaps, settings: renderSettings, game: renderGame })[state.view]();
   syncHotkeys();
   syncTrainer();
 }

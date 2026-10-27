@@ -1,8 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Window controls and opening links in the browser",
-  "windows": ["main"],
+  "description": "Main window: window controls, links, and every app command",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-minimize",
@@ -11,6 +13,24 @@
     "core:window:allow-hide",
     "core:window:allow-start-dragging",
     "core:window:allow-internal-toggle-maximize",
-    "opener:default"
+    "opener:default",
+    "allow-load-data",
+    "allow-save-data",
+    "allow-scan-library",
+    "allow-running-game",
+    "allow-launch-game",
+    "allow-set-hotkeys",
+    "allow-fetch-home",
+    "allow-close-game",
+    "allow-trainer-set",
+    "allow-trainer-action",
+    "allow-set-close-to-tray",
+    "allow-get-autostart",
+    "allow-set-autostart",
+    "allow-open-map",
+    "allow-map-player",
+    "allow-map-teleport",
+    "allow-map-pins-load",
+    "allow-map-pins-save"
   ]
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-map-player"
+description = "Enables the map_player command without any pre-configured scope."
+commands.allow = ["map_player"]
+
+[[permission]]
+identifier = "deny-map-player"
+description = "Denies the map_player command without any pre-configured scope."
+commands.deny = ["map_player"]

@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "map",
+  "description": "Map window (an outside website): only the map commands",
+  "windows": [
+    "map"
+  ],
+  "remote": {
+    "urls": [
+      "https://satisfactory-calculator.com/*"
+    ]
+  },
+  "permissions": [
+    "allow-map-player",
+    "allow-map-teleport",
+    "allow-map-pins-load",
+    "allow-map-pins-save"
+  ]
+}
