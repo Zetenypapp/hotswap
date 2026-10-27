@@ -880,8 +880,10 @@ fn main() {
     if let Some(i) = std::env::args().position(|a| a == "--scrap-test") {
         let dir = PathBuf::from(std::env::args().nth(i + 1).unwrap_or_default());
         println!("install: {:?}", scrap::install(&dir));
-        scrap::uninstall(&dir);
-        println!("removed");
+        if std::env::args().nth(i + 2).as_deref() != Some("keep") {
+            scrap::uninstall(&dir);
+            println!("removed");
+        }
         return;
     }
     // Dev aid: `hotswap --scrap-map <install> <out dir>` renders the map from a saved world.

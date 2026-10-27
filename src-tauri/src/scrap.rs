@@ -4,7 +4,8 @@
 //! - in_<n>.json: the mods, a new numbered file per change (written here, read by the bridge)
 //! - out.json: your position and health, about once a second (written by the bridge)
 //! - map_<seed>.json: the world's colors and heights, made once per world for the map
-//! The added lines and the bridge are removed again when the game closes.
+//! The lines stay between runs (the game may read its scripts as it starts, before Hotswap sees it);
+//! they only load the bridge, and `uninstall` takes everything out again.
 
 use crate::{mapimage, trainer::log};
 use std::{
@@ -18,10 +19,12 @@ pub const SCRAP: &str = "387990";
 
 const BRIDGE: &str = include_str!("../assets/sm_bridge.lua");
 const BRIDGE_FILE: &str = r"Scripts\hotswap_bridge.lua";
-const MARK: &str = "-- Hotswap: added while the game runs, removed when it closes";
-/// The game only loads script files through a direct dofile (not from inside pcall), so the file's
-/// existence is checked first; the bridge itself guards every hook.
-const HOOK: &str = r#"if not Hotswap and sm.json.fileExists( "$SURVIVAL_DATA/Scripts/hotswap_bridge.lua" ) then dofile( "$SURVIVAL_DATA/Scripts/hotswap_bridge.lua" ) end if Hotswap then local ok, err = pcall( Hotswap.hook ) if not ok then print( "[Hotswap] hook failed: " .. tostring( err ) ) end end"#;
+/// Marks our line in a game script. Older Hotswap builds appended a longer one.
+const MARK: &str = "--hotswap";
+const OLD_MARK: &str = "-- Hotswap: added while the game runs";
+/// The game only runs script files through a direct dofile (not from inside pcall); the bridge
+/// itself guards every hook. Short, because it has to fit in the space of the file's comments.
+const HOOK: &str = r#"print("[Hotswap] loading") if not Hotswap then dofile("$SURVIVAL_DATA/Scripts/hotswap_bridge.lua") end if Hotswap then local ok,e=pcall(Hotswap.hook) if not ok then print("[Hotswap] "..tostring(e)) end end"#;
 /// The scripts that load the bridge (it wraps functions from each).
 const HOOKED: [&str; 5] = [
     r"Scripts\game\SurvivalGame.lua",
@@ -56,11 +59,69 @@ fn survival_of(pid: u32) -> Option<PathBuf> {
     Some(exe.parent()?.parent()?.join("Survival")).filter(|d| d.is_dir())
 }
 
+/// Where the original of a hooked script is kept while it's patched.
+fn backup_of(survival: &Path, f: &str) -> PathBuf {
+    survival.join("hotswap").join("originals").join(f.replace('\\', "_"))
+}
+
+/// The script with our line added, at exactly its original size: the game indexes its scripts as it
+/// starts and reads only that many bytes, so text added past the end is never run. Comment text
+/// (not the `--`) makes room, and spaces pad the end.
+fn same_size_patch(orig: &str) -> Option<String> {
+    let tail = format!("\n{MARK}\n{HOOK}\n");
+    let mut out = String::with_capacity(orig.len());
+    let mut freed = 0;
+    for line in orig.split_inclusive('\n') {
+        let t = line.trim_start();
+        if freed < tail.len() && t.starts_with("--") && !t.starts_with("--[") && !line.contains("]]") {
+            let ending = if line.ends_with("\r\n") { "\r\n" } else if line.ends_with('\n') { "\n" } else { "" };
+            let short = format!("{}--{ending}", &line[..line.len() - t.len()]);
+            freed += line.len() - short.len();
+            out.push_str(&short);
+        } else {
+            out.push_str(line);
+        }
+    }
+    if freed < tail.len() {
+        return None;
+    }
+    out.push_str(&tail);
+    let pad = orig.len() - out.len();
+    out.push_str(&" ".repeat(pad));
+    Some(out)
+}
+
+/// Writes `text` to `path` and gives it the modified time `when`.
+fn write_dated(path: &Path, text: &str, when: Option<SystemTime>) -> Result<(), String> {
+    fs::write(path, text).map_err(|e| e.to_string())?;
+    if let Some(t) = when {
+        let _ = fs::OpenOptions::new().write(true).open(path).and_then(|f| f.set_modified(t));
+    }
+    Ok(())
+}
+
+/// The script as the game shipped it, with its modified time.
+fn original_of(survival: &Path, f: &str) -> Result<(String, Option<SystemTime>), String> {
+    let backup = backup_of(survival, f);
+    if let Ok(text) = fs::read_to_string(&backup) {
+        return Ok((text, fs::metadata(&backup).and_then(|m| m.modified()).ok()));
+    }
+    let path = survival.join(f);
+    let s = fs::read_to_string(&path).map_err(|e| format!("{f}: {e}"))?;
+    let when = fs::metadata(&path).and_then(|m| m.modified()).ok();
+    // An older Hotswap's appended line (that build lost the date, so take a neighbor's).
+    if let Some(i) = s.find(OLD_MARK) {
+        let neighbor = fs::metadata(survival.join(r"Scripts\util.lua")).and_then(|m| m.modified()).ok();
+        return Ok((s[..i].strip_suffix('\n').unwrap_or(&s[..i]).to_string(), neighbor));
+    }
+    Ok((s, when))
+}
+
 /// Adds the bridge to the game's scripts (idempotent) and starts a fresh settings folder.
 pub fn install(survival: &Path) -> Result<(), String> {
     let io = |e: std::io::Error| e.to_string();
     let dir = survival.join("hotswap");
-    fs::create_dir_all(&dir).map_err(io)?;
+    fs::create_dir_all(dir.join("originals")).map_err(io)?;
     if let Ok(entries) = fs::read_dir(&dir) {
         for e in entries.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
@@ -72,16 +133,14 @@ pub fn install(survival: &Path) -> Result<(), String> {
     fs::write(dir.join("map_wanted.json"), "{}").map_err(io)?;
     fs::write(survival.join(BRIDGE_FILE), BRIDGE).map_err(io)?;
     for f in HOOKED {
-        let path = survival.join(f);
-        let s = fs::read_to_string(&path).map_err(|e| format!("{f}: {e}"))?;
-        // An older Hotswap's line is replaced with this one.
-        let orig = match s.find(MARK) {
-            Some(i) => s[..i].strip_suffix('\n').unwrap_or(&s[..i]).to_string(),
-            None => s.clone(),
-        };
-        let want = format!("{orig}\n{MARK}\n{HOOK}\n");
-        if want != s {
-            fs::write(&path, want).map_err(io)?;
+        let (orig, when) = original_of(survival, f)?;
+        let backup = backup_of(survival, f);
+        if !backup.exists() {
+            write_dated(&backup, &orig, when)?;
+        }
+        let want = same_size_patch(&orig).ok_or_else(|| format!("{f}: no room for Hotswap's line"))?;
+        if fs::read_to_string(survival.join(f)).ok().as_deref() != Some(want.as_str()) {
+            write_dated(&survival.join(f), &want, when)?;
         }
     }
     Ok(())
@@ -90,15 +149,10 @@ pub fn install(survival: &Path) -> Result<(), String> {
 /// Takes the bridge out again, leaving the game's scripts exactly as they were.
 pub fn uninstall(survival: &Path) {
     for f in HOOKED {
-        let path = survival.join(f);
-        let Ok(s) = fs::read_to_string(&path) else { continue };
-        if let Some(i) = s.find(MARK) {
-            let mut orig = s[..i].to_string();
-            if orig.ends_with('\n') {
-                orig.pop();
-            }
-            let _ = fs::write(&path, orig);
+        if let Ok((orig, when)) = original_of(survival, f) {
+            let _ = write_dated(&survival.join(f), &orig, when);
         }
+        let _ = fs::remove_file(backup_of(survival, f));
     }
     let _ = fs::remove_file(survival.join(BRIDGE_FILE));
     if let Ok(entries) = fs::read_dir(survival.join("hotswap")) {
@@ -158,13 +212,6 @@ impl Session {
             _ => None,
         };
         Ok(true)
-    }
-}
-
-impl Drop for Session {
-    fn drop(&mut self) {
-        uninstall(&self.survival);
-        log("scrap: bridge removed");
     }
 }
 
