@@ -7,7 +7,7 @@ Hotswap is a free, open-source, ad-free mod app for **single-player** PC games o
 > 💡 **Inspired by ArtCraft.**
 > 🤖 **Made by AI.** Hotswap was designed and written by Claude (Anthropic's AI) in Claude Code, directed by [@Zetenypapp](https://github.com/Zetenypapp).
 
-> 🎮 **Game support right now: Satisfactory and Subnautica 2.** These are the games with working mod settings so far. Every other game shows up in your library with art, playtime and launching, but its mod list is either empty or marked **Soon**.
+> 🎮 **Game support right now: Satisfactory, Subnautica and Subnautica 2.** These are the games with working mod settings so far. Every other game shows up in your library with art, playtime and launching, but its mod list is either empty or marked **Soon**.
 
 ![Satisfactory mod page](docs/game.png)
 
@@ -29,6 +29,10 @@ All of these work live while you play. Hotswap connects to the running game, and
 | 🏗️ | **No Power Required / No Fuel Needed** | Factories and generators run for free |
 
 Everything happens in the game's memory only. Nothing is written to your save file: restart the game and it's all back to normal. Still, **keep a backup save** while experimenting.
+
+## 🐠 Subnautica mods
+
+Infinite Health, Infinite Oxygen, No Hunger, No Thirst, Swim Speed, Walk Speed, Free Crafting, Unlock All Blueprints, Instant Building, Instant Scanning, Fast Growing, Infinite Energy, No Crush Depth and Passive Creatures. Most of them switch the game's own console cheats. Subnautica runs on Unity, and Hotswap looks up its classes and fields by asking the game's Mono runtime.
 
 ## 🌊 Subnautica 2 mods
 
@@ -54,6 +58,8 @@ Maps → Satisfactory opens a map drawn from your running game:
 - 🏭 **Your factory:** buildings, belts, pipes, rails and power lines
 - 📍 **Live position and trail**, pins, and **right-click teleport**
 - 🌐 A **Detailed map** tab with Satisfactory Calculator's interactive map
+
+**Subnautica** gets a map rendered from the game's own terrain files: a satellite-style view of the seabed (or a depth map), your live position and heading, and pins.
 
 ## 🧩 Mod loader
 
