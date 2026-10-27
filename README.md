@@ -77,12 +77,14 @@ Mods has a page per game. For Satisfactory, Browse searches every mod on [ficsit
 - ▶️ **Real Play button:** launches through the game's store and detects when it's running, however you started it
 - ⌨️ **In-game hotkeys:** rebindable, with clash warnings, plus a panic key that turns every mod off
 - ⏻ **Power and stop:** pause all mods or close the game from the sidebar
-- 🗂️ **Profiles:** save mod setups per game and switch in one click
+- 🗂️ **Profiles:** save mod setups per game and switch in one click, or share one with a friend as a code
+- 📌 **Pinned mods:** keep your favorites at the top, with a live dot when they're working in game
+- 🪟 **Mini mode:** a small always-on-top window with just the running game's mods
 - 📰 **Live Home:** developer news for your games, Steam deals (via CheapShark), top sellers and new releases
 - ⏱️ **Playtime and sessions:** Steam hours plus time played with Hotswap
 - 🔍 **Ctrl+K palette:** jump to any game, page, mod or action
 - 📍 **Teleport hotkeys:** save your position and jump back to it
-- 🔊 **Sounds and in-game overlay** when mods change
+- 🔊 **Sounds and in-game overlay** when mods change, in the corner you pick, plus a hotkey cheat sheet (hold Ctrl+F1)
 - 🔄 **Auto-updates:** signed updates from GitHub releases, installed with one click
 - 🎨 **Accent colors, tray icon, start with Windows**
 
