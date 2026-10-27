@@ -422,6 +422,41 @@ async fn tokio_sleep(ms: u64) {
     let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(std::time::Duration::from_millis(ms))).await;
 }
 
+/// Shows or closes the radar: a small transparent, click-through window in the top-right corner.
+#[tauri::command]
+async fn radar_show(app: AppHandle, show: bool) -> Result<(), String> {
+    let existing = app.get_webview_window("radar");
+    if !show {
+        if let Some(w) = existing {
+            let _ = w.close();
+        }
+        return Ok(());
+    }
+    if existing.is_some() {
+        return Ok(());
+    }
+    let monitor = app.primary_monitor().ok().flatten().ok_or("no monitor")?;
+    let scale = monitor.scale_factor();
+    let size = 260.0;
+    let x = monitor.position().x as f64 / scale + monitor.size().width as f64 / scale - size - 24.0;
+    let y = monitor.position().y as f64 / scale + 24.0;
+    let win = tauri::WebviewWindowBuilder::new(&app, "radar", tauri::WebviewUrl::App("radar.html".into()))
+        .title("Hotswap radar")
+        .inner_size(size, size)
+        .position(x, y)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false)
+        .resizable(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let _ = win.set_ignore_cursor_events(true);
+    Ok(())
+}
+
 #[tauri::command]
 fn overlay_close(app: AppHandle) {
     if let Some(w) = app.get_webview_window("overlay") {
@@ -725,6 +760,36 @@ fn main() {
         println!("{:?} in {:?}", sn1map::ensure(dir, std::path::Path::new(&out), sn1map::Style::Satellite), t.elapsed());
         return;
     }
+    // Dev aid: `hotswap --repo-peek` prints the R.E.P.O. player's and enemies' positions.
+    if std::env::args().any(|a| a == "--repo-peek") {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let pid = sys.processes().values().find(|p| p.name().to_string_lossy() == "REPO.exe").map(|p| p.pid().as_u32());
+        let Some(Ok(mut m)) = pid.map(mono::Mono::attach) else { return println!("not attached") };
+        let pa = m.class("", "PlayerAvatar").unwrap();
+        let avatar = m.static_addr(pa, "instance").and_then(|a| m.p.ptr(a)).unwrap();
+        let (to, co) = (m.field(pa, "playerTransform").unwrap() as u64, m.field(pa, "clientPositionCurrent").unwrap() as u64);
+        let t = m.p.ptr(avatar + to).unwrap();
+        let cp: Vec<f32> = (0..3).map(|i| m.p.read::<f32>(avatar + co + i * 4).unwrap()).collect();
+        println!("player transform {:?} clientPositionCurrent {cp:?}", m.transform_pos(t));
+        let ed = m.class("", "EnemyDirector").unwrap();
+        let dir = m.static_addr(ed, "instance").and_then(|a| m.p.ptr(a)).unwrap();
+        let lo = m.field(ed, "enemiesSpawned").unwrap() as u64;
+        let list = m.p.ptr(dir + lo).unwrap();
+        let (items, n) = (m.p.ptr(list + 0x10).unwrap(), m.p.read::<i32>(list + 0x18).unwrap());
+        let ep = m.class("", "EnemyParent").unwrap();
+        let (eo, no, so) = (m.field(ep, "Enemy").unwrap() as u64, m.field(ep, "enemyName").unwrap() as u64, m.field(ep, "Spawned").unwrap() as u64);
+        let en = m.class("", "Enemy").unwrap();
+        let ct = m.field(en, "CenterTransform").unwrap() as u64;
+        for i in 0..n as u64 {
+            let Some(par) = m.p.ptr(items + 0x20 + i * 8) else { continue };
+            let name = m.p.ptr(par + no).map(|s| { let len = m.p.read::<i32>(s + 0x10).unwrap_or(0).clamp(0, 64) as usize; let mut b = vec![0u8; len * 2]; m.p.read_into(s + 0x14, &mut b); String::from_utf16_lossy(&b.chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect::<Vec<_>>()) });
+            let spawned = m.p.read::<u8>(par + so);
+            let pos = m.p.ptr(par + eo).and_then(|e| m.p.ptr(e + ct)).and_then(|t| m.transform_pos(t));
+            println!("  {name:?} spawned={spawned:?} at {pos:?}");
+        }
+        return;
+    }
     // Dev aid: `hotswap --world-scan` prints what the map would draw.
     if std::env::args().any(|a| a == "--world-scan") {
         let mut sys = sysinfo::System::new();
@@ -1007,7 +1072,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
             fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart,
-            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
+            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, radar_show, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hotswap");

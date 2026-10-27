@@ -195,6 +195,7 @@ function syncHotkeys() {
 }
 
 // Tells the trainer which values the running game should have.
+let radarOpen = false;
 let lastTrainer = '';
 let TRAINER = { connected: false, message: '' };
 function syncTrainer() {
@@ -207,6 +208,9 @@ function syncTrainer() {
   if (sig === lastTrainer) return;
   lastTrainer = sig;
   invoke('trainer_set', args).catch(console.error);
+  // The radar window lives while a game with the radar mod has it on.
+  const radar = !!values['enemy-radar'] && !args.paused;
+  if (radar !== radarOpen) { radarOpen = radar; invoke('radar_show', { show: radar }).catch(console.error); }
 }
 
 /* ---------- Tiles ---------- */

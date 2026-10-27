@@ -225,6 +225,14 @@ impl Mono {
         out
     }
 
+    /// A managed System.String (length at +0x10, UTF-16 characters from +0x14).
+    pub fn string(&self, s: u64) -> String {
+        let len = self.p.read::<i32>(s + 0x10).unwrap_or(0).clamp(0, 256) as usize;
+        let mut b = vec![0u8; len * 2];
+        self.p.read_into(s + 0x14, &mut b);
+        String::from_utf16_lossy(&b.chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect::<Vec<_>>())
+    }
+
     pub fn cstr(&self, addr: u64) -> String {
         let mut b = [0u8; 256];
         self.p.read_into(addr, &mut b);
@@ -267,4 +275,53 @@ fn heap_regions(p: &Proc) -> Vec<(u64, usize)> {
         addr = base + size;
     }
     out
+}
+
+impl Mono {
+    /// World position of a UnityEngine.Transform (managed object), read from Unity's native
+    /// transform hierarchy: the managed object points to the native Transform (m_CachedPtr at
+    /// +0x10), which holds its hierarchy and index; positions are local, so walk up the parents.
+    pub fn transform_pos(&self, transform: u64) -> Option<[f32; 3]> {
+        self.transform_world(transform).map(|(p, _)| p)
+    }
+
+    /// World position and rotation (quaternion x, y, z, w) of a Transform.
+    pub fn transform_world(&self, transform: u64) -> Option<([f32; 3], [f32; 4])> {
+        let native = self.p.ptr(transform + 0x10)?;
+        let hierarchy = self.p.ptr(native + 0x38)?;
+        let mut index = self.p.read::<i32>(native + 0x40)?;
+        let locals = self.p.ptr(hierarchy + 0x18)?;
+        let parents = self.p.ptr(hierarchy + 0x20)?;
+        let read = |i: i32| -> Option<[f32; 12]> {
+            let mut b = [0u8; 48];
+            self.p.read_into(locals + i as u64 * 48, &mut b).then_some(())?;
+            Some(std::array::from_fn(|k| f32::from_le_bytes(b[k * 4..k * 4 + 4].try_into().unwrap())))
+        };
+        let t = read(index)?;
+        let mut pos = [t[0], t[1], t[2]];
+        let mut rot = [t[4], t[5], t[6], t[7]];
+        for _ in 0..64 {
+            index = self.p.read::<i32>(parents + index as u64 * 4)?;
+            if index < 0 {
+                break;
+            }
+            // Parent: translation (0..3), rotation quaternion xyzw (4..8), scale (8..11).
+            let p = read(index)?;
+            let s = [pos[0] * p[8], pos[1] * p[9], pos[2] * p[10]];
+            let (qx, qy, qz, qw) = (p[4], p[5], p[6], p[7]);
+            // v' = v + 2w(q x v) + 2 q x (q x v)
+            let c1 = [qy * s[2] - qz * s[1], qz * s[0] - qx * s[2], qx * s[1] - qy * s[0]];
+            let c2 = [qy * c1[2] - qz * c1[1], qz * c1[0] - qx * c1[2], qx * c1[1] - qy * c1[0]];
+            pos = [0, 1, 2].map(|k| s[k] + 2.0 * (qw * c1[k] + c2[k]) + p[k]);
+            // rot = parent * rot
+            let [x, y, z, w] = rot;
+            rot = [
+                qw * x + qx * w + qy * z - qz * y,
+                qw * y - qx * z + qy * w + qz * x,
+                qw * z + qx * y - qy * x + qz * w,
+                qw * w - qx * x - qy * y - qz * z,
+            ];
+        }
+        pos.iter().all(|v| v.is_finite() && v.abs() < 1e6).then_some((pos, rot))
+    }
 }

@@ -19,11 +19,13 @@ pub struct Session {
     /// The grabber's own strengths (with your upgrades) before scaling: field -> value.
     grab_orig: HashMap<&'static str, f32>,
     grabber: u64,
+    /// Enemy radar data for the overlay, when the radar is on.
+    pub radar: Option<serde_json::Value>,
 }
 
 impl Session {
     pub fn new(m: Mono) -> Session {
-        Session { m, avatar: 0, health: 0, controller: 0, off: HashMap::new(), god_orig: None, switched: HashMap::new(), grab_orig: HashMap::new(), grabber: 0 }
+        Session { m, avatar: 0, health: 0, controller: 0, off: HashMap::new(), god_orig: None, switched: HashMap::new(), grab_orig: HashMap::new(), grabber: 0, radar: None }
     }
 
     fn f(&mut self, class: &str, field: &'static str) -> Option<u64> {
@@ -65,6 +67,33 @@ impl Session {
         } else if let Some(v) = self.switched.remove(&addr) {
             self.m.p.write(addr, v);
         }
+    }
+
+    /// You (position and facing) and every spawned enemy with its name and position.
+    fn scan_enemies(&mut self, avatar: u64) -> Option<serde_json::Value> {
+        let to = self.f("PlayerAvatar", "playerTransform")?;
+        let (me, rot) = self.m.transform_world(self.m.p.ptr(avatar + to)?)?;
+        // Facing: the body's forward (0, 0, 1) rotated, as a compass angle (0 = +z).
+        let [x, y, z, w] = rot;
+        let (fx, fz) = (2.0 * (x * z + w * y), 1.0 - 2.0 * (x * x + y * y));
+        let yaw = fx.atan2(fz).to_degrees();
+        let dir = self.static_obj("EnemyDirector", "instance")?;
+        let lo = self.f("EnemyDirector", "enemiesSpawned")?;
+        let list = self.m.p.ptr(dir + lo)?;
+        let (items, n) = (self.m.p.ptr(list + 0x10)?, self.m.p.read::<i32>(list + 0x18)?);
+        let (eo, no, so) = (self.f("EnemyParent", "Enemy")?, self.f("EnemyParent", "enemyName")?, self.f("EnemyParent", "Spawned")?);
+        let ct = self.f("Enemy", "CenterTransform")?;
+        let mut enemies = Vec::new();
+        for i in 0..n.clamp(0, 64) as u64 {
+            let Some(parent) = self.m.p.ptr(items + 0x20 + i * 8) else { continue };
+            if self.m.p.read::<u8>(parent + so) != Some(1) {
+                continue;
+            }
+            let Some(pos) = self.m.p.ptr(parent + eo).and_then(|e| self.m.p.ptr(e + ct)).and_then(|t| self.m.transform_pos(t)) else { continue };
+            let name = self.m.p.ptr(parent + no).map(|s| self.m.string(s)).unwrap_or_default();
+            enemies.push(serde_json::json!({ "name": name, "x": pos[0], "y": pos[1], "z": pos[2] }));
+        }
+        Some(serde_json::json!({ "me": { "x": me[0], "y": me[1], "z": me[2], "yaw": yaw }, "enemies": enemies }))
     }
 
     pub fn tick(&mut self, values: Option<&HashMap<String, f64>>, actions: &[String]) -> Result<bool, String> {
@@ -158,6 +187,7 @@ impl Session {
                 self.write_f32(g, "PhysGrabber", field, base * f);
             }
         }
+        self.radar = if on("enemy-radar") { self.scan_enemies(avatar) } else { None };
         // Round: infinite battery (the game's debug switch) and completing every extraction point.
         if let Some(rd) = self.static_obj("RoundDirector", "instance").filter(|&r| r != 0) {
             self.switch(rd, "RoundDirector", "debugInfiniteBattery", on("infinite-battery"));

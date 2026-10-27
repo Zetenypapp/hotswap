@@ -1,0 +1,57 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Hotswap radar</title>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; user-select: none; }
+  canvas { display: block; }
+</style></head>
+<body><canvas id="c" width="260" height="260"></canvas>
+<script>
+  // Enemy radar over the game: you in the middle facing up, enemies as dots (through walls).
+  // The window is transparent and ignores the mouse; frames come from the trainer ~10 times a second.
+  const RANGE = 30; // meters to the edge
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = 260 * dpr; cv.height = 260 * dpr; cv.style.width = cv.style.height = '260px';
+  ctx.scale(dpr, dpr);
+  const C = 130, R = 118;
+  let frame = null, seen = 0;
+
+  function draw() {
+    ctx.clearRect(0, 0, 260, 260);
+    ctx.fillStyle = 'rgba(10, 12, 16, .62)';
+    ctx.beginPath(); ctx.arc(C, C, R, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1;
+    for (const r of [R / 3, R * 2 / 3, R]) { ctx.beginPath(); ctx.arc(C, C, r, 0, 7); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(C, C - R); ctx.lineTo(C, C + R); ctx.moveTo(C - R, C); ctx.lineTo(C + R, C); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.font = '600 10px system-ui';
+    ctx.fillText(`${RANGE} m`, C + 4, C - R + 12);
+    // You.
+    ctx.fillStyle = '#3ddc84';
+    ctx.beginPath(); ctx.moveTo(C, C - 9); ctx.lineTo(C + 6, C + 6); ctx.lineTo(C, C + 3); ctx.lineTo(C - 6, C + 6); ctx.closePath(); ctx.fill();
+    if (!frame || performance.now() - seen > 2000) return;
+    const { me, enemies } = frame;
+    const a = me.yaw * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
+    const k = R / RANGE;
+    for (const e of enemies) {
+      const dx = e.x - me.x, dz = e.z - me.z, dy = e.y - me.y;
+      let right = dx * cos - dz * sin, fwd = dx * sin + dz * cos;
+      const dist = Math.hypot(dx, dz);
+      // Beyond range: pinned to the edge.
+      const f = Math.min(1, RANGE / Math.max(dist, 0.01));
+      if (dist > RANGE) { right *= f; fwd *= f; }
+      const x = C + right * k, y = C - fwd * k;
+      const near = dist < 10;
+      ctx.fillStyle = dist > RANGE ? 'rgba(255,90,90,.55)' : near ? '#ff3b3b' : '#ff7a59';
+      ctx.beginPath(); ctx.arc(x, y, near ? 6 : 4.5, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+      // Above / below you by more than a floor.
+      if (Math.abs(dy) > 2.5) { ctx.fillStyle = '#fff'; ctx.font = '700 9px system-ui'; ctx.fillText(dy > 0 ? '▲' : '▼', x + 6, y + 3); }
+      if (dist <= RANGE) {
+        ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '600 10px system-ui';
+        ctx.fillText(`${e.name || 'Enemy'} ${Math.round(dist)}m`, x + 8, y - 6);
+      }
+    }
+  }
+  window.__TAURI__.event.listen('radar', ({ payload }) => { frame = payload; seen = performance.now(); });
+  (function loop() { draw(); requestAnimationFrame(loop); })();
+</script></body></html>

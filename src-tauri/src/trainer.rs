@@ -169,6 +169,9 @@ impl Trainer {
                             repo.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions))
                         }))
                         .unwrap_or_else(|_| Some(Err("Lost track of the game, reconnecting".into())));
+                        if let Some(r) = repo.as_ref().and_then(|s| s.radar.clone()) {
+                            let _ = app.emit("radar", r);
+                        }
                         match result {
                             Some(Ok(true)) => Status { game: game.clone(), connected: true, message: "Connected".into() },
                             Some(Err(e)) => {
@@ -192,7 +195,9 @@ impl Trainer {
                     let _ = app.emit("trainer-status", &status);
                     last = status;
                 }
-                thread::sleep(Duration::from_millis(500));
+                // The radar needs smooth updates; everything else is fine twice a second.
+                let fast = game.as_deref() == Some(crate::repo::REPO) && values.get("enemy-radar").is_some_and(|v| *v != 0.0) && !paused;
+                thread::sleep(Duration::from_millis(if fast { 100 } else { 500 }));
             }
         });
     }

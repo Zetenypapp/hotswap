@@ -4,7 +4,8 @@
   "description": "Main window: window controls, links, and every app command",
   "windows": [
     "main",
-    "overlay"
+    "overlay",
+    "radar"
   ],
   "permissions": [
     "core:default",
@@ -53,6 +54,7 @@
     "allow-fmods-install",
     "allow-fmods-downloads",
     "allow-fmods-pick",
-    "allow-nexus-search"
+    "allow-nexus-search",
+    "allow-radar-show"
   ]
 }
