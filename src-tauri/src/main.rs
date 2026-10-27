@@ -8,6 +8,7 @@ mod iostore;
 mod mapimage;
 mod modfiles;
 mod modloader;
+mod repo;
 mod mono;
 mod sn1;
 mod sn1map;

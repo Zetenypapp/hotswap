@@ -56,6 +56,7 @@ const LIVE = {
     'free-production', 'no-power-required', 'no-fuel-needed', 'turbo-production',
     'save-position', 'teleport-to-saved-position',
   ],
+  3241660: ['infinite-health', 'infinite-stamina', 'movement-speed'],
   264710: [
     'infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'swim-speed', 'walk-speed',
     'free-crafting', 'unlock-all-blueprints', 'instant-building', 'instant-scanning', 'fast-growing',
