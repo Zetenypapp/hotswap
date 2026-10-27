@@ -166,7 +166,7 @@ impl Trainer {
                                 .map(crate::repo::Session::new);
                         }
                         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            repo.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }))
+                            repo.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions))
                         }))
                         .unwrap_or_else(|_| Some(Err("Lost track of the game, reconnecting".into())));
                         match result {
