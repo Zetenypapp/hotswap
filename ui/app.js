@@ -419,26 +419,40 @@ function renderLibrary() {
 const MAP_GAMES = ['526870'];
 
 let mapOpen = null, mapShown = false; // app ID of the map being shown on the Maps page
+let mapMode = 'local'; // 'local' = Hotswap's own map, 'web' = Satisfactory Calculator
 
 function renderMaps() {
   setAmbient(null);
   const list = MAP_GAMES.map(id => LIB.find(g => String(g.appId) === id) || buildGame({ appId: +id, name: CATALOG[id]?.name || 'Satisfactory' }));
   const open = list.find(g => String(g.appId) === mapOpen);
+  // Re-renders happen on every app event; leave a live map alone instead of rebuilding it.
+  const key = open ? `${open.appId}:${mapMode}` : '';
+  if (key && $('mapsBody').dataset.key === key) return;
+  $('mapsBody').dataset.key = key;
+  if (!open || mapMode !== 'local') LocalMap.unmount();
   $('mapsBody').innerHTML = open ? `
-    <div class="lib-head"><button class="chip" data-mapback>‹ All maps</button><h1>${esc(open.name)}</h1><span class="meta">Right-click the map to teleport or drop a pin.</span></div>
-    <div id="mapHost" class="map-host"><span>Loading map…</span></div>` : `
-    <div class="lib-head"><h1>Maps</h1><span class="meta">Zoom, pin spots and teleport. Right-click the map to teleport or drop a pin.</span></div>
+    <div class="lib-head map-head"><button class="chip" data-mapback>‹ All maps</button><h1>${esc(open.name)}</h1>
+      <div class="seg-tabs"><button class="chip${mapMode === 'local' ? ' on' : ''}" data-mapmode="local">Hotswap map</button><button class="chip${mapMode === 'web' ? ' on' : ''}" data-mapmode="web">Detailed map</button></div>
+      <span class="meta">${mapMode === 'local' ? 'Live from your game. Right-click to teleport or pin.' : 'By Satisfactory Calculator (their site, their ads).'}</span></div>
+    <div id="mapHost" class="map-host">${mapMode === 'web' ? '<span>Loading map…</span>' : ''}</div>` : `
+    <div class="lib-head"><h1>Maps</h1><span class="meta">Resources, collectibles and your factory, live. Pin spots and teleport.</span></div>
     <div class="lib-grid">${list.map(g => `<button class="lib-item" data-map="${g.appId}"><span class="art">${capsule(g)}</span>
       <span class="nm">${esc(g.name)}</span><span class="sub">Interactive map${RUNNING === g.id ? ' · live' : ''}</span></button>`).join('')}</div>
-    <p class="meta" style="margin-top:22px">Maps by <a href="https://satisfactory-calculator.com" ${ext}>Satisfactory Calculator</a>, shown as-is. Hotswap adds your live position, pins and teleporting on top.</p>`;
+    <p class="meta" style="margin-top:22px">The Hotswap map is drawn from your running game. The detailed map is <a href="https://satisfactory-calculator.com" ${ext}>Satisfactory Calculator</a>, shown as-is.</p>`;
+  if (open && mapMode === 'local') {
+    const host = $('mapHost');
+    host.style.height = Math.max(300, innerHeight - host.getBoundingClientRect().top - 16) + 'px';
+    LocalMap.mount(host);
+  }
 }
 
 // The map is a separate web view laid over #mapHost, so keep it matched to that box and hide it
 // whenever the page (or the palette, which it would cover) says so.
 function syncMap() {
+  if (state.view !== 'maps' && $('mapsBody').dataset.key) { LocalMap.unmount(); $('mapsBody').dataset.key = ''; }
   if (!invoke) return;
   const host = $('mapHost');
-  if (state.view !== 'maps' || !mapOpen || !host || pal) {
+  if (state.view !== 'maps' || !mapOpen || mapMode !== 'web' || !host || pal) {
     if (mapShown) { mapShown = false; invoke('map_hide'); }
     return;
   }
@@ -447,12 +461,18 @@ function syncMap() {
   mapShown = true;
   invoke('map_show', { game: mapOpen, x: r.left, y: r.top, w: r.width, h: r.height }).catch(e => { mapShown = false; toast(String(e)); });
 }
-addEventListener('resize', () => syncMap());
+addEventListener('resize', () => {
+  const host = $('mapHost');
+  if (host && mapMode === 'local') host.style.height = Math.max(300, innerHeight - host.getBoundingClientRect().top - 16) + 'px';
+  syncMap();
+});
 
 document.addEventListener('click', e => {
   const m = e.target.closest('[data-map]');
   if (m) { mapOpen = m.dataset.map; renderMaps(); syncMap(); }
   if (e.target.closest('[data-mapback]')) { mapOpen = null; renderMaps(); syncMap(); }
+  const mm = e.target.closest('[data-mapmode]');
+  if (mm) { mapMode = mm.dataset.mapmode; renderMaps(); syncMap(); }
 });
 
 function renderSettings() {

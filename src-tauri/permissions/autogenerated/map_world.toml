@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-map-world"
+description = "Enables the map_world command without any pre-configured scope."
+commands.allow = ["map_world"]
+
+[[permission]]
+identifier = "deny-map-world"
+description = "Denies the map_world command without any pre-configured scope."
+commands.deny = ["map_world"]

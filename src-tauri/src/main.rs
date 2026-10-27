@@ -9,6 +9,7 @@ mod trainer;
 mod ue;
 mod vdf;
 mod watch;
+mod world;
 
 use std::{
     collections::HashMap,
@@ -178,6 +179,18 @@ async fn map_show(app: AppHandle, game: String, x: f64, y: f64, w: f64, h: f64) 
     main.add_child(view, pos, size).map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// Everything the Hotswap map draws, read live from the running game.
+#[tauri::command]
+async fn map_world(watch: State<'_, watch::Watch>, game: String) -> Result<world::World, String> {
+    if game != trainer::SATISFACTORY {
+        return Err("No map for this game".into());
+    }
+    let pid = watch.pid_of(&game).ok_or("Start the game to see your world")?;
+    tauri::async_runtime::spawn_blocking(move || ue::objects::Ue::attach(pid).map(|ue| world::scan(&ue)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn map_hide(app: AppHandle) {
     if let Some(v) = app.get_webview("map") {
@@ -307,6 +320,51 @@ fn main() {
         match ue::symbols::find_rva(std::path::Path::new(&a[i + 1]), &a[i + 2]) {
             Ok(rva) => println!("{} = 0x{rva:X} ({:?})", a[i + 2], t.elapsed()),
             Err(e) => println!("error: {e} ({:?})", t.elapsed()),
+        }
+        return;
+    }
+    // Dev aid: `hotswap --world-scan` prints what the map would draw.
+    if std::env::args().any(|a| a == "--world-scan") {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let pid = sys.processes().values().find(|p| p.name().to_string_lossy().contains("FactoryGameSteam-Win64-Shipping")).map(|p| p.pid().as_u32());
+        let Some(u) = pid.and_then(|p| ue::objects::Ue::attach(p).ok()) else { println!("not attached"); return };
+        let t = std::time::Instant::now();
+        let w = serde_json::to_value(world::scan(&u)).unwrap();
+        if let Some(out) = std::env::args().skip_while(|a| a != "--world-scan").nth(1) {
+            let _ = fs::write(out, w.to_string());
+        }
+        println!("scan {:?}", t.elapsed());
+        for k in ["nodes", "things", "buildings", "lines"] {
+            let a = w[k].as_array().unwrap();
+            println!("{k}: {} e.g. {}", a.len(), a.iter().take(3).map(|v| v.to_string()).collect::<Vec<_>>().join(" | "));
+        }
+        let mut res: std::collections::BTreeMap<String, usize> = Default::default();
+        for n in w["nodes"].as_array().unwrap() { *res.entry(format!("{} {} p{}", n["kind"], n["res"], n["purity"])).or_default() += 1; }
+        println!("{res:?}");
+        return;
+    }
+    // Dev aid: `hotswap --world-peek` counts map-worthy actor classes and shows key properties.
+    if std::env::args().any(|a| a == "--world-peek") {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let pid = sys.processes().values().find(|p| p.name().to_string_lossy().contains("FactoryGameSteam-Win64-Shipping")).map(|p| p.pid().as_u32());
+        let Some(u) = pid.and_then(|p| ue::objects::Ue::attach(p).ok()) else { println!("not attached"); return };
+        let t = std::time::Instant::now();
+        let mut counts: std::collections::BTreeMap<String, (usize, u64)> = Default::default();
+        for o in u.find_by_classes(|n| n.starts_with("Build_") || n.contains("Resource") || n.contains("Fracking") || n.contains("DropPod") || n.contains("Crystal") || n.contains("WAT") || n.contains("Lightweight")) {
+            let c = u.class_of(o).unwrap();
+            let e = counts.entry(u.name_of(c).unwrap_or_default()).or_insert((0, o));
+            e.0 += 1;
+        }
+        println!("scan {:?}", t.elapsed());
+        for (k, (n, o)) in &counts { println!("{n:6} {k}  e.g. 0x{o:X}"); }
+        for want in ["Build_ConveyorBeltMk1_C", "BP_ResourceNode_C", "Build_PowerLine_C", "FGLightweightBuildableSubsystem", "BP_DropPod_C"] {
+            if let Some((_, o)) = counts.get(want) {
+                let c = u.class_of(*o).unwrap();
+                let names: Vec<String> = u.props(c).into_iter().filter(|p| !p.owner.starts_with("Actor") && !p.owner.starts_with("Object")).map(|p| format!("{}:{}@{:X}", p.name, p.kind, p.offset)).collect();
+                println!("== {want}: {}", names.join(", "));
+            }
         }
         return;
     }
@@ -545,7 +603,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
             fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart,
-            map_show, map_hide, map_player, map_teleport, map_pins_load, map_pins_save
+            map_show, map_hide, map_world, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hotswap");

@@ -2,7 +2,7 @@
 const COMMANDS: &[&str] = &[
     "load_data", "save_data", "scan_library", "running_game", "launch_game", "set_hotkeys",
     "fetch_home", "close_game", "trainer_set", "trainer_action", "set_close_to_tray", "get_autostart", "set_autostart",
-    "map_show", "map_hide", "map_player", "map_teleport", "map_pins_load", "map_pins_save",
+    "map_show", "map_hide", "map_world", "map_player", "map_teleport", "map_pins_load", "map_pins_save",
 ];
 
 fn main() {
