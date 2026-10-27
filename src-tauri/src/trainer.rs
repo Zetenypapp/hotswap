@@ -211,7 +211,10 @@ struct Session {
     fed_at: Option<Instant>,
     pos: Option<[f64; 4]>,
     teleport: Option<[f64; 3]>,
-    teleport_fn: Option<Option<crate::ue::call::Func>>,
+    /// Offset of the root component's cached world transform translation (not reflected; found by value).
+    world_loc_off: Option<u64>,
+    /// After a teleport: keep the player parked there until then, so the terrain can stream in.
+    hold: Option<([f64; 3], Instant)>,
     /// After a map teleport, fall damage stays off until then (you may drop from high up).
     fall_guard: Option<Instant>,
 }
@@ -220,7 +223,7 @@ impl Session {
     fn new(ue: Ue) -> Session {
         Session { ue, t: Targets::default(), resolved_at: None, offsets: HashMap::new(), base: HashMap::new(), base_for: 0, gs: 0, orig_bools: HashMap::new(), held: HashMap::new(), held_for: 0, fuel_max: HashMap::new(), turbo_orig: HashMap::new(), turbo_at: None, turbo_cleaned: false, normal_health: HashMap::new(), fall_curves: None, gs_search: None, jetpacks: Vec::new(), jetpacks_at: None,
             recipe_addr: HashMap::new(), stack_sizes: HashMap::new(), add_stack_fn: None, woken: Default::default(), recipe_cache: HashMap::new(), zeroed: HashMap::new(), benches: Vec::new(), benches_at: None, machines: Vec::new(), machines_at: None, fed_at: None,
-            pos: None, teleport: None, teleport_fn: None, fall_guard: None }
+            pos: None, teleport: None, world_loc_off: None, hold: None, fall_guard: None }
     }
 
     fn off(&mut self, obj: u64, name: &'static str) -> Result<u64, String> {
@@ -447,28 +450,46 @@ impl Session {
         [x, y, z].iter().all(|v| v.is_finite()).then_some([x, y, z, yaw])
     }
 
-    /// Moves the player with the engine's own `AActor::K2_TeleportTo`, keeping the facing direction.
+    /// Moves the player by writing the root component's location. Calling the engine's teleport
+    /// from our thread froze the game, so this only writes memory, like every other mod.
     fn teleport_to(&mut self, to: [f64; 3]) {
-        if self.ue.process_event == 0 {
-            return;
-        }
-        if self.teleport_fn.is_none() {
-            self.teleport_fn = Some(self.ue.func("Actor", "K2_TeleportTo"));
-        }
-        let Some(Some(f)) = &self.teleport_fn else { return log("K2_TeleportTo not found") };
-        let find = |n: &str| f.params.iter().find(|p| p.0 == n).map(|p| p.1 as usize);
-        let (Some(lo), Some(ro)) = (find("DestLocation"), find("DestRotation")) else { return };
-        let mut params = vec![0u8; f.size as usize];
-        for (i, v) in to.iter().enumerate() {
-            params[lo + i * 8..lo + i * 8 + 8].copy_from_slice(&v.to_le_bytes());
-        }
-        let yaw = self.pos.map_or(0.0, |p| p[3]);
-        params[ro + 8..ro + 16].copy_from_slice(&yaw.to_le_bytes());
         self.fall_guard = Some(Instant::now() + Duration::from_secs(30));
-        match self.ue.call(self.ue.process_event, self.t.player, f, &params) {
-            Ok(r) => log(&format!("teleport to {to:?} ok={}", find("ReturnValue").is_some_and(|o| r.get(o) == Some(&1)))),
-            Err(e) => log(&format!("teleport failed: {e}")),
+        self.hold = Some((to, Instant::now() + Duration::from_secs(3)));
+        log(&format!("teleport to {to:?}"));
+        self.place(to);
+    }
+
+    /// Writes `to` as the player's location (relative and cached world transform) and stops them.
+    fn place(&mut self, to: [f64; 3]) -> Option<()> {
+        let player = self.t.player;
+        let ro = self.off(player, "RootComponent").ok()?;
+        let root = self.ue.p.ptr(player + ro)?;
+        let rel = self.off(root, "RelativeLocation").ok()?;
+        if self.world_loc_off.is_none() {
+            // The root has no parent, so its world translation equals RelativeLocation: find that copy.
+            let here: Vec<f64> = (0..3).map(|i| self.ue.p.read::<f64>(root + rel + i * 8).unwrap_or(f64::NAN)).collect();
+            let mut buf = vec![0u8; 0x400];
+            if !self.ue.p.read_into(root, &mut buf) {
+                return None;
+            }
+            let d = |o: usize| f64::from_le_bytes(buf[o..o + 8].try_into().unwrap());
+            self.world_loc_off = (0x20..0x400 - 24).step_by(16)
+                .find(|&o| o as u64 != rel && (0..3).all(|i| (d(o + i * 8) - here[i]).abs() < 0.01))
+                .map(|o| o as u64);
+            log(&format!("world location offset: {:X?}", self.world_loc_off));
         }
+        let wo = self.world_loc_off?;
+        for (i, v) in to.iter().enumerate() {
+            self.ue.p.write(root + rel + i as u64 * 8, *v);
+            self.ue.p.write(root + wo + i as u64 * 8, *v);
+        }
+        let movement = self.t.movement;
+        if let Ok(vo) = self.off(movement, "Velocity") {
+            for i in 0..3 {
+                self.ue.p.write(movement + vo + i * 8, 0.0f64);
+            }
+        }
+        Some(())
     }
 
     /// Adds items to an inventory through the game's own `UFGInventoryComponent::AddStack`.
@@ -624,6 +645,10 @@ impl Session {
         if let Some(to) = self.teleport.take() {
             self.teleport_to(to);
         }
+        let holding = match self.hold {
+            Some((to, until)) if Instant::now() < until => { self.place(to); true }
+            _ => { self.hold = None; false }
+        };
 
         // Remember the game's own movement values once per movement component.
         const MOVE: [&str; 4] = ["MaxWalkSpeed", "mMaxSprintSpeed", "JumpZVelocity", "GravityScale"];
@@ -659,7 +684,7 @@ impl Session {
             ("MaxWalkSpeed", speed),
             ("mMaxSprintSpeed", speed),
             ("JumpZVelocity", get("jump-height", 100.0) / 100.0),
-            ("GravityScale", get("gravity-strength", 100.0) / 100.0),
+            ("GravityScale", if holding { 0.0 } else { get("gravity-strength", 100.0) / 100.0 }),
         ];
         for (name, factor) in scaled {
             let o = self.off(movement, name)?;
