@@ -511,8 +511,13 @@ impl Session {
         Ok(())
     }
 
-    fn still_valid(&self) -> bool {
-        self.t.player != 0 && self.ue.name_of(self.t.player).is_some_and(|n| n.starts_with("Char_Player_C"))
+    /// The player we hold is still the one you control. After a respawn or save load the old
+    /// character lingers without a controller, so its name alone isn't enough.
+    fn still_valid(&mut self) -> bool {
+        let p = self.t.player;
+        p != 0
+            && self.ue.name_of(p).is_some_and(|n| n.starts_with("Char_Player_C"))
+            && self.off(p, "Controller").is_ok_and(|o| self.ue.p.ptr(p + o).is_some())
     }
 
     fn resolve(&mut self) -> Result<(), String> {
@@ -540,6 +545,11 @@ impl Session {
             return Err("Game closed".into());
         }
         if !self.still_valid() {
+            // We had a player and lost it: respawn or new save. Everything cached belongs to the
+            // old world, so start a fresh session.
+            if self.t.player != 0 {
+                return Err("Game reloaded, reconnecting".into());
+            }
             // Scanning every object is heavy, so while loading only look every 2 seconds.
             if self.resolved_at.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
                 return Ok(false);
