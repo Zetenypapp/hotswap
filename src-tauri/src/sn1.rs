@@ -30,7 +30,24 @@ struct Targets {
     survival: u64,
     swim_motor: u64,
     walk_motor: u64,
+    controller: u64,
+    oxygen_mgr: u64,
 }
+
+/// Player speed limits: (PlayerController default, motor field it's copied into, which slider).
+const SPEEDS: [(&str, &str, &str); 11] = [
+    ("swimForwardMaxSpeed", "forwardMaxSpeed", "swim"),
+    ("swimBackwardMaxSpeed", "backwardMaxSpeed", "swim"),
+    ("swimStrafeMaxSpeed", "strafeMaxSpeed", "swim"),
+    ("swimVerticalMaxSpeed", "verticalMaxSpeed", "swim"),
+    ("seaglideForwardMaxSpeed", "forwardMaxSpeed", "glide"),
+    ("seaglideBackwardMaxSpeed", "backwardMaxSpeed", "glide"),
+    ("seaglideStrafeMaxSpeed", "strafeMaxSpeed", "glide"),
+    ("seaglideVerticalMaxSpeed", "verticalMaxSpeed", "glide"),
+    ("walkRunForwardMaxSpeed", "forwardMaxSpeed", "walk"),
+    ("walkRunBackwardMaxSpeed", "backwardMaxSpeed", "walk"),
+    ("walkRunStrafeMaxSpeed", "strafeMaxSpeed", "walk"),
+];
 
 pub struct Session {
     m: Mono,
@@ -40,11 +57,15 @@ pub struct Session {
     ours: u32,
     /// Console cheat switches we turned on: address -> the value before.
     switched: HashMap<u64, u8>,
+    /// The game's own speed limits (PlayerController field -> value), read once per player.
+    speed_orig: HashMap<&'static str, f32>,
+    /// Speed factors last applied: (swim, walk).
+    speed_last: (f32, f32),
 }
 
 impl Session {
     pub fn new(m: Mono) -> Session {
-        Session { m, t: Targets::default(), off: HashMap::new(), ours: 0, switched: HashMap::new() }
+        Session { m, t: Targets::default(), off: HashMap::new(), ours: 0, switched: HashMap::new(), speed_orig: HashMap::new(), speed_last: (1.0, 1.0) }
     }
 
     /// Offset of `class.field`, cached.
@@ -81,7 +102,9 @@ impl Session {
                 t.max_health = data + o;
             }
         }
+        t.oxygen_mgr = self.ptr_at(player, "Player", "oxygenMgr").unwrap_or(0);
         if let Some(pc) = self.ptr_at(player, "Player", "<playerController>k__BackingField") {
+            t.controller = pc;
             t.swim_motor = self.ptr_at(pc, "PlayerController", "underWaterController").unwrap_or(0);
             t.walk_motor = self.ptr_at(pc, "PlayerController", "groundController").unwrap_or(0);
         }
@@ -120,6 +143,8 @@ impl Session {
         if player != self.t.player {
             self.ours = 0;
             self.switched.clear();
+            self.speed_orig.clear();
+            self.speed_last = (1.0, 1.0);
             self.resolve(player);
         }
         let none = HashMap::new();
@@ -175,18 +200,67 @@ impl Session {
                 }
             }
         }
-        // Speeds: the motors' own speed multiplier.
-        for (k, motor) in [("swim-speed", t.swim_motor), ("walk-speed", t.walk_motor)] {
-            if motor == 0 {
+        // Oxygen: the game's NoOxygen cheat only stops it going down, so also fill every oxygen
+        // source (lungs and tanks) to its capacity.
+        if on("infinite-oxygen") && t.oxygen_mgr != 0 {
+            self.fill_oxygen(t.oxygen_mgr);
+        }
+        self.speeds(t, (v.get("swim-speed").copied().unwrap_or(100.0) / 100.0) as f32, (v.get("walk-speed").copied().unwrap_or(100.0) / 100.0) as f32);
+        Ok(true)
+    }
+
+    fn fill_oxygen(&mut self, mgr: u64) {
+        let (Some(list), Some(cap_o), Some(avail_o)) = (self.ptr_at(mgr, "OxygenManager", "sources"), self.f("Oxygen", "oxygenCapacity"), self.f("Oxygen", "oxygenAvailable")) else { return };
+        // List<T>: _items (an array: header, length, then elements at +0x20) and _size.
+        let (Some(items), Some(n)) = (self.m.p.ptr(list + 0x10), self.m.p.read::<i32>(list + 0x18)) else { return };
+        let oxygen_vt = self.m.class("", "Oxygen").and_then(|c| self.m.vtable(c));
+        for i in 0..n.clamp(0, 16) as u64 {
+            let Some(src) = self.m.p.ptr(items + 0x20 + i * 8) else { continue };
+            if oxygen_vt.is_some() && self.m.p.read::<u64>(src) != oxygen_vt {
                 continue;
             }
-            let want = (v.get(k).copied().unwrap_or(100.0) / 100.0) as f32;
-            if let Some(o) = self.f("PlayerMotor", "debugSpeedMult") {
-                if self.m.p.read::<f32>(motor + o).is_some_and(|x| (x - want).abs() > 1e-3) {
-                    self.m.p.write(motor + o, want);
+            if let Some(cap) = self.m.p.read::<f32>(src + cap_o).filter(|c| *c > 0.0 && *c < 10_000.0) {
+                if self.m.p.read::<f32>(src + avail_o).is_some_and(|a| a < cap) {
+                    self.m.p.write(src + avail_o, cap);
                 }
             }
         }
-        Ok(true)
+    }
+
+    /// Scales the player's speed limits: the controller's defaults (copied into the motors when the
+    /// player switches between swimming, the Seaglide and walking) and the values in use now.
+    fn speeds(&mut self, t: Targets, swim: f32, walk: f32) {
+        if t.controller == 0 || (swim, walk) == self.speed_last {
+            return;
+        }
+        let (old_swim, old_walk) = self.speed_last;
+        for (pc_field, _, _) in SPEEDS {
+            if !self.speed_orig.contains_key(pc_field) {
+                let Some(o) = self.f("PlayerController", pc_field) else { continue };
+                // Already scaled by an earlier session is impossible to tell apart; read it as is.
+                let Some(v) = self.m.p.read::<f32>(t.controller + o) else { continue };
+                self.speed_orig.insert(pc_field, v);
+            }
+        }
+        let factor = |kind: &str, s: f32, w: f32| if kind == "walk" { w } else { s };
+        for (pc_field, _, kind) in SPEEDS {
+            let Some(o) = self.f("PlayerController", pc_field) else { continue };
+            let Some(&base) = self.speed_orig.get(pc_field) else { continue };
+            self.m.p.write(t.controller + o, base * factor(kind, swim, walk));
+        }
+        // The motors hold a copy for the current mode: rescale whatever is in there now.
+        for (motor, old, new) in [(t.swim_motor, old_swim, swim), (t.walk_motor, old_walk, walk)] {
+            if motor == 0 || old <= 0.0 {
+                continue;
+            }
+            for field in ["forwardMaxSpeed", "backwardMaxSpeed", "strafeMaxSpeed", "verticalMaxSpeed"] {
+                if let Some(o) = self.f("PlayerMotor", field) {
+                    if let Some(cur) = self.m.p.read::<f32>(motor + o) {
+                        self.m.p.write(motor + o, cur / old * new);
+                    }
+                }
+            }
+        }
+        self.speed_last = (swim, walk);
     }
 }
