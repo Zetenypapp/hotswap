@@ -3,4 +3,5 @@
 pub mod call;
 pub mod mem;
 pub mod objects;
+pub mod scan;
 pub mod symbols;

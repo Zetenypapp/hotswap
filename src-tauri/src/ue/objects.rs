@@ -64,6 +64,27 @@ impl Ue {
         }
     }
 
+    /// Attaches to a UE5 game without debug symbols: the tables are found by their layout in the
+    /// main module (`module` is part of its file name) and checked by reading known names back.
+    pub fn attach_scan(pid: u32, module: &str) -> Result<Ue, String> {
+        let p = Proc::open(pid)?;
+        let (base, _) = p.module(module).ok_or("game module not loaded")?;
+        let (objs, names) = super::scan::find_tables(&p, base);
+        let mut ue = Ue { p, objects: 0, names: 0, process_event: 0, name_cache: Default::default() };
+        ue.names = names.into_iter().take(100_000).find(|&n| {
+            ue.names = n;
+            ue.name_cache.lock().unwrap().clear();
+            ue.fname(0).as_deref() == Some("None") && ue.fname(3).as_deref() == Some("ByteProperty")
+        }).ok_or("couldn't find the name table")?;
+        ue.name_cache.lock().unwrap().clear();
+        // The real object table's first object is the CoreUObject package.
+        ue.objects = objs.into_iter().find(|&o| {
+            ue.objects = o;
+            ue.object(0).and_then(|x| ue.name_of(x)).as_deref() == Some("/Script/CoreUObject")
+        }).ok_or("couldn't find the object table")?;
+        Ok(ue)
+    }
+
     /// Text of an FName comparison index (UE5 FNamePool).
     pub fn fname(&self, index: u32) -> Option<String> {
         if let Some(s) = self.name_cache.lock().unwrap().get(&index) {

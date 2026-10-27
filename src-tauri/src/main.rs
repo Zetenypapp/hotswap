@@ -7,6 +7,7 @@ mod home;
 mod iostore;
 mod mapimage;
 mod modloader;
+mod sn2;
 mod steam;
 mod trainer;
 mod ue;
@@ -448,6 +449,98 @@ fn main() {
         println!("{}", serde_json::to_string(&modloader::installed(install)).unwrap());
         println!("{:?}", modloader::dry_run(install, &r));
         println!("{:?}", modloader::search("smart", "downloads", 0).map(|v| v["count"].clone()));
+        return;
+    }
+    // Dev aid: `hotswap --scan-attach <exe name part> [Class [filter]]` attaches without symbols and
+    // lists a class's properties (or counts objects).
+    if let Some(m) = std::env::args().skip_while(|a| a != "--scan-attach").nth(1) {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let pid = sys.processes().values().find(|p| p.name().to_string_lossy().contains(&m)).map(|p| p.pid().as_u32());
+        let t = std::time::Instant::now();
+        if let Some(pp) = pid.and_then(|p| ue::mem::Proc::open(p).ok()) {
+            let (base, _) = pp.module(&m).unwrap_or_default();
+            for s in ue::scan::sections(&pp, base) { println!("section {} 0x{:X} size 0x{:X}", s.0, s.1, s.2); }
+            let (o, n) = ue::scan::find_tables(&pp, base);
+            println!("object candidates {} name candidates {}", o.len(), n.len());
+            for &c in o.iter().take(5) { println!("  obj cand 0x{c:X} num {:?}", pp.read::<i32>(c + 0x24)); }
+            // Look for the "None" entry: a block whose first bytes are a 4-char header then "None".
+            let mut shown = 0;
+            for &c in n.iter() {
+                let Some(b0) = pp.ptr(c + 0x10) else { continue };
+                let mut h = [0u8; 16];
+                pp.read_into(b0, &mut h);
+                if h[2..6] == *b"None" || h[4..8] == *b"None" || h[..8].windows(4).any(|w| w == b"None") {
+                    println!("  name cand 0x{c:X} block0 {:02X?}", h); shown += 1;
+                    if shown > 5 { break; }
+                }
+            }
+        }
+        let u = match pid.map(|p| ue::objects::Ue::attach_scan(p, &m)) { Some(Ok(u)) => u, Some(Err(e)) => return println!("attach failed: {e}"), None => return println!("not running") };
+        println!("attached in {:?}: {} objects", t.elapsed(), u.count());
+        let args: Vec<String> = std::env::args().skip_while(|a| a != "--scan-attach").skip(2).collect();
+        if let Some(cls) = args.first() {
+            let filter = args.get(1).map(|s| s.to_lowercase()).unwrap_or_default();
+            if cls == "*" {
+                // Class names matching the filter, with how many live objects each has.
+                let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
+                for o in u.all_objects() {
+                    if let Some(c) = u.class_of(o).and_then(|c| u.name_of(c)) {
+                        if c.to_lowercase().contains(&filter) { *counts.entry(c).or_default() += 1; }
+                    }
+                }
+                for (k, n) in counts { println!("{n:6} {k}"); }
+            } else if let Some(c) = u.find_class(cls) {
+                for p in u.props(c).into_iter().filter(|p| p.name.to_lowercase().contains(&filter)) {
+                    println!("{}.{} : {} @0x{:X}", p.owner, p.name, p.kind, p.offset);
+                }
+            } else {
+                println!("class {cls} not found");
+            }
+        }
+        return;
+    }
+    // Dev aid: `hotswap --sn2-peek` shows the Subnautica 2 player's attribute sets (base / current).
+    if std::env::args().any(|a| a == "--sn2-peek") {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let pid = sys.processes().values().find(|p| p.name().to_string_lossy().contains("Subnautica2-Win64")).map(|p| p.pid().as_u32());
+        let Some(u) = pid.and_then(|p| ue::objects::Ue::attach_scan(p, "Subnautica2-Win64").ok()) else { return println!("not attached") };
+        let all = u.all_objects();
+        println!("count {} live {}", u.count(), all.len());
+        for &o in &all {
+            if u.class_of(o).and_then(|c| u.name_of(c)).is_some_and(|n| n == "BP_SN2PlayerCharacter_C" || n == "BP_SN2PlayerController_C") {
+                println!("  {} 0x{o:X} outer {:?}", u.name_of(o).unwrap_or_default(), u.outer_of(o).and_then(|x| u.name_of(x)));
+                if let Some(c) = u.class_of(o) {
+                    for f in ["Pawn", "AcknowledgedPawn", "Character", "PlayerState"] {
+                        let v = u.prop(c, f).and_then(|pr| u.p.ptr(o + pr.offset as u64));
+                        println!("    {f} = {v:X?} {:?}", v.and_then(|x| u.class_of(x)).and_then(|c| u.name_of(c)));
+                    }
+                }
+            }
+        }
+        // The local player: what a live player controller possesses, plus its player state.
+        let mut players = Vec::new();
+        for c in u.find_by_classes(|n| n == "BP_SN2PlayerController_C") {
+            let cls = u.class_of(c).unwrap();
+            for f in ["Pawn", "PlayerState"] {
+                if let Some(x) = u.prop(cls, f).and_then(|pr| u.p.ptr(c + pr.offset as u64)) { players.push(x); }
+            }
+        }
+        for &p in &players {
+            let cls = u.class_of(p).unwrap();
+            let ctrl = u.prop(cls, "Controller").and_then(|o| u.p.ptr(p + o.offset as u64));
+            println!("player 0x{p:X} {} {} controller={ctrl:X?}", u.name_of(cls).unwrap_or_default(), u.name_of(p).unwrap_or_default());
+        }
+        let sets = u.find_by_classes(|n| n.starts_with("UWE") && n.ends_with("AttributeSet"));
+        for s in sets.into_iter().filter(|&s| u.outer_of(s).is_some_and(|o| players.contains(&o))) {
+            let cls = u.class_of(s).unwrap();
+            println!("== {} 0x{s:X} outer 0x{:X}", u.name_of(cls).unwrap_or_default(), u.outer_of(s).unwrap());
+            for pr in u.props(cls).into_iter().filter(|p| p.kind == "StructProperty") {
+                let a = s + pr.offset as u64;
+                println!("  {} base {:?} current {:?}", pr.name, u.p.read::<f32>(a + 8), u.p.read::<f32>(a + 12));
+            }
+        }
         return;
     }
     // Dev aid: `hotswap --world-scan` prints what the map would draw.

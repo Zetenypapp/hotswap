@@ -32,7 +32,8 @@ const CATALOG = {
     { name: 'Building', mods: [T('Free Crafting'), T('Infinite Components'), T('Infinite Batteries')] },
   ]},
   1962700: { genre: 'Underwater survival', cats: [
-    { name: 'Player', mods: [T('Infinite Oxygen'), T('Infinite Health'), T('No Hunger'), T('No Thirst'), S('Swim Speed', 50, 400, 10, 100)] },
+    { name: 'Player', mods: [T('Infinite Health', 'Health stays full and damage is ignored.'), T('Infinite Oxygen'), T('No Hunger'), T('No Thirst'), T('No Temperature Damage', 'Heat and cold do no damage.'), T('No Radiation'), T('Free Dash', 'Dashing costs no oxygen.')] },
+    { name: 'Movement', mods: [S('Swim Speed', 10, 500, 10, 100, 'Percent of normal swim speed.'), S('Walk Speed', 10, 500, 10, 100, 'Percent of normal walking speed.')] },
     { name: 'Crafting', mods: [T('Free Crafting'), T('Free Building'), T('Infinite Battery')] },
   ]},
   227300: { genre: 'Driving sim', cats: [
@@ -48,6 +49,10 @@ const LIVE = {
     'walking-speed', 'jump-height', 'game-speed', 'super-speed', 'gravity-strength',
     'free-production', 'no-power-required', 'no-fuel-needed', 'turbo-production',
     'save-position', 'teleport-to-saved-position',
+  ],
+  1962700: [
+    'infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'no-temperature-damage', 'no-radiation', 'free-dash',
+    'swim-speed', 'walk-speed',
   ],
 };
 
