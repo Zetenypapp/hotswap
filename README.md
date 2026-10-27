@@ -7,7 +7,7 @@ Hotswap is a free, open-source, ad-free mod app for **single-player** PC games o
 > 💡 **Inspired by ArtCraft.**
 > 🤖 **Made by AI.** Hotswap was designed and written by Claude (Anthropic's AI) in Claude Code, directed by [@Zetenypapp](https://github.com/Zetenypapp).
 
-> 🎮 **Game support right now: Satisfactory, Subnautica and Subnautica 2.** These are the games with working mod settings so far. Every other game shows up in your library with art, playtime and launching, but its mod list is either empty or marked **Soon**.
+> 🎮 **Game support right now: Satisfactory, Subnautica, Subnautica 2 and R.E.P.O.** These are the games with working mod settings so far. Every other game shows up in your library with art, playtime and launching, but its mod list is either empty or marked **Soon**.
 
 ![Satisfactory mod page](docs/game.png)
 
@@ -29,6 +29,10 @@ All of these work live while you play. Hotswap connects to the running game, and
 | 🏗️ | **No Power Required / No Fuel Needed** | Factories and generators run for free |
 
 Everything happens in the game's memory only. Nothing is written to your save file: restart the game and it's all back to normal. Still, **keep a backup save** while experimenting.
+
+## 👻 R.E.P.O. mods
+
+Infinite Health (the game's own god mode), Infinite Stamina, Infinite Jumps, Movement Speed, Grab Strength, Throw Strength, Infinite Battery, Complete Extractions, and an **Enemy Radar** over your screen (experimental). For single-player and private lobbies with friends who know you're using it.
 
 ## 🐠 Subnautica mods
 
