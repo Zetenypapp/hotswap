@@ -491,3 +491,9 @@ textarea:focus { box-shadow: inset 0 0 0 1px var(--glass-3); }
 a.btn { display: inline-flex; align-items: center; text-decoration: none; color: inherit; font-size: 13px; }
 .btn:disabled { opacity: .5; }
 .lib-item.soon-item { opacity: .5; cursor: default; }
+.mods-dl { margin-bottom: 14px; padding: 12px 14px; border-radius: 18px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+.mods-dl-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mods-dl-head .meta { flex: 1; font-size: 12px; }
+.mods-dl-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-top: 1px solid rgba(255,255,255,.05); }
+.mods-dl .meta { margin: 0; }
+.mods-warn a { color: inherit; text-decoration: underline; }

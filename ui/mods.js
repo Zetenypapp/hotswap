@@ -4,7 +4,7 @@ const Mods = (() => {
   // Games with a mod loader page. `source` is where their mods come from; others show as coming soon.
   const GAMES = [
     { id: '526870', source: 'ficsit.app', url: 'https://ficsit.app' },
-    { id: '1962700', source: null },
+    { id: '1962700', source: 'Nexus Mods', url: 'https://www.nexusmods.com/subnautica2', nexus: 'subnautica2' },
   ];
   let GAME = null; // the game whose mod page is open, or null for the game grid
   // Installed mods are only read for Satisfactory, the one game with a mod source so far.
@@ -12,6 +12,9 @@ const Mods = (() => {
   const S = { tab: 'installed', query: '', sort: 'popular', results: [], count: 0, loading: false, error: '',
     installed: [], build: null, updates: {}, checking: false, busy: {}, loaded: false };
   let searchTimer;
+  // Nexus Mods games (mods are files: UE4SS, Lua and pak mods).
+  const N = { mods: [], downloads: [], results: [], count: 0, loading: false, error: '', builtIn: false, busy: '', clicked: null };
+  const isNexus = () => !!GAMES.find(x => x.id === GAME)?.nexus;
 
   const running = () => RUNNING === gid();
   const fmtN = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n);
@@ -98,7 +101,7 @@ const Mods = (() => {
     if (body.dataset.view !== GAME + S.tab) {
       body.dataset.view = GAME + S.tab;
       body.innerHTML = `
-        <div class="lib-head"><button class="chip" data-modgame="">‹ All games</button><h1>${esc(gameOf(GAME).name)}</h1><span class="meta">${S.build ? `Game build ${S.build} · ` : ''}mods from <a href="${info.url}" ${ext}>${esc(info.source)}</a></span>
+        <div class="lib-head"><button class="chip" data-modgame="">‹ All games</button><h1>${esc(gameOf(GAME).name)}</h1><span class="meta">${S.build && !isNexus() ? `Game build ${S.build} · ` : ''}mods from <a href="${info.url}" ${ext}>${esc(info.source)}</a></span>
           <div class="chips"><button class="chip${S.tab === 'installed' ? ' on' : ''}" data-modtab="installed">Installed</button><button class="chip${S.tab === 'browse' ? ' on' : ''}" data-modtab="browse">Browse</button></div></div>
         <div id="modsWarn"></div>
         ${S.tab === 'browse' ? `<div class="mods-bar"><label class="search mods-search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
@@ -106,9 +109,12 @@ const Mods = (() => {
             <div class="chips">${[['popular', 'Popular'], ['updated', 'Updated'], ['new', 'New']].map(([k, l]) => `<button class="chip${S.sort === k ? ' on' : ''}" data-modsort="${k}">${l}</button>`).join('')}</div></div>` : ''}
         <div id="modsList"></div>`;
       const input = $('modSearch');
-      if (input) input.addEventListener('input', () => { S.query = input.value; clearTimeout(searchTimer); searchTimer = setTimeout(() => search(false), 350); });
-      if (!S.loaded) refreshInstalled();
-      if (S.tab === 'browse' && !S.results.length && !S.loading) search(false);
+      if (input) input.addEventListener('input', () => { S.query = input.value; clearTimeout(searchTimer); searchTimer = setTimeout(() => isNexus() ? nSearch(false) : search(false), 350); });
+      if (isNexus()) { nRefresh(); if (S.tab === 'browse' && !N.results.length) nSearch(false); }
+      else {
+        if (!S.loaded) refreshInstalled();
+        if (S.tab === 'browse' && !S.results.length && !S.loading) search(false);
+      }
     }
     list();
   }
@@ -116,6 +122,7 @@ const Mods = (() => {
   function list() {
     const el = $('modsList');
     if (!el || state.view !== 'mods' || !GAME) return;
+    if (isNexus()) return nexusList(el);
     $('modsWarn').innerHTML = running() ? '<div class="mods-warn">Satisfactory is running. Close it to install, update or remove mods.</div>' : '';
     if (S.error && S.tab === 'installed') { el.innerHTML = `<p class="empty">${esc(S.error)}</p>`; return; }
     S.tab === 'installed' ? installedList(el) : browseList(el);
@@ -173,13 +180,95 @@ const Mods = (() => {
     const d = t.dataset;
     if ('modgame' in d) { GAME = d.modgame || null; render(); }
     else if (d.modtab) { S.tab = d.modtab; render(); }
-    else if (d.modsort) { S.sort = d.modsort; document.querySelectorAll('[data-modsort]').forEach(b => b.classList.toggle('on', b === t)); search(false); }
+    else if (d.modsort) { S.sort = d.modsort; document.querySelectorAll('[data-modsort]').forEach(b => b.classList.toggle('on', b === t)); isNexus() ? nSearch(false) : search(false); }
     else if (d.modinstall) install(d.modinstall, d.name);
     else if (d.modtoggle) { const on = t.getAttribute('aria-checked') !== 'true'; act('mods_set_enabled', { reference: d.modtoggle, enabled: on }, [d.modtoggle, on ? 'on' : 'off']); }
     else if (d.modremove) { if (confirm(`Uninstall ${d.name}?`)) act('mods_uninstall', { reference: d.modremove }, [d.name, 'removed']); }
     else if ('modcheck' in d) checkUpdates();
-    else if ('modmore' in d) search(true);
+    else if ('modmore' in d) isNexus() ? nSearch(true) : search(true);
     else if ('modupall' in d) Object.keys(S.updates).reduce((p, r) => p.then(() => install(r)), Promise.resolve());
+  });
+
+  /* ---------- Nexus Mods games ---------- */
+  async function nRefresh() {
+    try { N.mods = await invoke('fmods_list', { game: GAME }); N.error = ''; } catch (e) { N.error = String(e); }
+    try { N.downloads = await invoke('fmods_downloads'); } catch {}
+    list();
+  }
+  async function nSearch(more) {
+    N.loading = true; list();
+    try {
+      const r = await invoke('nexus_search', { game: GAME, query: S.query, sort: S.sort, offset: more ? N.results.length : 0 });
+      N.results = more ? [...N.results, ...r.nodes] : r.nodes; N.count = r.totalCount; N.error = '';
+    } catch (e) { N.error = String(e); }
+    N.loading = false; list();
+  }
+  async function nInstall(path, name) {
+    if (running()) return toast('Close the game first', 'then change mods');
+    N.busy = path; list();
+    try { const what = await invoke('fmods_install', { game: GAME, path }); toast(what, 'installed'); }
+    catch (e) { toast(`Couldn't install ${name}`, String(e)); }
+    N.busy = ''; nRefresh();
+  }
+  async function nAct(cmd, args, msg) {
+    if (running()) return toast('Close the game first', 'then change mods');
+    try { await invoke(cmd, { game: GAME, ...args }); if (msg) toast(...msg); } catch (e) { toast("Couldn't change the mod", String(e)); }
+    nRefresh();
+  }
+
+  const KIND = { ue4ss: 'Mod loader', lua: 'UE4SS Lua mod', pak: 'Pak mod', logic: 'Blueprint mod' };
+  function downloadsBox() {
+    return `<div class="mods-dl"><div class="mods-dl-head"><b>Install a downloaded mod</b><span class="meta">Mod files from your Downloads folder in the last 3 days.</span>
+        <button class="btn" data-nrefresh>Refresh</button><button class="btn" data-npick>Choose file…</button></div>
+      ${N.downloads.length ? N.downloads.map(f => `<div class="mods-dl-row"><span class="mod-txt"><b>${esc(f.name)}</b><span>${mb(f.size)}</span></span>
+        ${N.busy === f.path ? '<span class="mod-prog">Installing…</span>' : `<button class="btn accent" data-ninstall="${esc(f.path)}" data-name="${esc(f.name)}">Install</button>`}</div>`).join('')
+        : '<p class="meta">Nothing yet. Download a mod from its Nexus page, then press Refresh.</p>'}</div>`;
+  }
+  function nexusList(el) {
+    $('modsWarn').innerHTML = running() ? '<div class="mods-warn">The game is running. Close it to install, change or remove mods.</div>' : '';
+    const hasLoader = N.mods.some(m => m.kind === 'ue4ss');
+    const loaderTip = hasLoader ? '' : `<div class="mods-warn">Most mods need <b>UE4SS</b>. <a href="https://www.nexusmods.com/subnautica2/mods/36?tab=files" ${ext}>Download UE4SS</a>, then install it below.</div>`;
+    if (S.tab === 'installed') {
+      const shown = N.mods.filter(m => N.builtIn || !m.built_in);
+      const hidden = N.mods.length - shown.length;
+      el.innerHTML = `${loaderTip}${downloadsBox()}
+        <div class="mods-tools"><span class="meta">${N.mods.filter(m => !m.built_in).length} installed</span>
+          ${hidden || N.builtIn ? `<button class="btn" data-nbuiltin>${N.builtIn ? 'Hide' : 'Show'} UE4SS's own mods</button>` : ''}</div>
+        ${N.error ? `<p class="empty">${esc(N.error)}</p>` : shown.length ? `<div class="mods-rows">${shown.map(m => `<div class="mod-row${m.enabled ? '' : ' off'}">
+          <span class="mod-ico">${esc(m.name[0])}</span>
+          <div class="mod-txt"><b>${esc(m.name)}</b><span>${KIND[m.kind]}${m.built_in ? ' · comes with UE4SS' : ''}</span></div>
+          ${m.kind === 'ue4ss' ? '' : `<button class="switch" role="switch" aria-checked="${m.enabled}" data-ntoggle="${esc(m.id)}"></button>`}
+          <button class="btn outline" data-nremove="${esc(m.id)}" data-name="${esc(m.name)}">Remove</button></div>`).join('')}</div>`
+          : '<p class="empty">No mods installed yet.</p>'}
+        <p class="meta mods-foot">Lua mods are switched with UE4SS's enabled.txt; turned-off pak mods move to a folder next to ~mods. Mods can break saves: keep backups.</p>`;
+      return;
+    }
+    el.innerHTML = `${loaderTip}${N.clicked ? downloadsBox() : ''}
+      ${N.error ? `<p class="empty">${esc(N.error)}</p>` : ''}
+      <div class="mod-grid">${N.results.map(m => `<div class="mod-card">
+        <div class="mod-top">${m.thumbnailUrl ? `<img src="${esc(m.thumbnailUrl)}" alt="" loading="lazy">` : `<span class="mod-ico big">${esc(m.name[0])}</span>`}
+          <div class="mod-txt"><b>${esc(m.name)}</b><span>by ${esc(m.author)} · ${fmtN(m.downloads)} downloads</span></div></div>
+        <p>${esc(m.summary || '')}</p>
+        <div class="mod-foot"><span class="meta">${esc(m.version || '')}</span>
+          <a class="btn outline" href="https://www.nexusmods.com/subnautica2/mods/${m.modId}" ${ext}>Details</a>
+          <a class="btn accent" href="https://www.nexusmods.com/subnautica2/mods/${m.modId}?tab=files" ${ext} data-ndownload="${m.modId}">Download</a></div>
+      </div>`).join('')}</div>
+      ${N.loading ? '<p class="empty">Loading…</p>' : N.results.length < N.count ? '<div class="mods-more"><button class="btn" data-modmore>Load more</button></div>' : N.results.length ? '' : '<p class="empty">No mods found.</p>'}
+      <p class="meta mods-foot">Nexus Mods only lets apps download for premium members, so Download opens the mod's files on Nexus. Once it's downloaded, install it from the box at the top or under Installed.</p>`;
+  }
+
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-ninstall],[data-npick],[data-nrefresh],[data-ntoggle],[data-nremove],[data-nbuiltin],[data-ndownload]');
+    if (!t) return;
+    const d = t.dataset;
+    if (d.ninstall) nInstall(d.ninstall, d.name);
+    else if ('npick' in d) invoke('fmods_pick').then(p => p && nInstall(p, p.split(/[\\/]/).pop()));
+    else if ('nrefresh' in d) nRefresh();
+    else if (d.ntoggle) { const on = t.getAttribute('aria-checked') !== 'true'; nAct('fmods_set_enabled', { id: d.ntoggle, enabled: on }, [d.ntoggle.split(':')[1], on ? 'on' : 'off']); }
+    else if (d.nremove) { if (confirm(`Remove ${d.name}?`)) nAct('fmods_remove', { id: d.nremove }, [d.name, 'removed']); }
+    else if ('nbuiltin' in d) { N.builtIn = !N.builtIn; list(); }
+    // The link itself opens the browser; keep the downloads box in view and look for the file shortly.
+    else if (d.ndownload) { N.clicked = d.ndownload; setTimeout(nRefresh, 15000); setTimeout(() => list(), 50); }
   });
 
   return { render, onProgress, list };

@@ -6,6 +6,7 @@ mod gog;
 mod home;
 mod iostore;
 mod mapimage;
+mod modfiles;
 mod modloader;
 mod sn2;
 mod steam;
@@ -266,6 +267,69 @@ fn mod_install_dir(watch: &watch::Watch, game: &str) -> Result<PathBuf, String> 
     watch.install_of(game).ok_or_else(|| "Game isn't installed".into())
 }
 
+/// Games whose mods are files from Nexus Mods (UE4SS / pak mods): game ID -> (project folder, Nexus domain).
+const FILE_MOD_GAMES: [(&str, &str, &str); 1] = [(sn2::SUBNAUTICA2, "Subnautica2", "subnautica2")];
+
+fn file_game(watch: &watch::Watch, game: &str, changing: bool) -> Result<modfiles::Game, String> {
+    let (_, project, _) = FILE_MOD_GAMES.iter().find(|g| g.0 == game).ok_or("No mod support for this game")?;
+    if changing && watch.running().as_deref() == Some(game) {
+        return Err("Close the game first, then change mods".into());
+    }
+    Ok(modfiles::Game { root: watch.install_of(game).ok_or("Game isn't installed")?, project })
+}
+
+#[tauri::command]
+fn fmods_list(watch: State<watch::Watch>, game: String) -> Result<Vec<modfiles::FileMod>, String> {
+    Ok(file_game(&watch, &game, false)?.list())
+}
+
+#[tauri::command]
+fn fmods_set_enabled(watch: State<watch::Watch>, game: String, id: String, enabled: bool) -> Result<(), String> {
+    file_game(&watch, &game, true)?.set_enabled(&id, enabled)
+}
+
+#[tauri::command]
+fn fmods_remove(watch: State<watch::Watch>, game: String, id: String) -> Result<(), String> {
+    file_game(&watch, &game, true)?.remove(&id)
+}
+
+#[tauri::command]
+async fn fmods_install(app: AppHandle, watch: State<'_, watch::Watch>, game: String, path: String) -> Result<String, String> {
+    let g = file_game(&watch, &game, true)?;
+    let scratch = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("modfiles");
+    tauri::async_runtime::spawn_blocking(move || g.install(std::path::Path::new(&path), &scratch)).await.map_err(|e| e.to_string())?
+}
+
+#[derive(serde::Serialize)]
+struct DownloadFile {
+    name: String,
+    path: PathBuf,
+    size: u64,
+}
+
+#[tauri::command]
+fn fmods_downloads() -> Vec<DownloadFile> {
+    modfiles::recent_downloads().into_iter().map(|(name, path, size)| DownloadFile { name, path, size }).collect()
+}
+
+/// Lets the user pick a downloaded mod file.
+#[tauri::command]
+async fn fmods_pick(app: AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog().file().set_title("Choose a mod file").add_filter("Mod files", &["zip", "7z", "pak"]).blocking_pick_file()
+    })
+    .await
+    .ok()??;
+    picked.into_path().ok().map(|p| p.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn nexus_search(game: String, query: String, sort: String, offset: u32) -> Result<serde_json::Value, String> {
+    let (_, _, domain) = FILE_MOD_GAMES.iter().find(|g| g.0 == game).ok_or("No mod support for this game")?;
+    tauri::async_runtime::spawn_blocking(move || modfiles::nexus_search(domain, &query, &sort, offset)).await.map_err(|e| e.to_string())?
+}
+
 #[derive(serde::Serialize)]
 struct ModsState {
     installed: Vec<modloader::Installed>,
@@ -308,6 +372,47 @@ fn mods_set_enabled(watch: State<watch::Watch>, game: String, reference: String,
 async fn mods_updates(watch: State<'_, watch::Watch>, game: String) -> Result<HashMap<String, String>, String> {
     let install = watch.install_of(&game).ok_or("Game isn't installed")?;
     tauri::async_runtime::spawn_blocking(move || modloader::updates(&install)).await.map_err(|e| e.to_string())?
+}
+
+/// Shows a mod change in the overlay over the game (created on first use, then kept: a
+/// transparent, click-through, always-on-top window across the top of the main monitor).
+#[tauri::command]
+async fn overlay_notify(app: AppHandle, note: serde_json::Value) -> Result<(), String> {
+    if app.get_webview_window("overlay").is_none() {
+        let monitor = app.primary_monitor().ok().flatten().ok_or("no monitor")?;
+        let scale = monitor.scale_factor();
+        let (w, h) = (460.0, 220.0);
+        let x = monitor.position().x as f64 / scale + monitor.size().width as f64 / scale / 2.0 - w / 2.0;
+        let y = monitor.position().y as f64 / scale;
+        let win = tauri::WebviewWindowBuilder::new(&app, "overlay", tauri::WebviewUrl::App("overlay.html".into()))
+            .title("Hotswap overlay")
+            .inner_size(w, h)
+            .position(x, y)
+            .decorations(false)
+            .transparent(true)
+            .shadow(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .focused(false)
+            .resizable(false)
+            .build()
+            .map_err(|e| e.to_string())?;
+        let _ = win.set_ignore_cursor_events(true);
+        // Give the page a moment to start listening before the first note.
+        tokio_sleep(400).await;
+    }
+    app.emit_to("overlay", "overlay", note).map_err(|e| e.to_string())
+}
+
+async fn tokio_sleep(ms: u64) {
+    let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(std::time::Duration::from_millis(ms))).await;
+}
+
+#[tauri::command]
+fn overlay_close(app: AppHandle) {
+    if let Some(w) = app.get_webview_window("overlay") {
+        let _ = w.close();
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -801,6 +906,7 @@ fn main() {
         .manage(CloseToTray(AtomicBool::new(true)))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -834,7 +940,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
             fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart,
-            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
+            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hotswap");

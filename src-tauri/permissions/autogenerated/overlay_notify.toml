@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-overlay-notify"
+description = "Enables the overlay_notify command without any pre-configured scope."
+commands.allow = ["overlay_notify"]
+
+[[permission]]
+identifier = "deny-overlay-notify"
+description = "Denies the overlay_notify command without any pre-configured scope."
+commands.deny = ["overlay_notify"]

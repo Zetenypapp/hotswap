@@ -19,7 +19,8 @@
         "center": true,
         "visible": false,
         "decorations": false,
-        "backgroundColor": "#111316"
+        "backgroundColor": "#111316",
+        "additionalBrowserArgs": "--autoplay-policy=no-user-gesture-required --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"
       }
     ],
     "security": {

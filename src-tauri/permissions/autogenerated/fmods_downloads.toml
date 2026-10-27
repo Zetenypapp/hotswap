@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fmods-downloads"
+description = "Enables the fmods_downloads command without any pre-configured scope."
+commands.allow = ["fmods_downloads"]
+
+[[permission]]
+identifier = "deny-fmods-downloads"
+description = "Denies the fmods_downloads command without any pre-configured scope."
+commands.deny = ["fmods_downloads"]

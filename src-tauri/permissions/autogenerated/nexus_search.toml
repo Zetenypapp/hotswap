@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-nexus-search"
+description = "Enables the nexus_search command without any pre-configured scope."
+commands.allow = ["nexus_search"]
+
+[[permission]]
+identifier = "deny-nexus-search"
+description = "Denies the nexus_search command without any pre-configured scope."
+commands.deny = ["nexus_search"]

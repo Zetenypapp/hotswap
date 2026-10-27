@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fmods-pick"
+description = "Enables the fmods_pick command without any pre-configured scope."
+commands.allow = ["fmods_pick"]
+
+[[permission]]
+identifier = "deny-fmods-pick"
+description = "Denies the fmods_pick command without any pre-configured scope."
+commands.deny = ["fmods_pick"]

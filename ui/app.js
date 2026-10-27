@@ -43,7 +43,7 @@ function comboFromEvent(e) {
 const DEFAULTS = {
   view: 'home', game: null, playing: null, fav: {}, closed: {}, notes: {}, log: [],
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
-  showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, paused: {},
+  showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, sounds: true, overlay: true, paused: {},
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
 };
 let state = { ...DEFAULTS };
@@ -492,6 +492,8 @@ function renderSettings() {
       <div class="set-row"><div class="txt"><b>Enable hotkeys</b><span>While a game with mods is running, its hotkeys work everywhere, including inside the game. They're released again when the game closes.</span></div>${sw('setHotkeys', state.hotkeys)}</div>
       <div class="set-row"><div class="txt"><b>Panic key</b><span>Turns off every mod in the running game at once. Click to change it.</span></div>
         <button class="key bindable${listeningPanic ? ' listening' : ''}" id="panicBind">${listeningPanic ? 'Press a key…' : esc(comboLabel(state.panicKey))}</button></div>
+      <div class="set-row"><div class="txt"><b>Sounds</b><span>A short chime when a mod turns on or off.</span></div>${sw('setSounds', state.sounds)}</div>
+      ${invoke ? `<div class="set-row"><div class="txt"><b>In-game overlay</b><span>Shows mod changes from hotkeys at the top of the screen, over the game. Works with borderless and windowed games, not exclusive fullscreen.</span></div><button class="btn" id="testOverlay">Test</button>${sw('setOverlay', state.overlay)}</div>` : ''}
       <div class="set-row"><div class="txt"><b>Reset all key bindings</b><span>Puts every mod back on its default hotkey.</span></div><button class="btn" id="resetBinds">Reset</button></div>
     </div>
     ${invoke ? `<div class="set-group"><h2>Startup and tray</h2>
@@ -709,6 +711,7 @@ function setMod(g, m, v, how) {
   save();
   syncTrainer();
   toast(m.name, shown);
+  feedback(g, m.name, shown, m.type === 'toggle' ? !!v : true, !!how);
   renderSide();
   if (state.view === 'game' && state.game === g.id) renderGame();
 }
@@ -721,7 +724,35 @@ function panic(how) {
   logLine(g, `All mods → Off${how ? ' (' + how + ')' : ''}`);
   save();
   toast('All mods', 'off');
+  feedback(g, 'All mods', 'Off', false, true);
   render();
+}
+
+/* ---------- Feedback: sound and the in-game overlay ---------- */
+let audio;
+// A short two-note chime, rising for on and falling for off. Made in code, no sound files.
+function chime(on) {
+  try {
+    audio ||= new AudioContext();
+    if (audio.state === 'suspended') audio.resume();
+    const t = audio.currentTime;
+    (on ? [660, 990] : [660, 440]).forEach((f, i) => {
+      const o = audio.createOscillator(), gain = audio.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      gain.gain.setValueAtTime(0, t + i * 0.07);
+      gain.gain.linearRampToValueAtTime(0.18, t + i * 0.07 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.07 + 0.16);
+      o.connect(gain).connect(audio.destination);
+      o.start(t + i * 0.07); o.stop(t + i * 0.07 + 0.18);
+    });
+  } catch {}
+}
+// `hotkey` is true for changes made from the game (hotkeys, panic key): those show on the overlay.
+function feedback(g, title, value, on, hotkey) {
+  if (state.sounds) chime(on);
+  if (state.overlay && hotkey && invoke && isLive(g)) {
+    invoke('overlay_notify', { note: { title, value, on, game: g.name, accent: state.accent } }).catch(console.error);
+  }
 }
 
 function play(g) {
@@ -991,6 +1022,9 @@ document.addEventListener('click', e => {
       break;
     case 'homeRefresh': refreshHome(true); break;
     case 'setAutoUpdate': state.autoUpdate = !state.autoUpdate; save(); render(); break;
+    case 'setSounds': state.sounds = !state.sounds; save(); render(); if (state.sounds) chime(true); break;
+    case 'setOverlay': state.overlay = !state.overlay; save(); render(); if (!state.overlay) invoke?.('overlay_close'); break;
+    case 'testOverlay': invoke?.('overlay_notify', { note: { title: 'Hotswap overlay', value: 'On', on: true, game: 'This is how mod changes look in game', accent: state.accent } }); chime(true); break;
     case 'checkUpdateBtn': checkUpdate(true); break;
     case 'updateBtn': case 'updatePill': installUpdate(); break;
     case 'softToggle': state.softOpen = !state.softOpen; save(); renderSide(); break;
