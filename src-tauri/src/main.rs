@@ -209,15 +209,20 @@ struct MapBackground {
 /// The map background, made from the game's own map texture in the user's install (built once,
 /// then cached in the app data folder).
 #[tauri::command]
-async fn map_background(app: AppHandle, watch: State<'_, watch::Watch>, game: String) -> Result<MapBackground, String> {
+async fn map_background(app: AppHandle, watch: State<'_, watch::Watch>, game: String, style: Option<String>) -> Result<MapBackground, String> {
     let install = watch.install_of(&game).ok_or("Game isn't installed")?;
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("map").join(&game);
+    // Games with more than one map style keep each in its own folder.
+    let style = match style.as_deref() { Some("depth") => Some(sn1map::Style::Depth), Some(_) => Some(sn1map::Style::Satellite), None => None };
+    let mut dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("map").join(&game);
+    if game == sn1::SUBNAUTICA {
+        dir = dir.join(if style == Some(sn1map::Style::Depth) { "depth" } else { "satellite" });
+    }
     let d = dir.clone();
     let g = game.clone();
     // Satisfactory: the game's own map texture. Subnautica: rendered from its terrain files.
     tauri::async_runtime::spawn_blocking(move || match g.as_str() {
         trainer::SATISFACTORY => mapimage::ensure(&install, &d),
-        sn1::SUBNAUTICA => sn1map::ensure(&install.join(r"Subnautica_Data\StreamingAssets\SNUnmanagedData\Build18"), &d),
+        sn1::SUBNAUTICA => sn1map::ensure(&install.join(r"Subnautica_Data\StreamingAssets\SNUnmanagedData\Build18"), &d, style.unwrap_or(sn1map::Style::Satellite)),
         _ => Err("No map for this game".into()),
     })
     .await
@@ -715,7 +720,8 @@ fn main() {
     if let Some(out) = std::env::args().skip_while(|a| a != "--sn1-map").nth(1) {
         let t = std::time::Instant::now();
         let dir = std::path::Path::new(r"E:\SteamLibrary\steamapps\common\Subnautica\Subnautica_Data\StreamingAssets\SNUnmanagedData\Build18");
-        println!("{:?} in {:?}", sn1map::ensure(dir, std::path::Path::new(&out)), t.elapsed());
+        if out == "stats" { return println!("{}", sn1map::material_stats(dir).unwrap_or_else(|e| e)); }
+        println!("{:?} in {:?}", sn1map::ensure(dir, std::path::Path::new(&out), sn1map::Style::Satellite), t.elapsed());
         return;
     }
     // Dev aid: `hotswap --world-scan` prints what the map would draw.

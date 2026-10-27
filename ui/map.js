@@ -5,7 +5,7 @@ const LocalMap = (() => {
   // and which features it has (a live world scan with resources and buildings, teleporting).
   const GAMES = {
     '526870': { name: 'Satisfactory', world: { x0: -324698.832031, x1: 425301.832031, y0: -375000, y1: 375000 }, unit: 100, scan: true, teleport: true },
-    '264710': { name: 'Subnautica', world: { x0: -2048, x1: 2048, y0: -2048, y1: 2048 }, unit: 1, scan: false, teleport: false },
+    '264710': { name: 'Subnautica', world: { x0: -2048, x1: 2048, y0: -2048, y1: 2048 }, unit: 1, scan: false, teleport: false, styles: [['satellite', 'Satellite'], ['depth', 'Depth']] },
   };
   let G = GAMES['526870'], GAME = G.id = '526870', WORLD = G.world, U = G.unit;
 
@@ -50,7 +50,7 @@ const LocalMap = (() => {
 
   function loadPrefs() {
     const d = { res: {}, purity: [true, true, true], things: { slugs: true, somersloops: true, spheres: true, pods: true }, hideOpened: true,
-      terrain: true, buildings: true, lines: { belt: true, pipe: true, rail: true, power: false, hyper: true }, trail: true, panel: true };
+      terrain: true, mapStyle: 'satellite', buildings: true, lines: { belt: true, pipe: true, rail: true, power: false, hyper: true }, trail: true, panel: true };
     try { return Object.assign(d, JSON.parse(localStorage.getItem('hotswap.map') || '{}')); } catch { return d; }
   }
   function savePrefs() { try { localStorage.setItem('hotswap.map', JSON.stringify(prefs)); } catch {} }
@@ -103,7 +103,7 @@ const LocalMap = (() => {
   async function loadBackground() {
     if (bg) return;
     try {
-      const r = await invoke('map_background', { game: GAME });
+      const r = await invoke('map_background', { game: GAME, style: G.styles ? prefs.mapStyle : null });
       const img = src => { const i = new Image(); i.onload = () => { dirty = true; }; i.src = fileSrc(src); return i; };
       bg = { overview: img(r.overview), tiles: r.tiles.map(([x, y, src]) => ({ x, y, src, img: null })), img };
     } catch (e) { bgError = String(e); buildLegend(); }
@@ -484,6 +484,7 @@ const LocalMap = (() => {
     if (a === 'opened') { prefs.hideOpened = !prefs.hideOpened; savePrefs(); buildLegend(); dirty = true; }
     if (a === 'line') { prefs.lines[b.dataset.k] = !prefs.lines[b.dataset.k]; savePrefs(); buildLegend(); dirty = true; }
     if (a === 'buildings') { prefs.buildings = !prefs.buildings; savePrefs(); buildLegend(); dirty = true; }
+    if (a === 'style' && prefs.mapStyle !== b.dataset.k) { prefs.mapStyle = b.dataset.k; savePrefs(); bg = null; bgError = ''; buildLegend(); loadBackground(); }
     if (a === 'terrain') { prefs.terrain = !prefs.terrain; savePrefs(); buildLegend(); dirty = true; }
     if (a === 'trail') { prefs.trail = !prefs.trail; savePrefs(); buildLegend(); dirty = true; }
     if (a === 'cleartrail') { trail = me ? [[me[0], me[1]]] : []; dirty = true; }
@@ -531,6 +532,7 @@ const LocalMap = (() => {
         ${Object.entries(LINES).map(([k, [l, c]]) => chip(prefs.lines[k], 'line', k, `${l}${lines[k] ? ` <em>${lines[k]}</em>` : ''}`, c)).join('')}
       </div>` : '') + `
       <div class="lm-sec"><span>Map</span><button class="lm-link" data-lm="cleartrail">Clear trail</button></div>
+      ${G.styles ? `<div class="lm-chips">${G.styles.map(([k, l]) => chip(prefs.mapStyle === k, 'style', k, l)).join('')}</div>` : ''}
       <div class="lm-chips">${chip(prefs.terrain, 'terrain', '', 'Terrain')}${chip(prefs.trail, 'trail', '', 'Your trail')}</div>
       ${bgError ? `<p class="lm-note">Terrain unavailable: ${esc(bgError)}</p>` : ''}`;
     ui.legend.querySelectorAll('[data-lm="res"]').forEach(b => b.addEventListener('contextmenu', e => { e.preventDefault(); nearest(b.dataset.k); }));

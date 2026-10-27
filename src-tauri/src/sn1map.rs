@@ -18,8 +18,10 @@ const BATCH: usize = 5 * OCTREE;
 const SEA: f32 = 3040.0;
 
 /// Height of the highest solid voxel in every 1 m column (voxel units, -1 = nothing).
-fn heights(dir: &Path) -> Result<Vec<i16>, String> {
+/// Heights, and the material of the top voxel in every column.
+fn heights_and_materials(dir: &Path) -> Result<(Vec<i16>, Vec<u8>), String> {
     let mut h = vec![-1i16; SIZE * SIZE];
+    let mut m = vec![0u8; SIZE * SIZE];
     let rd = std::fs::read_dir(dir.join("CompiledOctreesCache")).map_err(|e| format!("terrain files not found: {e}"))?;
     let mut files: Vec<(usize, usize, usize, std::path::PathBuf)> = rd
         .flatten()
@@ -48,14 +50,14 @@ fn heights(dir: &Path) -> Result<Vec<i16>, String> {
             let Some(n) = data.get(pos..pos + 2).map(|b| u16::from_le_bytes([b[0], b[1]]) as usize) else { break };
             let nodes = &data[(pos + 2).min(data.len())..(pos + 2 + n * 4).min(data.len())];
             pos += 2 + n * 4;
-            fill(nodes, 0, (x0 + ox * OCTREE, by * BATCH + oy * OCTREE, z0 + oz * OCTREE), OCTREE, &mut h);
+            fill(nodes, 0, (x0 + ox * OCTREE, by * BATCH + oy * OCTREE, z0 + oz * OCTREE), OCTREE, &mut h, &mut m);
         }
     }
-    Ok(h)
+    Ok((h, m))
 }
 
 /// Marks the top of every solid cube in node `i` (and its children) in the height map.
-fn fill(nodes: &[u8], i: usize, (x, y, z): (usize, usize, usize), size: usize, h: &mut [i16]) {
+fn fill(nodes: &[u8], i: usize, (x, y, z): (usize, usize, usize), size: usize, h: &mut [i16], m: &mut [u8]) {
     let Some(node) = nodes.get(i * 4..i * 4 + 4) else { return };
     let (material, child) = (node[0], u16::from_le_bytes([node[2], node[3]]) as usize);
     if child == 0 || size == 1 {
@@ -68,6 +70,7 @@ fn fill(nodes: &[u8], i: usize, (x, y, z): (usize, usize, usize), size: usize, h
                 let c = &mut h[zz * SIZE + xx];
                 if *c < top {
                     *c = top;
+                    m[zz * SIZE + xx] = material;
                 }
             }
         }
@@ -76,7 +79,7 @@ fn fill(nodes: &[u8], i: usize, (x, y, z): (usize, usize, usize), size: usize, h
     let half = size / 2;
     for c in 0..8 {
         let (dx, dy, dz) = ((c >> 2) & 1, (c >> 1) & 1, c & 1);
-        fill(nodes, child + c, (x + dx * half, y + dy * half, z + dz * half), half, h);
+        fill(nodes, child + c, (x + dx * half, y + dy * half, z + dz * half), half, h, m);
     }
 }
 
@@ -130,19 +133,76 @@ fn land_color(up: f32) -> [f32; 3] {
     }
 }
 
+/// Natural seabed colors per biome (biomeMap.bin order), for the satellite style.
+const NATURAL: [[f32; 3]; 19] = [
+    [214.0, 196.0, 150.0], // safeShallows: pale sand
+    [96.0, 122.0, 70.0],   // kelpForest
+    [152.0, 78.0, 60.0],   // grassyPlateaus: rust red grass
+    [118.0, 124.0, 118.0], // underwaterIslands: grey rock
+    [122.0, 96.0, 132.0],  // mushroomForest
+    [100.0, 112.0, 142.0], // kooshZone
+    [82.0, 88.0, 142.0],   // grandReef
+    [220.0, 226.0, 232.0], // arctic
+    [92.0, 52.0, 40.0],    // inactiveLavaZone: basalt
+    [78.0, 78.0, 82.0],    // unassigned
+    [190.0, 160.0, 112.0], // crashZone
+    [70.0, 70.0, 76.0],    // void
+    [150.0, 120.0, 132.0], // sparseReef
+    [202.0, 182.0, 132.0], // dunes
+    [82.0, 32.0, 42.0],    // bloodKelp
+    [132.0, 126.0, 120.0], // mountains
+    [142.0, 126.0, 96.0],  // seaTreaderPath
+    [82.0, 32.0, 42.0],    // bloodKelpTwo
+    [96.0, 90.0, 85.0],    // CragField
+];
+
+/// Map styles: depth-colored relief, or a "satellite" look of the seabed through the water.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Style {
+    Depth,
+    Satellite,
+}
+
 /// The finished map as RGB, SIZE x SIZE at 1 m per pixel, north up.
-fn render(dir: &Path) -> Result<Vec<u8>, String> {
-    let h = heights(dir)?;
-    let biome = std::fs::read(dir.join("biomeMap.bin")).unwrap_or_default();
-    let biome_at = |x: usize, z: usize| -> Option<[u8; 3]> {
-        let v = *biome.get(2 + (z / 4) * 1024 + x / 4)? as usize;
-        BIOMES.get(v).copied().flatten()
-    };
+fn render(dir: &Path, style: Style) -> Result<Vec<u8>, String> {
+    let (h, mats) = heights_and_materials(dir)?;
+    let biome_raw = std::fs::read(dir.join("biomeMap.bin")).unwrap_or_default();
+    let biome_id = |x: usize, z: usize| biome_raw.get(2 + (z / 4) * 1024 + x / 4).map(|&v| v as usize).filter(|&v| v < 19);
+    // Satellite: each material takes the natural color of the biome it's mostly found in, with its own
+    // small shift in brightness and tone so neighboring materials show as patches.
+    let mut mat_color = [[0f32; 3]; 256];
+    if style == Style::Satellite {
+        let mut votes = vec![[0u32; 19]; 256];
+        for z in (0..SIZE).step_by(4) {
+            for x in (0..SIZE).step_by(4) {
+                if let Some(b) = biome_id(x, z) {
+                    votes[mats[z * SIZE + x] as usize][b] += 1;
+                }
+            }
+        }
+        for (m, v) in votes.iter().enumerate() {
+            let b = (0..19).max_by_key(|&i| v[i]).unwrap_or(11);
+            let hash = (m as u32).wrapping_mul(2654435761);
+            let light = 0.82 + (hash % 1000) as f32 / 1000.0 * 0.34;
+            let warm = ((hash >> 10) % 100) as f32 / 100.0 * 0.12 - 0.06;
+            let c = NATURAL[b];
+            mat_color[m] = [c[0] * light * (1.0 + warm), c[1] * light, c[2] * light * (1.0 - warm)];
+        }
+    }
+    let biome_at = |x: usize, z: usize| -> Option<[u8; 3]> { BIOMES.get(biome_id(x, z)?).copied().flatten() };
     let at = |x: usize, z: usize| h[z.min(SIZE - 1) * SIZE + x.min(SIZE - 1)] as f32;
     let mut rgb = vec![0u8; SIZE * SIZE * 3];
     for z in 0..SIZE {
         for x in 0..SIZE {
             let v = at(x, z);
+            if style == Style::Satellite {
+                let c = satellite(v, mat_color[mats[z * SIZE + x] as usize], shade_at(&at, x, z));
+                let o = ((SIZE - 1 - z) * SIZE + x) * 3;
+                for i in 0..3 {
+                    rgb[o + i] = c[i].clamp(0.0, 255.0) as u8;
+                }
+                continue;
+            }
             let mut c = if v < 0.0 {
                 [8.0, 16.0, 38.0]
             } else if v >= SEA {
@@ -154,9 +214,7 @@ fn render(dir: &Path) -> Result<Vec<u8>, String> {
                 if let Some(t) = biome_at(x, z) {
                     c = lerp(c, t.map(|v| v as f32), if v >= SEA { 0.08 } else { 0.14 });
                 }
-                // Relief, lit from the northwest.
-                let (dx, dz) = (at(x + 1, z) - at(x.saturating_sub(1), z), at(x, z + 1) - at(x, z.saturating_sub(1)));
-                let shade = (1.0 + (-dx + dz) * 0.09).clamp(0.45, 1.45);
+                let shade = shade_at(&at, x, z);
                 c = c.map(|v| v * shade);
             }
             let o = ((SIZE - 1 - z) * SIZE + x) * 3;
@@ -168,17 +226,39 @@ fn render(dir: &Path) -> Result<Vec<u8>, String> {
     Ok(rgb)
 }
 
+/// Relief shading, lit from the northwest.
+fn shade_at(at: &impl Fn(usize, usize) -> f32, x: usize, z: usize) -> f32 {
+    let (dx, dz) = (at(x + 1, z) - at(x.saturating_sub(1), z), at(x, z + 1) - at(x, z.saturating_sub(1)));
+    (1.0 + (-dx + dz) * 0.09).clamp(0.45, 1.45)
+}
+
+/// Satellite look: the lit seabed seen through the water, fading into blue with depth.
+fn satellite(v: f32, ground: [f32; 3], shade: f32) -> [f32; 3] {
+    if v < 0.0 {
+        return [6.0, 14.0, 34.0];
+    }
+    let lit = ground.map(|c| c * shade);
+    if v >= SEA {
+        return lerp(lit, [110.0, 140.0, 80.0], ((v - SEA) / 40.0).clamp(0.0, 0.5));
+    }
+    let d = SEA - v;
+    // Water tint deepens with depth; relief stays faintly visible even far down.
+    let water = lerp([38.0, 150.0, 175.0], [6.0, 26.0, 62.0], (d / 600.0).min(1.0));
+    let seen = 1.0 - (-d / 55.0).exp();
+    lerp(lit, water.map(|c| c * (0.75 + 0.25 * shade)), seen.min(0.93))
+}
+
 /// Writes the overview (2 m per pixel) and 2 x 2 full-size tiles (1 m per pixel) into `dir`,
 /// unless they're already there for these game files. `data` is .../SNUnmanagedData/Build18.
-pub fn ensure(data: &Path, dir: &Path) -> Result<(), String> {
+pub fn ensure(data: &Path, dir: &Path, style: Style) -> Result<(), String> {
     let meta = std::fs::metadata(data.join("biomeMap.bin")).map_err(|e| format!("game files not found: {e}"))?;
-    let stamp = format!("sn1-v1 {} {:?}", meta.len(), meta.modified().ok());
+    let stamp = format!("sn1-v2-{} {} {:?}", style as u8, meta.len(), meta.modified().ok());
     let stamp_file = dir.join("stamp.txt");
     if std::fs::read_to_string(&stamp_file).is_ok_and(|s| s == stamp) && dir.join(mapimage::OVERVIEW).exists() {
         return Ok(());
     }
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    let rgb = render(data)?;
+    let rgb = render(data, style)?;
     let half = SIZE / 2;
     let mut overview = vec![0u8; half * half * 3];
     for y in 0..half {
@@ -199,4 +279,27 @@ pub fn ensure(data: &Path, dir: &Path) -> Result<(), String> {
         mapimage::write_jpeg(&dir.join(mapimage::tile_file(tx, ty)), &part, half)?;
     }
     std::fs::write(stamp_file, stamp).map_err(|e| e.to_string())
+}
+
+/// Dev aid: how often each material is the top surface, per biome (top 3 biomes each).
+pub fn material_stats(dir: &Path) -> Result<String, String> {
+    let (h, m) = heights_and_materials(dir)?;
+    let biome = std::fs::read(dir.join("biomeMap.bin")).unwrap_or_default();
+    let mut counts = std::collections::BTreeMap::<u8, (usize, std::collections::BTreeMap<u8, usize>)>::new();
+    for z in 0..SIZE {
+        for x in 0..SIZE {
+            if h[z * SIZE + x] < 0 { continue; }
+            let e = counts.entry(m[z * SIZE + x]).or_default();
+            e.0 += 1;
+            *e.1.entry(*biome.get(2 + (z / 4) * 1024 + x / 4).unwrap_or(&255)).or_default() += 1;
+        }
+    }
+    let mut out = String::new();
+    for (mat, (n, bs)) in counts {
+        let mut b: Vec<_> = bs.into_iter().collect();
+        b.sort_by(|a, b| b.1.cmp(&a.1));
+        out += &format!("{mat}: {n} {:?}
+", &b[..b.len().min(3)]);
+    }
+    Ok(out)
 }
