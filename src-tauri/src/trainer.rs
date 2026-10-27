@@ -130,6 +130,36 @@ impl Trainer {
     }
 }
 
+/// The "Save Position" spot, in the app data folder.
+fn spot_file() -> Option<std::path::PathBuf> {
+    Some(std::path::Path::new(&std::env::var("APPDATA").ok()?).join("app.hotswap.desktop").join("saved_spot.json"))
+}
+
+fn spot_file_load() -> Option<[f64; 3]> {
+    serde_json::from_str(&std::fs::read_to_string(spot_file()?).ok()?).ok()
+}
+
+fn spot_file_save(at: [f64; 3]) {
+    if let (Some(p), Ok(s)) = (spot_file(), serde_json::to_string(&at)) {
+        let _ = std::fs::write(p, s);
+    }
+}
+
+/// Turbo production's saved real clocks: machine position -> [current, pending, max].
+fn turbo_file() -> Option<std::path::PathBuf> {
+    Some(std::path::Path::new(&std::env::var("APPDATA").ok()?).join("app.hotswap.desktop").join("turbo_clocks.json"))
+}
+
+fn turbo_file_load() -> HashMap<String, [f32; 3]> {
+    turbo_file().and_then(|p| std::fs::read_to_string(p).ok()).and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+}
+
+fn turbo_file_save(map: &HashMap<String, [f32; 3]>) {
+    if let (Some(p), Ok(s)) = (turbo_file(), serde_json::to_string(map)) {
+        let _ = std::fs::write(p, s);
+    }
+}
+
 /// Dev aid (`hotswap --trainer-test`): shows what the trainer finds and whether a write sticks.
 pub fn debug(pid: u32) {
     let ue = match Ue::attach(pid) {
@@ -362,9 +392,19 @@ impl Session {
     }
 
     /// Turbo production: run every machine at 500% clock speed. Each machine's own clock comes back when off.
+    /// A machine's identity across sessions (addresses change): its rounded position.
+    fn machine_key(&mut self, m: u64) -> Option<String> {
+        let ro = self.off(m, "RootComponent").ok()?;
+        let root = self.ue.p.ptr(m + ro)?;
+        let lo = self.off(root, "RelativeLocation").ok()?;
+        let [x, y, z] = [0, 8, 16].map(|i| self.ue.p.read::<f64>(root + lo + i).unwrap_or(0.0));
+        Some(format!("{x:.0},{y:.0},{z:.0}"))
+    }
+
     fn turbo_machines(&mut self, on: bool) -> Result<(), String> {
         const TURBO: f32 = 5.0;
         if !on {
+            let had = !self.turbo_orig.is_empty();
             for (m, (cur, pending, max)) in std::mem::take(&mut self.turbo_orig) {
                 for (name, v) in [("mMaxPotential", max), ("mCurrentPotential", cur), ("mPendingPotential", pending)] {
                     if let Ok(o) = self.off(m, name) {
@@ -372,23 +412,32 @@ impl Session {
                     }
                 }
             }
-            // Machines boosted before Hotswap restarted have no saved clock. 500% is impossible in the
-            // normal game, so anything still exactly there goes back to 100% (max 250%), once per session.
+            // Machines boosted before Hotswap or the game restarted: put back the clocks saved on
+            // disk, matched by position. 500% is impossible in the normal game, so anything still
+            // exactly there without a saved clock goes back to 100% (max 250%). Once per session.
             if !self.turbo_cleaned {
                 self.turbo_cleaned = true;
                 self.ensure_machines();
-                let mut fixed = 0;
+                let saved = turbo_file_load();
+                let (mut restored, mut reset) = (0, 0);
                 for m in self.machines.clone() {
                     let (Ok(c), Ok(p), Ok(x)) = (self.off(m, "mCurrentPotential"), self.off(m, "mPendingPotential"), self.off(m, "mMaxPotential")) else { continue };
-                    if self.ue.p.read::<f32>(m + c) == Some(TURBO) {
-                        self.ue.p.write(m + x, 2.5f32);
-                        self.ue.p.write(m + c, 1.0f32);
-                        self.ue.p.write(m + p, 1.0f32);
-                        fixed += 1;
+                    if self.ue.p.read::<f32>(m + c) != Some(TURBO) {
+                        continue;
                     }
+                    let (cur, pending, max) = match self.machine_key(m).and_then(|k| saved.get(&k).copied()) {
+                        Some([cur, pending, max]) => { restored += 1; (cur, pending, max) }
+                        None => { reset += 1; (1.0, 1.0, 2.5) }
+                    };
+                    self.ue.p.write(m + x, max);
+                    self.ue.p.write(m + c, cur);
+                    self.ue.p.write(m + p, pending);
                 }
-                if fixed > 0 {
-                    log(&format!("turbo off: reset {fixed} leftover machines to 100%"));
+                if restored + reset > 0 {
+                    log(&format!("turbo off: restored {restored} saved clocks, reset {reset} unknown machines to 100%"));
+                }
+                if had || restored > 0 {
+                    turbo_file_save(&HashMap::new());
                 }
             }
             return Ok(());
@@ -399,11 +448,25 @@ impl Session {
         }
         self.turbo_at = Some(Instant::now());
         self.ensure_machines();
+        let mut saved: Option<HashMap<String, [f32; 3]>> = None;
+        let mut changed = false;
         for m in self.machines.clone() {
             let (Ok(c), Ok(p), Ok(x)) = (self.off(m, "mCurrentPotential"), self.off(m, "mPendingPotential"), self.off(m, "mMaxPotential")) else { continue };
-            let read = |o: u64| self.ue.p.read::<f32>(m + o).unwrap_or(1.0);
             if !self.turbo_orig.contains_key(&m) {
-                let orig = (read(c), read(p), read(x));
+                // Remember the real clock on disk too, so it survives Hotswap or the game restarting.
+                let file = saved.get_or_insert_with(turbo_file_load);
+                let read = |o: u64| self.ue.p.read::<f32>(m + o).unwrap_or(1.0);
+                let live = (read(c), read(p), read(x));
+                let key = self.machine_key(m);
+                let orig = match key.as_ref().and_then(|k| file.get(k)) {
+                    Some(&[cur, pending, max]) => (cur, pending, max),
+                    None if live.0 == TURBO => (1.0, 1.0, 2.5),
+                    None => live,
+                };
+                if let Some(k) = key.filter(|k| !file.contains_key(k)) {
+                    file.insert(k, [orig.0, orig.1, orig.2]);
+                    changed = true;
+                }
                 self.turbo_orig.insert(m, orig);
             }
             for o in [x, c, p] {
@@ -411,6 +474,9 @@ impl Session {
                     self.ue.p.write(m + o, TURBO);
                 }
             }
+        }
+        if let (true, Some(file)) = (changed, &saved) {
+            turbo_file_save(file);
         }
         Ok(())
     }
@@ -651,6 +717,19 @@ impl Session {
         if let Some(to) = self.teleport.take() {
             self.teleport_to(to);
         }
+        // Hotkey actions: save where you stand, and jump back there (kept on disk across restarts).
+        for a in actions {
+            match a.as_str() {
+                "save-position" => if let Some([x, y, z, _]) = self.pos {
+                    spot_file_save([x, y, z + 50.0]);
+                    log(&format!("saved position {x:.0}, {y:.0}, {z:.0}"));
+                },
+                "teleport-to-saved-position" => if let Some(to) = spot_file_load() {
+                    self.teleport_to(to);
+                },
+                _ => {}
+            }
+        }
         let holding = match self.hold {
             Some((to, until)) if Instant::now() < until => { self.place(to); true }
             _ => { self.hold = None; false }
@@ -797,7 +876,7 @@ impl Session {
         if get("unlimited-jetpack-fuel", 0.0) != 0.0 {
             self.hold_jetpack_fuel()?;
         }
-        let _ = (actions, sink); // no one-shot mods right now
+        let _ = sink;
         Ok(true)
     }
 }

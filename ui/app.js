@@ -43,7 +43,7 @@ function comboFromEvent(e) {
 const DEFAULTS = {
   view: 'home', game: null, playing: null, fav: {}, closed: {}, notes: {}, log: [],
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
-  showSoftware: true, softOpen: false, closeToTray: true, paused: {},
+  showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, paused: {},
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
 };
 let state = { ...DEFAULTS };
@@ -54,6 +54,7 @@ let sessionStart = null;     // when the current RUNNING session began
 let launching = null;        // { id, timer } while waiting for a launched game to appear
 let capture = null;          // { gid, mid, dir } while rebinding a key; mid is null for the panic key
 let stopArmed = false;       // stop button clicked once; a second click closes the game
+let VERSION = '', UPDATE = null, UPDATE_MSG = ''; // app version and a newer release, if any
 let AUTOSTART = false;      // read from Windows at boot; the setting lives there, not in state
 let profileMenu = false;     // profile popover open
 let newProfile = false;      // profile popover showing the name field
@@ -509,8 +510,10 @@ function renderSettings() {
     <div class="set-group"><h2>Data</h2>
       <div class="set-row"><div class="txt"><b>Reset all mod settings</b><span>Turns every mod off in every profile of every game. Profiles, notes and favorites stay.</span></div><button class="btn danger" id="wipeBtn">Reset</button></div>
     </div>
-    <div class="set-group"><h2>About</h2>
-      <div class="set-row"><div class="txt"><b>Hotswap 0.1.0</b><span>Interface preview. Mods don't change games yet. Game art is read from your local Steam cache. Figtree font under the SIL Open Font License.</span></div></div>
+    <div class="set-group"><h2>About and updates</h2>
+      <div class="set-row"><div class="txt"><b>Hotswap ${esc(VERSION || '')}</b><span>${UPDATE ? `Version ${esc(UPDATE.version)} is available.` : esc(UPDATE_MSG || 'Free, open source, no ads.')} Game art is read from your local Steam cache. Figtree font under the SIL Open Font License.</span></div>
+        ${invoke ? (UPDATE ? '<button class="btn" id="updateBtn">Update now</button>' : '<button class="btn" id="checkUpdateBtn">Check now</button>') : ''}</div>
+      ${invoke ? `<div class="set-row"><div class="txt"><b>Check for updates automatically</b><span>Looks for a new release on GitHub when Hotswap starts. Updates are signed, and nothing installs without your click.</span></div>${sw('setAutoUpdate', state.autoUpdate)}</div>` : ''}
     </div>`;
 }
 
@@ -664,11 +667,11 @@ function applyAccent() {
 
 function render() {
   applyAccent();
-  const views = { home: 'homeView', library: 'libView', maps: 'mapsView', settings: 'setView', game: 'gameView' };
+  const views = { home: 'homeView', library: 'libView', maps: 'mapsView', mods: 'modsView', settings: 'setView', game: 'gameView' };
   if (state.view === 'game' && !game()) state.view = 'home';
   Object.entries(views).forEach(([v, id]) => $(id).hidden = v !== state.view);
   renderSide();
-  ({ home: renderHome, library: renderLibrary, maps: renderMaps, settings: renderSettings, game: renderGame })[state.view]();
+  ({ home: renderHome, library: renderLibrary, maps: renderMaps, mods: () => Mods.render(), settings: renderSettings, game: renderGame })[state.view]();
   syncHotkeys();
   syncTrainer();
   syncMap();
@@ -757,6 +760,30 @@ function onRunning(id) {
   render();
 }
 
+/* ---------- Updates ---------- */
+async function checkUpdate(manual) {
+  if (!invoke) return;
+  try {
+    UPDATE = await invoke('check_update');
+    UPDATE_MSG = UPDATE ? '' : 'You have the latest version.';
+    if (manual) toast(UPDATE ? `Version ${UPDATE.version}` : 'Hotswap is up to date', UPDATE ? 'available' : '');
+  } catch (e) {
+    UPDATE_MSG = "Couldn't check for updates.";
+    if (manual) toast("Couldn't check for updates", String(e));
+  }
+  const pill = $('updatePill');
+  pill.hidden = !UPDATE;
+  if (UPDATE) pill.textContent = `Update to ${UPDATE.version}`;
+  if (state.view === 'settings') renderSettings();
+}
+function installUpdate() {
+  if (!UPDATE) return;
+  toast('Downloading update', UPDATE.version);
+  $('updatePill').textContent = 'Updating…';
+  // Hotswap closes and the installer reopens it on the new version.
+  invoke('install_update').catch(e => { toast("Update failed", String(e)); $('updatePill').textContent = `Update to ${UPDATE.version}`; });
+}
+
 // Applies a hotkey press, from the system-wide listener or (in a browser) the page.
 function onCombo(combo) {
   if (capture) return;
@@ -821,6 +848,7 @@ const PAGE_ICONS = {
   home: '<path d="M3 10.5L12 3l9 7.5V21h-6v-6H9v6H3z"/>',
   library: ICONS_GRID(),
   maps: '<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z" opacity=".35"/><path d="M9 4v14l6 2V6z"/>',
+  mods: '<path d="M10 3h4v3a2 2 0 1 0 4 0V3h3v7h-3a2 2 0 1 0 0 4h3v7h-7v-3a2 2 0 1 0-4 0v3H3v-7h3a2 2 0 1 0 0-4H3V3z"/>',
   settings: '<circle cx="12" cy="12" r="4"/><path d="M11 2h2v4h-2zM11 18h2v4h-2zM2 11h4v2H2zM18 11h4v2h-4z"/>',
   action: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
 };
@@ -830,7 +858,7 @@ const palIcon = k => `<span class="pal-ic"><svg width="16" height="16" viewBox="
 function paletteItems(q) {
   const items = [];
   const add = (kind, label, sub, run, ic) => items.push({ kind, label, sub, run, ic });
-  [['home', 'Home'], ['library', 'Library'], ['maps', 'Maps'], ['settings', 'Settings']]
+  [['home', 'Home'], ['library', 'Library'], ['maps', 'Maps'], ['mods', 'Mods'], ['settings', 'Settings']]
     .forEach(([v, l]) => add('Page', l, '', () => go(v), palIcon(v)));
   const games = q ? LIB : gamesOnly().slice().sort((a, b) => b.lastPlayed - a.lastPlayed).slice(0, 6);
   games.forEach(g => add(g.software ? 'Software' : 'Game', g.name, [g.playtime ? hours(g.playtime) : '', modsOf(g).length ? `${modsOf(g).length} mods` : ''].filter(Boolean).join(' · '),
@@ -962,6 +990,9 @@ document.addEventListener('click', e => {
         .finally(render);
       break;
     case 'homeRefresh': refreshHome(true); break;
+    case 'setAutoUpdate': state.autoUpdate = !state.autoUpdate; save(); render(); break;
+    case 'checkUpdateBtn': checkUpdate(true); break;
+    case 'updateBtn': case 'updatePill': installUpdate(); break;
     case 'softToggle': state.softOpen = !state.softOpen; save(); renderSide(); break;
     case 'rescanBtn': scanLibrary().then(() => { render(); toast('Found', `${LIB.length} games`); }); break;
     case 'wipeBtn':
@@ -1066,8 +1097,11 @@ const icon = (k, s = 16) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"
     state.playing = null;
     invoke('set_close_to_tray', { enabled: state.closeToTray }).catch(console.error);
     AUTOSTART = await invoke('get_autostart').catch(() => false);
+    VERSION = await invoke('app_version').catch(() => '');
+    if (state.autoUpdate) setTimeout(() => checkUpdate(false), 4000);
     listen?.('game-running', e => onRunning(e.payload ?? null));
     listen?.('hotkey', e => onCombo(e.payload));
+    listen?.('mod-progress', e => Mods.onProgress(e.payload));
     listen?.('trainer-status', e => { TRAINER = e.payload; if (state.view === 'game') renderPanel(); });
     onRunning(await invoke('running_game').catch(() => null));
   } else if (state.playing && !findGame(state.playing)) state.playing = null;
@@ -1076,6 +1110,6 @@ const icon = (k, s = 16) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"
 })().catch(err => {
   console.error(err);
   document.querySelectorAll('.view').forEach(v => v.hidden = v.id !== 'mapsView');
-  document.querySelector('#mapsView .empty-page').innerHTML = `<h1>Hotswap couldn't start</h1>
-    <p>${esc(err?.message || err)}</p><button class="btn" onclick="location.reload()">Try again</button>`;
+  $('mapsBody').innerHTML = `<div class="empty-page"><h1>Hotswap couldn't start</h1>
+    <p>${esc(err?.message || err)}</p><button class="btn" onclick="location.reload()">Try again</button></div>`;
 });

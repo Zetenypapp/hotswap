@@ -23,6 +23,7 @@
       <button data-view="home"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 10.5L12 3l9 7.5V21h-6v-6H9v6H3z"/></svg>Home</button>
       <button data-view="library"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>Library</button>
       <button data-view="maps"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z" opacity=".35"/><path d="M9 4v14l6 2V6z"/></svg>Maps</button>
+      <button data-view="mods"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10 3h4v3a2 2 0 1 0 4 0V3h3v7h-3a2 2 0 1 0 0 4h3v7h-7v-3a2 2 0 1 0-4 0v3H3v-7h3a2 2 0 1 0 0-4H3V3z"/></svg>Mods</button>
     </nav>
     <div class="side-label">
       My games <span class="n" id="gameCount"></span>
@@ -43,6 +44,7 @@
       </label>
       <div class="spacer" data-tauri-drag-region></div>
       <div class="tb-right" data-tauri-drag-region>
+        <button class="update-pill" id="updatePill" hidden></button>
         <button class="home tb-settings" data-view="settings" aria-label="Settings" title="Settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
         <div class="winctl" id="winctl">
           <button id="winMin" aria-label="Minimize"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor"/></svg></button>
@@ -54,6 +56,7 @@
 
     <section class="view" id="homeView"><div class="scroll"><div class="home-view" id="homeBody"></div></div></section>
     <section class="view" id="libView"><div class="scroll"><div class="lib-view" id="libBody"></div></div></section>
+    <section class="view" id="modsView"><div class="scroll"><div class="lib-view" id="modsBody"></div></div></section>
     <section class="view" id="mapsView"><div class="scroll"><div class="lib-view" id="mapsBody"></div></div></section>
     <section class="view" id="setView"><div class="scroll"><div class="set-view" id="setBody"></div></div></section>
     <section class="view" id="gameView">
@@ -98,6 +101,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="data.js"></script>
 <script src="map.js"></script>
+<script src="mods.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

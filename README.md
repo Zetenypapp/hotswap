@@ -41,6 +41,10 @@ Maps → Satisfactory opens a map drawn from your running game:
 - 📍 **Live position and trail**, pins, and **right-click teleport**
 - 🌐 A **Detailed map** tab with Satisfactory Calculator's interactive map
 
+## 🧩 Mod loader
+
+Mods → Browse searches every mod on [ficsit.app](https://ficsit.app) and installs it with one click, together with the Satisfactory Mod Loader and any other mods it needs. Downloads are checked against ficsit.app's SHA-256 hashes. Installed mods can be updated, turned off or removed. It uses the same folders as Satisfactory Mod Manager, so both work side by side.
+
 ## ✨ App features
 
 - 🎮 **Your real library:** finds installed Steam, Epic and GOG games, with artwork read from Steam's local cache
@@ -53,6 +57,8 @@ Maps → Satisfactory opens a map drawn from your running game:
 - 📰 **Live Home:** developer news for your games, Steam deals (via CheapShark), top sellers and new releases
 - ⏱️ **Playtime and sessions:** Steam hours plus time played with Hotswap
 - 🔍 **Ctrl+K palette:** jump to any game, page, mod or action
+- 📍 **Teleport hotkeys:** save your position and jump back to it
+- 🔄 **Auto-updates:** signed updates from GitHub releases, installed with one click
 - 🎨 **Accent colors, tray icon, start with Windows**
 
 ![Home](docs/home.png)

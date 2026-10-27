@@ -11,6 +11,8 @@ const CATALOG = {
     { name: 'Inventory', mods: [T('Infinite Items', 'Stacks in your inventory never go down, and used-up items come back.'), T('Easy Crafting', 'Building and workbench crafting need no materials at all. Reopen the workbench after picking a recipe.')] },
     { name: 'Physics', mods: [S('Walking Speed', 10, 1000, 10, 100, 'Percent of normal speed. 100 is the game default.'), S('Jump Height', 10, 1000, 10, 100, 'Percent of normal jump height.'), S('Game Speed', 0.1, 5, 0.1, 1), T('Super Speed'), S('Gravity Strength', 0, 200, 5, 100, 'Percent of normal gravity. 0 lets you float.')] },
     { name: 'Building', mods: [T('Free Production', 'Machines need no ingredients. Their outputs are real items.'), T('No Power Required'), T('No Fuel Needed', 'Generators and vehicles run without fuel.'), T('Turbo Production', 'Machines produce much faster.')] },
+ 
+    { name: 'Teleport', mods: [A('Save Position', 'Remembers where you stand, even after a restart.'), A('Teleport to Saved Position', 'Jumps back to the saved spot. Fall damage is off for a moment after.')] },
   ]},
   3241660: { genre: 'Horror co-op', solo: true, cats: [
     { name: 'Player', mods: [T('Infinite Health'), T('Infinite Stamina'), S('Movement Speed', 50, 300, 10, 100)] },
@@ -45,6 +47,7 @@ const LIVE = {
     'infinite-health', 'unlimited-jetpack-fuel', 'no-fall-damage', 'infinite-items', 'easy-crafting',
     'walking-speed', 'jump-height', 'game-speed', 'super-speed', 'gravity-strength',
     'free-production', 'no-power-required', 'no-fuel-needed', 'turbo-production',
+    'save-position', 'teleport-to-saved-position',
   ],
 };
 

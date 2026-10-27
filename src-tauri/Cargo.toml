@@ -1,6 +1,6 @@
 [package]
 name = "hotswap"
-version = "0.2.0"
+version = "0.2.1"
 description = "Hotswap desktop app"
 edition = "2021"
 
@@ -22,6 +22,10 @@ pdb = "0.8"
 oozextract = "0.5"
 texture2ddecoder = "0.1"
 jpeg-encoder = "0.7"
+tauri-plugin-updater = "2"
+semver = "1"
+sha2 = "0.10"
+zip = { version = "4", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"

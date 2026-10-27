@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Hotswap",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "identifier": "app.hotswap.desktop",
   "build": {
     "frontendDist": "../ui"
@@ -32,7 +32,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "Hotswap",
     "shortDescription": "Swap the way you play, in real time.",
     "windows": {
@@ -41,6 +43,20 @@
         "installerIcon": "icons/icon.ico"
       }
     },
-    "icon": ["icons/icon.ico"]
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFEMEQ4MDFDRjMxODY3N0QKUldSOVp4anpISUFOSGJuSWZVa2crTG0xTDFLWnpDdTJBNjhtUWJRNlBBWnc2QUVJQjJhaFEyQXQK",
+      "endpoints": [
+        "https://github.com/Zetenypapp/hotswap/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

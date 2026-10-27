@@ -34,6 +34,15 @@
     "allow-map-show",
     "allow-map-hide",
     "allow-map-world",
-    "allow-map-background"
+    "allow-map-background",
+    "allow-check-update",
+    "allow-install-update",
+    "allow-app-version",
+    "allow-mods-state",
+    "allow-mods-search",
+    "allow-mods-install",
+    "allow-mods-uninstall",
+    "allow-mods-set-enabled",
+    "allow-mods-updates"
   ]
 }

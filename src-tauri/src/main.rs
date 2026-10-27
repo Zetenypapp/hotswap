@@ -6,6 +6,7 @@ mod gog;
 mod home;
 mod iostore;
 mod mapimage;
+mod modloader;
 mod steam;
 mod trainer;
 mod ue;
@@ -253,6 +254,89 @@ fn map_pins_save(app: AppHandle, data: String) -> Result<(), String> {
     save_data(app, "pins".into(), data)
 }
 
+/// Mod loader: the game's mod folder must not change while the game runs.
+fn mod_install_dir(watch: &watch::Watch, game: &str) -> Result<PathBuf, String> {
+    if game != trainer::SATISFACTORY {
+        return Err("The mod loader supports Satisfactory only for now".into());
+    }
+    if watch.running().as_deref() == Some(game) {
+        return Err("Close the game first, then change mods".into());
+    }
+    watch.install_of(game).ok_or_else(|| "Game isn't installed".into())
+}
+
+#[derive(serde::Serialize)]
+struct ModsState {
+    installed: Vec<modloader::Installed>,
+    build: Option<u64>,
+}
+
+#[tauri::command]
+fn mods_state(watch: State<watch::Watch>, game: String) -> Result<ModsState, String> {
+    let install = watch.install_of(&game).ok_or("Game isn't installed")?;
+    Ok(ModsState { installed: modloader::installed(&install), build: modloader::game_build(&install) })
+}
+
+#[tauri::command]
+async fn mods_search(query: String, sort: String, offset: u32) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || modloader::search(&query, &sort, offset)).await.map_err(|e| e.to_string())?
+}
+
+/// Installs or updates a mod with its dependencies; progress arrives as `mod-progress` events.
+#[tauri::command]
+async fn mods_install(app: AppHandle, watch: State<'_, watch::Watch>, game: String, reference: String) -> Result<Vec<String>, String> {
+    let install = mod_install_dir(&watch, &game)?;
+    let cache = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("mods");
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || modloader::install(&install, &reference, &cache, |p| { let _ = a.emit("mod-progress", p); }))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn mods_uninstall(watch: State<watch::Watch>, game: String, reference: String) -> Result<(), String> {
+    modloader::uninstall(&mod_install_dir(&watch, &game)?, &reference)
+}
+
+#[tauri::command]
+fn mods_set_enabled(watch: State<watch::Watch>, game: String, reference: String, enabled: bool) -> Result<(), String> {
+    modloader::set_enabled(&mod_install_dir(&watch, &game)?, &reference, enabled)
+}
+
+#[tauri::command]
+async fn mods_updates(watch: State<'_, watch::Watch>, game: String) -> Result<HashMap<String, String>, String> {
+    let install = watch.install_of(&game).ok_or("Game isn't installed")?;
+    tauri::async_runtime::spawn_blocking(move || modloader::updates(&install)).await.map_err(|e| e.to_string())?
+}
+
+#[derive(serde::Serialize)]
+struct UpdateInfo {
+    version: String,
+    notes: String,
+}
+
+/// A newer Hotswap release on GitHub, if there is one (signed; checked against the built-in key).
+#[tauri::command]
+async fn check_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
+    Ok(update.map(|u| UpdateInfo { version: u.version.clone(), notes: u.body.clone().unwrap_or_default() }))
+}
+
+/// Downloads and installs the newest release, then restarts into it.
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?.ok_or("Already up to date")?;
+    update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+    app.restart();
+}
+
+#[tauri::command]
+fn app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
 #[tauri::command]
 fn set_close_to_tray(flag: State<CloseToTray>, enabled: bool) {
     flag.0.store(enabled, Ordering::Relaxed);
@@ -355,6 +439,15 @@ fn main() {
         let t = std::time::Instant::now();
         let install = std::path::Path::new(r"D:\SteamLibrary\steamapps\common\Satisfactory");
         println!("{:?} in {:?}", mapimage::ensure(install, std::path::Path::new(&out)), t.elapsed());
+        return;
+    }
+    // Dev aid: `hotswap --mods-plan <ModReference>` shows what installing a mod would download.
+    if let Some(r) = std::env::args().skip_while(|a| a != "--mods-plan").nth(1) {
+        let install = std::path::Path::new(r"D:\SteamLibrary\steamapps\common\Satisfactory");
+        println!("build {:?}", modloader::game_build(install));
+        println!("{}", serde_json::to_string(&modloader::installed(install)).unwrap());
+        println!("{:?}", modloader::dry_run(install, &r));
+        println!("{:?}", modloader::search("smart", "downloads", 0).map(|v| v["count"].clone()));
         return;
     }
     // Dev aid: `hotswap --world-scan` prints what the map would draw.
@@ -604,6 +697,7 @@ fn main() {
         .manage(trainer::Trainer::default())
         .manage(CloseToTray(AtomicBool::new(true)))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -637,7 +731,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
             fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart,
-            map_show, map_hide, map_world, map_background, map_player, map_teleport, map_pins_load, map_pins_save
+            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hotswap");
