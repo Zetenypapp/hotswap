@@ -7,7 +7,7 @@ Hotswap is a free, open-source, ad-free mod app for **single-player** PC games o
 > 💡 **Inspired by ArtCraft.**
 > 🤖 **Made by AI.** Hotswap was designed and written by Claude (Anthropic's AI) in Claude Code, directed by [@Zetenypapp](https://github.com/Zetenypapp).
 
-> 🎮 **Game support right now: Satisfactory only.** Satisfactory is the only game with working mod settings so far. Every other game shows up in your library with art, playtime and launching, but its mod list is either empty or marked **Soon**.
+> 🎮 **Game support right now: Satisfactory and Subnautica 2.** These are the games with working mod settings so far. Every other game shows up in your library with art, playtime and launching, but its mod list is either empty or marked **Soon**.
 
 ![Satisfactory mod page](docs/game.png)
 
@@ -30,6 +30,20 @@ All of these work live while you play. Hotswap connects to the running game, and
 
 Everything happens in the game's memory only. Nothing is written to your save file: restart the game and it's all back to normal. Still, **keep a backup save** while experimenting.
 
+## 🌊 Subnautica 2 mods
+
+| Mod | What it does |
+|---|---|
+| **Infinite Health / Oxygen** | Never run out |
+| **No Hunger / No Thirst** | Food and water stay full |
+| **No Temperature Damage** | Heat and cold do no damage |
+| **Free Dash** | Dashing costs no oxygen |
+| **Swim Speed / Walk Speed** | 10% to 500% |
+| **Free Crafting / Instant Crafting** | No materials, no waiting (building too) |
+| **Infinite Energy** | Tools, vehicles and batteries never run out |
+
+Subnautica 2 ships without debug symbols, so Hotswap finds the engine's object and name tables by their layout in memory.
+
 ## 🗺️ Live map
 
 Maps → Satisfactory opens a map drawn from your running game:
@@ -43,7 +57,7 @@ Maps → Satisfactory opens a map drawn from your running game:
 
 ## 🧩 Mod loader
 
-Mods → Browse searches every mod on [ficsit.app](https://ficsit.app) and installs it with one click, together with the Satisfactory Mod Loader and any other mods it needs. Downloads are checked against ficsit.app's SHA-256 hashes. Installed mods can be updated, turned off or removed. It uses the same folders as Satisfactory Mod Manager, so both work side by side.
+Mods has a page per game. For Satisfactory, Browse searches every mod on [ficsit.app](https://ficsit.app) and installs it with one click, together with the Satisfactory Mod Loader and any other mods it needs. Downloads are checked against ficsit.app's SHA-256 hashes. Installed mods can be updated, turned off or removed. It uses the same folders as Satisfactory Mod Manager, so both work side by side. For Subnautica 2, Hotswap browses Nexus Mods and installs the .zip, .7z or .pak you download (UE4SS, Lua and pak mods).
 
 ## ✨ App features
 
@@ -58,6 +72,7 @@ Mods → Browse searches every mod on [ficsit.app](https://ficsit.app) and insta
 - ⏱️ **Playtime and sessions:** Steam hours plus time played with Hotswap
 - 🔍 **Ctrl+K palette:** jump to any game, page, mod or action
 - 📍 **Teleport hotkeys:** save your position and jump back to it
+- 🔊 **Sounds and in-game overlay** when mods change
 - 🔄 **Auto-updates:** signed updates from GitHub releases, installed with one click
 - 🎨 **Accent colors, tray icon, start with Windows**
 
