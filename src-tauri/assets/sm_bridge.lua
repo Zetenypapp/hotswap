@@ -331,6 +331,18 @@ end
 ------------------------------------------------------------------------------------------------
 
 function H.hook()
+	local before = {}
+	for k in pairs( H.wrapped or {} ) do before[k] = true end
+	H.hookCore()
+	local names = {}
+	local known = { SurvivalGame = SurvivalGame, SurvivalPlayer = SurvivalPlayer, MechanicCharacter = MechanicCharacter, Crafter = Crafter }
+	for name, class in pairs( known ) do
+		if class and H.wrapped and H.wrapped[class] and not before[class] then names[#names + 1] = name end
+	end
+	if #names > 0 then log( "hooked " .. table.concat( names, ", " ) ) end
+end
+
+function H.hookCore()
 	if SurvivalGame then wrap( SurvivalGame, "server_onFixedUpdate", gameTick ) end
 	if SurvivalPlayer then wrap( SurvivalPlayer, "server_onFixedUpdate", playerTick ) end
 	if MechanicCharacter then
@@ -344,6 +356,7 @@ function H.hook()
 	-- Terrain script: Load runs for a saved world, Create for a new one.
 	if type( Load ) == "function" and type( GetColorAt ) == "function" and not H.terrainHooked then
 		H.terrainHooked = true
+		log( "hooked the terrain" )
 		local load, create = Load, Create
 		Load = function( ... )
 			local a, b, c = load( ... )

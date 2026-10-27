@@ -184,12 +184,16 @@ impl Trainer {
                         }
                     }
                     Some(crate::scrap::SCRAP) => {
-                        let pid = pid_of(crate::scrap::SCRAP);
-                        if pid.is_none() {
-                            scrap = None; // the game closed: take the bridge out of its scripts
-                        } else if scrap.is_none() && last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
+                        // Looking for the process is the expensive part: at most every 3 seconds.
+                        if last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
                             last_attach = Some(Instant::now());
-                            scrap = pid.and_then(|pid| crate::scrap::Session::attach(pid).map_err(|e| log(&format!("scrap attach: {e}"))).ok());
+                            match pid_of(crate::scrap::SCRAP) {
+                                None => scrap = None, // the game closed: take the bridge out of its scripts
+                                Some(pid) if scrap.is_none() => {
+                                    scrap = crate::scrap::Session::attach(pid).map_err(|e| log(&format!("scrap attach: {e}"))).ok();
+                                }
+                                _ => {}
+                            }
                         }
                         let result = scrap.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions, teleport));
                         me.0.lock().unwrap().pos = scrap.as_ref().and_then(|s| s.pos);

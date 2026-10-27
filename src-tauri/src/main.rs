@@ -503,6 +503,8 @@ fn corner_pos(app: &AppHandle, corner: &str, w: f64, h: f64, margin: f64) -> Res
 #[tauri::command]
 async fn overlay_notify(app: AppHandle, note: serde_json::Value) -> Result<(), String> {
     let corner = note.get("corner").and_then(|c| c.as_str()).unwrap_or("top").to_string();
+    // The cheat sheet stays while its key is held (up to 10 s); a closed sheet needs no window.
+    let sheet_open = note.get("kind").and_then(|k| k.as_str()) == Some("sheet") && note.get("show").and_then(|v| v.as_bool()) == Some(true);
     let (w, h) = (460.0, 600.0);
     let (x, y) = corner_pos(&app, &corner, w, h, 0.0)?;
     if let Some(win) = app.get_webview_window("overlay") {
@@ -526,8 +528,27 @@ async fn overlay_notify(app: AppHandle, note: serde_json::Value) -> Result<(), S
         tokio_sleep(400).await;
     }
 
-    app.emit_to("overlay", "overlay", note).map_err(|e| e.to_string())
+    if let Some(win) = app.get_webview_window("overlay") {
+        let _ = win.show();
+    }
+    app.emit_to("overlay", "overlay", note).map_err(|e| e.to_string())?;
+    // Hidden again once the notes are gone: a see-through window kept over a game can make
+    // Windows drop the game's fast fullscreen path, which shows up as stutter.
+    let id = OVERLAY_GEN.fetch_add(1, Ordering::Relaxed) + 1;
+    let hold = if sheet_open { 10_500 } else { 3_000 };
+    tauri::async_runtime::spawn(async move {
+        tokio_sleep(hold).await;
+        if OVERLAY_GEN.load(Ordering::Relaxed) == id {
+            if let Some(win) = app.get_webview_window("overlay") {
+                let _ = win.hide();
+            }
+        }
+    });
+    Ok(())
 }
+
+/// Bumped on every overlay note; a pending hide only runs if no newer note came.
+static OVERLAY_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 async fn tokio_sleep(ms: u64) {
     let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(std::time::Duration::from_millis(ms))).await;

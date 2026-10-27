@@ -19,7 +19,9 @@ pub const SCRAP: &str = "387990";
 const BRIDGE: &str = include_str!("../assets/sm_bridge.lua");
 const BRIDGE_FILE: &str = r"Scripts\hotswap_bridge.lua";
 const MARK: &str = "-- Hotswap: added while the game runs, removed when it closes";
-const HOOK: &str = r#"if not Hotswap then pcall( dofile, "$SURVIVAL_DATA/Scripts/hotswap_bridge.lua" ) end if Hotswap then pcall( Hotswap.hook ) end"#;
+/// The game only loads script files through a direct dofile (not from inside pcall), so the file's
+/// existence is checked first; the bridge itself guards every hook.
+const HOOK: &str = r#"if not Hotswap and sm.json.fileExists( "$SURVIVAL_DATA/Scripts/hotswap_bridge.lua" ) then dofile( "$SURVIVAL_DATA/Scripts/hotswap_bridge.lua" ) end if Hotswap then local ok, err = pcall( Hotswap.hook ) if not ok then print( "[Hotswap] hook failed: " .. tostring( err ) ) end end"#;
 /// The scripts that load the bridge (it wraps functions from each).
 const HOOKED: [&str; 5] = [
     r"Scripts\game\SurvivalGame.lua",
@@ -72,8 +74,14 @@ pub fn install(survival: &Path) -> Result<(), String> {
     for f in HOOKED {
         let path = survival.join(f);
         let s = fs::read_to_string(&path).map_err(|e| format!("{f}: {e}"))?;
-        if !s.contains(MARK) {
-            fs::write(&path, format!("{s}\n{MARK}\n{HOOK}\n")).map_err(io)?;
+        // An older Hotswap's line is replaced with this one.
+        let orig = match s.find(MARK) {
+            Some(i) => s[..i].strip_suffix('\n').unwrap_or(&s[..i]).to_string(),
+            None => s.clone(),
+        };
+        let want = format!("{orig}\n{MARK}\n{HOOK}\n");
+        if want != s {
+            fs::write(&path, want).map_err(io)?;
         }
     }
     Ok(())
