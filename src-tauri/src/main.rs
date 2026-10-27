@@ -310,6 +310,37 @@ fn main() {
         }
         return;
     }
+    // Dev aid: `hotswap --tp-peek` finds every copy of the player's location in its components.
+    if std::env::args().any(|a| a == "--tp-peek") {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let pid = sys.processes().values().find(|p| p.name().to_string_lossy().contains("FactoryGameSteam-Win64-Shipping")).map(|p| p.pid().as_u32());
+        let Some(u) = pid.and_then(|p| ue::objects::Ue::attach(p).ok()) else { println!("not attached"); return };
+        for p in u.find_by_class("Char_Player_C") {
+            let cls = u.class_of(p).unwrap();
+            if u.prop(cls, "Controller").and_then(|o| u.p.ptr(p + o.offset as u64)).is_none() { continue }
+            let root = u.prop(cls, "RootComponent").and_then(|o| u.p.ptr(p + o.offset as u64)).unwrap();
+            let rc = u.class_of(root).unwrap();
+            let rel = u.prop(rc, "RelativeLocation").unwrap().offset as u64;
+            let here: Vec<f64> = (0..3).map(|i| u.p.read::<f64>(root + rel + i * 8).unwrap()).collect();
+            println!("player 0x{p:X} root 0x{root:X} {} RelativeLocation +0x{rel:X} = {here:?}", u.name_of(rc).unwrap_or_default());
+            let m = u.prop(cls, "CharacterMovement").and_then(|o| u.p.ptr(p + o.offset as u64)).unwrap();
+            for (label, obj) in [("root", root), ("movement", m), ("player", p)] {
+                let mut buf = vec![0u8; 0x1000];
+                u.p.read_into(obj, &mut buf);
+                for o in (0..0x1000 - 24).step_by(8) {
+                    let d = |k: usize| f64::from_le_bytes(buf[o + k * 8..o + k * 8 + 8].try_into().unwrap());
+                    if (d(0) - here[0]).abs() < 2000.0 && (d(1) - here[1]).abs() < 2000.0 && (d(2) - here[2]).abs() < 2000.0 {
+                        println!("  {label} +0x{o:X}: {:?}", [d(0), d(1), d(2)]);
+                    }
+                }
+                for pr in u.props(u.class_of(obj).unwrap()).iter().filter(|x| x.name.contains("Location") || x.name.contains("Transform")) {
+                    println!("    prop {label}.{} +0x{:X} {}", pr.name, pr.offset, pr.kind);
+                }
+            }
+        }
+        return;
+    }
     // Dev aid: `hotswap --trainer-peek` prints the player's live movement values without writing.
     if std::env::args().any(|a| a == "--trainer-peek") {
         let mut sys = sysinfo::System::new();

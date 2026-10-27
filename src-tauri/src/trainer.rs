@@ -467,14 +467,15 @@ impl Session {
         let rel = self.off(root, "RelativeLocation").ok()?;
         if self.world_loc_off.is_none() {
             // The root has no parent, so its world translation equals RelativeLocation: find that copy.
+            // It's the one followed by the transform's scale (1, 1, 1); the bounds' origin is another copy.
             let here: Vec<f64> = (0..3).map(|i| self.ue.p.read::<f64>(root + rel + i * 8).unwrap_or(f64::NAN)).collect();
             let mut buf = vec![0u8; 0x400];
             if !self.ue.p.read_into(root, &mut buf) {
                 return None;
             }
             let d = |o: usize| f64::from_le_bytes(buf[o..o + 8].try_into().unwrap());
-            self.world_loc_off = (0x20..0x400 - 24).step_by(16)
-                .find(|&o| o as u64 != rel && (0..3).all(|i| (d(o + i * 8) - here[i]).abs() < 0.01))
+            self.world_loc_off = (0x20..0x400 - 0x40).step_by(16)
+                .find(|&o| o as u64 != rel && (0..3).all(|i| (d(o + i * 8) - here[i]).abs() < 0.01 && (d(o + 0x20 + i * 8) - 1.0).abs() < 1e-6))
                 .map(|o| o as u64);
             log(&format!("world location offset: {:X?}", self.world_loc_off));
         }
@@ -484,6 +485,11 @@ impl Session {
             self.ue.p.write(root + wo + i as u64 * 8, *v);
         }
         let movement = self.t.movement;
+        if let Ok(lo) = self.off(movement, "LastUpdateLocation") {
+            for (i, v) in to.iter().enumerate() {
+                self.ue.p.write(movement + lo + i as u64 * 8, *v);
+            }
+        }
         if let Ok(vo) = self.off(movement, "Velocity") {
             for i in 0..3 {
                 self.ue.p.write(movement + vo + i * 8, 0.0f64);
