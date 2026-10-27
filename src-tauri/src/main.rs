@@ -532,6 +532,16 @@ fn main() {
             let ctrl = u.prop(cls, "Controller").and_then(|o| u.p.ptr(p + o.offset as u64));
             println!("player 0x{p:X} {} {} controller={ctrl:X?}", u.name_of(cls).unwrap_or_default(), u.name_of(p).unwrap_or_default());
         }
+        if let Some(&pawn) = players.first() {
+            let pc = u.class_of(pawn).unwrap();
+            if let Some(m) = u.prop(pc, "CharacterMovement").and_then(|o| u.p.ptr(pawn + o.offset as u64)) {
+                let mc = u.class_of(m).unwrap();
+                println!("movement 0x{m:X} {}", u.name_of(mc).unwrap_or_default());
+                for f in ["MaxWalkSpeed", "MaxSwimSpeed", "MaxFlySpeed", "MaxCustomMovementSpeed", "MaxAcceleration", "ForwardAndStrafeAddWalkSpeed", "MovementMode", "CustomMovementMode"] {
+                    if let Some(pr) = u.prop(mc, f) { println!("  {f} f32 {:?} u8 {:?}", u.p.read::<f32>(m + pr.offset as u64), u.p.read::<u8>(m + pr.offset as u64)); }
+                }
+            }
+        }
         let sets = u.find_by_classes(|n| n.starts_with("UWE") && n.ends_with("AttributeSet"));
         for s in sets.into_iter().filter(|&s| u.outer_of(s).is_some_and(|o| players.contains(&o))) {
             let cls = u.class_of(s).unwrap();

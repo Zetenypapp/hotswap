@@ -18,11 +18,14 @@ pub struct Session {
     offs: HashMap<(String, &'static str), Option<u64>>,
     /// The game's own value of every attribute we changed, put back when the mod is turned off.
     orig: HashMap<(&'static str, &'static str), f32>,
+    /// The character movement component and its own speed values before we scaled them.
+    movement: u64,
+    move_orig: HashMap<&'static str, f32>,
 }
 
 impl Session {
     pub fn new(ue: Ue) -> Session {
-        Session { ue, controller: 0, pawn: 0, sets: HashMap::new(), offs: HashMap::new(), orig: HashMap::new() }
+        Session { ue, controller: 0, pawn: 0, sets: HashMap::new(), offs: HashMap::new(), orig: HashMap::new(), movement: 0, move_orig: HashMap::new() }
     }
 
     fn prop_off(&mut self, obj: u64, name: &'static str) -> Option<u64> {
@@ -100,7 +103,9 @@ impl Session {
         if pawn != self.pawn || self.sets.is_empty() {
             // New character (loaded a save, respawned): its attributes are new objects.
             self.orig.clear();
+            self.move_orig.clear();
             self.resolve(pawn);
+            self.movement = self.prop_off(pawn, "CharacterMovement").and_then(|o| self.ue.p.ptr(pawn + o)).unwrap_or(0);
             if self.sets.is_empty() {
                 return Ok(false);
             }
@@ -135,18 +140,23 @@ impl Session {
             self.put(H, "Radiation", 0.0);
         }
         self.hold(on("free-dash"), M, "DashOxygenCost", 0.0);
-        // Speeds are percentages of the game's own value.
-        for (key, name) in [("swim-speed", "MaxSwimSpeed"), ("walk-speed", "MaxWalkSpeed")] {
-            let f = pct(key);
-            if (f - 1.0).abs() < 1e-3 {
-                self.hold(false, M, name, 0.0);
-            } else {
-                let base = match self.orig.get(&(M, name)) {
-                    Some(b) => *b,
-                    None => self.get(M, name).unwrap_or(0.0),
-                };
-                if base > 0.0 {
-                    self.hold(true, M, name, base * f);
+        // Speeds are percentages of the game's own value. The movement component has its own copy of
+        // each speed that the attribute only updates when the game changes it, so scale both.
+        let (walk, swim) = (pct("walk-speed"), pct("swim-speed"));
+        if self.movement != 0 {
+            for (name, f) in [("MaxWalkSpeed", walk), ("MaxSwimSpeed", swim), ("MaxCustomMovementSpeed", swim)] {
+                let Some(o) = self.prop_off(self.movement, name) else { continue };
+                let addr = self.movement + o;
+                let Some(cur) = self.ue.p.read::<f32>(addr) else { continue };
+                let base = *self.move_orig.entry(name).or_insert(cur);
+                let want = base * f;
+                if (cur - want).abs() > 0.5 {
+                    self.ue.p.write(addr, want);
+                }
+                // The attribute follows the same real value (the component's), so a value left
+                // over from an earlier session is corrected too.
+                if name != "MaxCustomMovementSpeed" {
+                    self.put(M, name, want);
                 }
             }
         }
