@@ -108,7 +108,17 @@ impl Container {
 
     /// The uncompressed contents of TOC entry `index`.
     pub fn read(&self, index: usize) -> Result<Vec<u8>, String> {
-        let (offset, len) = *self.chunks.get(index).ok_or("no such chunk")?;
+        let len = self.chunks.get(index).ok_or("no such chunk")?.1;
+        self.read_range(index, 0, len)
+    }
+
+    /// `len` bytes from `at` within TOC entry `index`, decompressing only the blocks needed.
+    pub fn read_range(&self, index: usize, at: u64, len: u64) -> Result<Vec<u8>, String> {
+        let (start, total) = *self.chunks.get(index).ok_or("no such chunk")?;
+        if at + len > total {
+            return Err("read past the end of the file".into());
+        }
+        let offset = start + at;
         let (first, last) = (offset / self.block_size, (offset + len.max(1) - 1) / self.block_size);
         let mut out = Vec::with_capacity(((last - first + 1) * self.block_size) as usize);
         let mut file = File::open(&self.ucas).map_err(|e| e.to_string())?;
