@@ -1,21 +1,29 @@
 /* Mod loader page: browse ficsit.app, install mods with their dependencies, and manage installed
    ones. Satisfactory only for now. The backend refuses changes while the game is running. */
 const Mods = (() => {
-  const GAME = '526870';
+  // Games with a mod loader page. `source` is where their mods come from; others show as coming soon.
+  const GAMES = [
+    { id: '526870', source: 'ficsit.app', url: 'https://ficsit.app' },
+    { id: '1962700', source: null },
+  ];
+  let GAME = null; // the game whose mod page is open, or null for the game grid
+  // Installed mods are only read for Satisfactory, the one game with a mod source so far.
+  const gid = () => GAME || GAMES[0].id;
   const S = { tab: 'installed', query: '', sort: 'popular', results: [], count: 0, loading: false, error: '',
     installed: [], build: null, updates: {}, checking: false, busy: {}, loaded: false };
   let searchTimer;
 
-  const running = () => RUNNING === GAME;
+  const running = () => RUNNING === gid();
   const fmtN = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n);
   const mb = b => b >= 1 << 20 ? `${(b / (1 << 20)).toFixed(0)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
 
   async function refreshInstalled() {
     try {
-      const r = await invoke('mods_state', { game: GAME });
+      const r = await invoke('mods_state', { game: gid() });
       S.installed = r.installed; S.build = r.build; S.error = '';
     } catch (e) { S.error = String(e); }
     S.loaded = true;
+    if (!GAME && state.view === 'mods') { const b = $('modsBody'); if (b.dataset.view === 'grid') grid(b); }
     list();
   }
   async function search(more) {
@@ -28,7 +36,7 @@ const Mods = (() => {
   }
   async function checkUpdates() {
     S.checking = true; list();
-    try { S.updates = await invoke('mods_updates', { game: GAME }); toast('Mods', Object.keys(S.updates).length ? `${Object.keys(S.updates).length} updates` : 'all up to date'); }
+    try { S.updates = await invoke('mods_updates', { game: gid() }); toast('Mods', Object.keys(S.updates).length ? `${Object.keys(S.updates).length} updates` : 'all up to date'); }
     catch (e) { toast("Couldn't check for mod updates", String(e)); }
     S.checking = false; list();
   }
@@ -36,7 +44,7 @@ const Mods = (() => {
     if (running()) return toast('Close Satisfactory first', 'then change mods');
     S.busy[ref] = { stage: 'resolving' }; list();
     try {
-      const done = await invoke('mods_install', { game: GAME, reference: ref });
+      const done = await invoke('mods_install', { game: gid(), reference: ref });
       delete S.updates[ref];
       toast(name || ref, done.length > 1 ? `installed with ${done.length - 1} ${done.length === 2 ? 'dependency' : 'dependencies'}` : 'installed');
     } catch (e) { toast(`Couldn't install ${name || ref}`, String(e)); }
@@ -45,7 +53,7 @@ const Mods = (() => {
   }
   async function act(cmd, args, msg) {
     if (running()) return toast('Close Satisfactory first', 'then change mods');
-    try { await invoke(cmd, { game: GAME, ...args }); if (msg) toast(...msg); } catch (e) { toast("Couldn't change the mod", String(e)); }
+    try { await invoke(cmd, { game: gid(), ...args }); if (msg) toast(...msg); } catch (e) { toast("Couldn't change the mod", String(e)); }
     refreshInstalled();
   }
 
@@ -65,14 +73,32 @@ const Mods = (() => {
   }
 
   /* ---------- page ---------- */
+  const gameOf = id => LIB.find(g => g.id === id || String(g.appId) === id) || buildGame({ appId: +id, name: DEMO_LIBRARY.find(d => String(d.appId) === id)?.name || 'Game' });
+
+  // The grid of games, like the Library.
+  function grid(body) {
+    const list = GAMES.filter(x => x.source || LIB.some(g => g.id === x.id));
+    body.innerHTML = `
+      <div class="lib-head"><h1>Mods</h1><span class="meta">Install and manage mods for each of your games.</span></div>
+      <div class="lib-grid">${list.map(x => {
+        const g = gameOf(x.id);
+        const n = x.id === '526870' && S.loaded ? S.installed.length : 0;
+        return `<button class="lib-item${x.source ? '' : ' soon-item'}" data-modgame="${x.id}"${x.source ? '' : ' disabled'}><span class="art">${capsule(g)}${n ? `<span class="modded">${n} installed</span>` : ''}</span>
+          <span class="nm">${esc(g.name)}</span><span class="sub">${x.source ? `Mods from ${esc(x.source)}` : 'Coming soon'}</span></button>`;
+      }).join('')}</div>`;
+    if (!S.loaded) refreshInstalled();
+  }
+
   function render() {
     setAmbient(null);
     const body = $('modsBody');
     if (!invoke) { body.innerHTML = '<div class="empty-page"><h1>Mods</h1><p>The mod loader works in the desktop app.</p></div>'; return; }
-    if (body.dataset.tab !== S.tab) {
-      body.dataset.tab = S.tab;
+    if (!GAME) { if (body.dataset.view !== 'grid') { body.dataset.view = 'grid'; grid(body); } return; }
+    const info = GAMES.find(x => x.id === GAME);
+    if (body.dataset.view !== GAME + S.tab) {
+      body.dataset.view = GAME + S.tab;
       body.innerHTML = `
-        <div class="lib-head"><h1>Mods</h1><span class="meta">Satisfactory${S.build ? ` · game build ${S.build}` : ''} · mods from <a href="https://ficsit.app" ${ext}>ficsit.app</a></span>
+        <div class="lib-head"><button class="chip" data-modgame="">‹ All games</button><h1>${esc(gameOf(GAME).name)}</h1><span class="meta">${S.build ? `Game build ${S.build} · ` : ''}mods from <a href="${info.url}" ${ext}>${esc(info.source)}</a></span>
           <div class="chips"><button class="chip${S.tab === 'installed' ? ' on' : ''}" data-modtab="installed">Installed</button><button class="chip${S.tab === 'browse' ? ' on' : ''}" data-modtab="browse">Browse</button></div></div>
         <div id="modsWarn"></div>
         ${S.tab === 'browse' ? `<div class="mods-bar"><label class="search mods-search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
@@ -89,7 +115,7 @@ const Mods = (() => {
 
   function list() {
     const el = $('modsList');
-    if (!el || state.view !== 'mods') return;
+    if (!el || state.view !== 'mods' || !GAME) return;
     $('modsWarn').innerHTML = running() ? '<div class="mods-warn">Satisfactory is running. Close it to install, update or remove mods.</div>' : '';
     if (S.error && S.tab === 'installed') { el.innerHTML = `<p class="empty">${esc(S.error)}</p>`; return; }
     S.tab === 'installed' ? installedList(el) : browseList(el);
@@ -142,10 +168,11 @@ const Mods = (() => {
   }
 
   document.addEventListener('click', e => {
-    const t = e.target.closest('[data-modtab],[data-modsort],[data-modinstall],[data-modtoggle],[data-modremove],[data-modcheck],[data-modmore],[data-modupall]');
+    const t = e.target.closest('[data-modgame],[data-modtab],[data-modsort],[data-modinstall],[data-modtoggle],[data-modremove],[data-modcheck],[data-modmore],[data-modupall]');
     if (!t) return;
     const d = t.dataset;
-    if (d.modtab) { S.tab = d.modtab; render(); }
+    if ('modgame' in d) { GAME = d.modgame || null; render(); }
+    else if (d.modtab) { S.tab = d.modtab; render(); }
     else if (d.modsort) { S.sort = d.modsort; document.querySelectorAll('[data-modsort]').forEach(b => b.classList.toggle('on', b === t)); search(false); }
     else if (d.modinstall) install(d.modinstall, d.name);
     else if (d.modtoggle) { const on = t.getAttribute('aria-checked') !== 'true'; act('mods_set_enabled', { reference: d.modtoggle, enabled: on }, [d.modtoggle, on ? 'on' : 'off']); }
