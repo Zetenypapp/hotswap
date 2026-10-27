@@ -58,7 +58,7 @@ pub fn ensure(install: &Path, dir: &Path) -> Result<(), String> {
     std::fs::write(stamp_file, stamp).map_err(|e| e.to_string())
 }
 
-fn write_jpeg(path: &Path, rgb: &[u8], size: usize) -> Result<(), String> {
+pub fn write_jpeg(path: &Path, rgb: &[u8], size: usize) -> Result<(), String> {
     let tmp = path.with_extension("tmp");
     let enc = jpeg_encoder::Encoder::new_file(&tmp, 88).map_err(|e| e.to_string())?;
     enc.encode(rgb, size as u16, size as u16, jpeg_encoder::ColorType::Rgb).map_err(|e| e.to_string())?;

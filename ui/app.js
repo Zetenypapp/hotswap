@@ -417,7 +417,9 @@ function renderLibrary() {
 
 /* ---------- Maps ---------- */
 // Steam app IDs with an interactive map (opened in its own window by the backend).
-const MAP_GAMES = ['526870'];
+const MAP_GAMES = ['526870', '264710'];
+// Games that also have Satisfactory Calculator's web map.
+const WEB_MAPS = ['526870'];
 
 let mapOpen = null, mapShown = false; // app ID of the map being shown on the Maps page
 let mapMode = 'local'; // 'local' = Hotswap's own map, 'web' = Satisfactory Calculator
@@ -433,8 +435,8 @@ function renderMaps() {
   if (!open || mapMode !== 'local') LocalMap.unmount();
   $('mapsBody').innerHTML = open ? `
     <div class="lib-head map-head"><button class="chip" data-mapback>‹ All maps</button><h1>${esc(open.name)}</h1>
-      <div class="seg-tabs"><button class="chip${mapMode === 'local' ? ' on' : ''}" data-mapmode="local">Hotswap map</button><button class="chip${mapMode === 'web' ? ' on' : ''}" data-mapmode="web">Detailed map</button></div>
-      <span class="meta">${mapMode === 'local' ? 'Live from your game. Right-click to teleport or pin.' : 'By Satisfactory Calculator (their site, their ads).'}</span></div>
+      ${WEB_MAPS.includes(String(open.appId)) ? `<div class="seg-tabs"><button class="chip${mapMode === 'local' ? ' on' : ''}" data-mapmode="local">Hotswap map</button><button class="chip${mapMode === 'web' ? ' on' : ''}" data-mapmode="web">Detailed map</button></div>` : ''}
+      <span class="meta">${mapMode === 'web' ? 'By Satisfactory Calculator (their site, their ads).' : WEB_MAPS.includes(String(open.appId)) ? 'Live from your game. Right-click to teleport or pin.' : 'Made from your game\'s terrain files. Right-click to drop a pin.'}</span></div>
     <div id="mapHost" class="map-host">${mapMode === 'web' ? '<span>Loading map…</span>' : ''}</div>` : `
     <div class="lib-head"><h1>Maps</h1><span class="meta">Resources, collectibles and your factory, live. Pin spots and teleport.</span></div>
     <div class="lib-grid">${list.map(g => `<button class="lib-item" data-map="${g.appId}"><span class="art">${capsule(g)}</span>
@@ -443,7 +445,7 @@ function renderMaps() {
   if (open && mapMode === 'local') {
     const host = $('mapHost');
     host.style.height = Math.max(300, innerHeight - host.getBoundingClientRect().top - 16) + 'px';
-    LocalMap.mount(host);
+    LocalMap.mount(host, String(open.appId));
   }
 }
 
@@ -470,7 +472,7 @@ addEventListener('resize', () => {
 
 document.addEventListener('click', e => {
   const m = e.target.closest('[data-map]');
-  if (m) { mapOpen = m.dataset.map; renderMaps(); syncMap(); }
+  if (m) { mapOpen = m.dataset.map; if (!WEB_MAPS.includes(mapOpen)) mapMode = 'local'; renderMaps(); syncMap(); }
   if (e.target.closest('[data-mapback]')) { mapOpen = null; renderMaps(); syncMap(); }
   const mm = e.target.closest('[data-mapmode]');
   if (mm) { mapMode = mm.dataset.mapmode; renderMaps(); syncMap(); }

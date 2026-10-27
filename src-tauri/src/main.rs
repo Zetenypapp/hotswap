@@ -10,6 +10,7 @@ mod modfiles;
 mod modloader;
 mod mono;
 mod sn1;
+mod sn1map;
 mod sn2;
 mod steam;
 mod trainer;
@@ -209,13 +210,18 @@ struct MapBackground {
 /// then cached in the app data folder).
 #[tauri::command]
 async fn map_background(app: AppHandle, watch: State<'_, watch::Watch>, game: String) -> Result<MapBackground, String> {
-    if game != trainer::SATISFACTORY {
-        return Err("No map for this game".into());
-    }
     let install = watch.install_of(&game).ok_or("Game isn't installed")?;
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("map").join(&game);
     let d = dir.clone();
-    tauri::async_runtime::spawn_blocking(move || mapimage::ensure(&install, &d)).await.map_err(|e| e.to_string())??;
+    let g = game.clone();
+    // Satisfactory: the game's own map texture. Subnautica: rendered from its terrain files.
+    tauri::async_runtime::spawn_blocking(move || match g.as_str() {
+        trainer::SATISFACTORY => mapimage::ensure(&install, &d),
+        sn1::SUBNAUTICA => sn1map::ensure(&install.join(r"Subnautica_Data\StreamingAssets\SNUnmanagedData\Build18"), &d),
+        _ => Err("No map for this game".into()),
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     let _ = app.asset_protocol_scope().allow_directory(&dir, false);
     Ok(MapBackground {
         overview: dir.join(mapimage::OVERVIEW),
@@ -703,6 +709,13 @@ fn main() {
         for (n, off, ty) in m.fields_of(uc) { if off != 0 && ty.contains("Single") { println!("UW {n} = {:?}", m.p.read::<f32>(uw + off as u64)); } }
         let mc = m.class("", "PlayerMotor").unwrap();
         for (n, off, ty) in m.fields_of(mc) { if ty.contains("Single") { println!("PM {n} = {:?}", m.p.read::<f32>(uw + off as u64)); } }
+        return;
+    }
+    // Dev aid: `hotswap --sn1-map <out.jpg>` renders Subnautica's terrain heights.
+    if let Some(out) = std::env::args().skip_while(|a| a != "--sn1-map").nth(1) {
+        let t = std::time::Instant::now();
+        let dir = std::path::Path::new(r"E:\SteamLibrary\steamapps\common\Subnautica\Subnautica_Data\StreamingAssets\SNUnmanagedData\Build18");
+        println!("{:?} in {:?}", sn1map::ensure(dir, std::path::Path::new(&out)), t.elapsed());
         return;
     }
     // Dev aid: `hotswap --world-scan` prints what the map would draw.

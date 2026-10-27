@@ -1,9 +1,13 @@
 /* Hotswap's own Satisfactory map, drawn from the running game's memory: resource nodes, collectibles,
    your factory, your live position and trail, pins, and right-click teleport. No bundled map art. */
 const LocalMap = (() => {
-  const GAME = '526870';
-  // World bounds in game units (cm), as the game's own map uses them.
-  const WORLD = { x0: -324698.832031, x1: 425301.832031, y0: -375000, y1: 375000 };
+  // Per game: world bounds in game units (map x = east, map y = south), game units per meter,
+  // and which features it has (a live world scan with resources and buildings, teleporting).
+  const GAMES = {
+    '526870': { name: 'Satisfactory', world: { x0: -324698.832031, x1: 425301.832031, y0: -375000, y1: 375000 }, unit: 100, scan: true, teleport: true },
+    '264710': { name: 'Subnautica', world: { x0: -2048, x1: 2048, y0: -2048, y1: 2048 }, unit: 1, scan: false, teleport: false },
+  };
+  let G = GAMES['526870'], GAME = G.id = '526870', WORLD = G.world, U = G.unit;
 
   const RES = {
     OreIron: ['Iron ore', '#a9b6c8'], OreCopper: ['Copper ore', '#e8833a'], Stone: ['Limestone', '#e6dcc0'],
@@ -57,7 +61,7 @@ const LocalMap = (() => {
   const sy = y => (y - view.cy) * view.s + cv.clientHeight / 2;
   const gx = px => (px - cv.clientWidth / 2) / view.s + view.cx;
   const gy = py => (py - cv.clientHeight / 2) / view.s + view.cy;
-  const meters = u => u / 100;
+  const meters = u => u / U;
   // Whole world in view, beside the layers panel when it's open.
   function fit() {
     const left = prefs.panel && cv.clientWidth > 900 ? 320 : 0;
@@ -67,16 +71,16 @@ const LocalMap = (() => {
     dirty = true;
   }
   const MIN_S = () => Math.min(cv.clientWidth / (WORLD.x1 - WORLD.x0), cv.clientHeight / (WORLD.y1 - WORLD.y0)) * 0.5;
-  const MAX_S = 0.5; // 1 m = 50 px
+  const MAX_S = () => 50 / U; // 1 m = 50 px
   function zoomAt(px, py, f) {
     const wx = gx(px), wy = gy(py);
-    view.s = Math.min(MAX_S, Math.max(MIN_S(), view.s * f));
+    view.s = Math.min(MAX_S(), Math.max(MIN_S(), view.s * f));
     view.cx = wx - (px - cv.clientWidth / 2) / view.s;
     view.cy = wy - (py - cv.clientHeight / 2) / view.s;
     dirty = true;
   }
   function flyTo(x, y, s) {
-    const from = { ...view }, to = { cx: x, cy: y, s: s || Math.max(view.s, 0.004) }, t0 = performance.now();
+    const from = { ...view }, to = { cx: x, cy: y, s: s || Math.max(view.s, 0.4 / U) }, t0 = performance.now();
     const step = () => {
       const k = Math.min(1, Math.max(0, (performance.now() - t0) / 450)), e = 1 - Math.pow(1 - k, 3);
       view.cx = from.cx + (to.cx - from.cx) * e; view.cy = from.cy + (to.cy - from.cy) * e;
@@ -89,6 +93,7 @@ const LocalMap = (() => {
 
   /* ---------- data ---------- */
   async function loadWorld() {
+    if (!G.scan) { worldError = ''; buildLegend(); return; }
     try {
       world = await invoke('map_world', { game: GAME });
       worldAt = Date.now(); worldError = '';
@@ -134,7 +139,7 @@ const LocalMap = (() => {
       const last = trail[trail.length - 1];
       if (!last || Math.hypot(p[0] - last[0], p[1] - last[1]) > 500) { trail.push([p[0], p[1]]); trail = trail.slice(-2000); }
       if (follow) { view.cx = p[0]; view.cy = p[1]; }
-      if (!world && !worldError.includes('Start')) loadWorld();
+      if (G.scan && !world && !worldError.includes('Start')) loadWorld();
     }
     status(); dirty = true;
   }
@@ -178,10 +183,10 @@ const LocalMap = (() => {
       ctx.fill();
     }
     // Fades out as you zoom in, where it would just be big blobs.
-    const hint = Math.max(0, Math.min(1, (0.004 - view.s) / 0.003));
+    const hint = Math.max(0, Math.min(1, (0.4 / U - view.s) / (0.3 / U)));
     if (world && hint > 0 && !terrain) {
       ctx.fillStyle = `rgba(120,140,170,${(0.05 * hint).toFixed(3)})`;
-      const r = Math.max(6, 12000 * view.s);
+      const r = Math.max(6, 120 * U * view.s);
       for (const n of world.nodes) { ctx.beginPath(); ctx.arc(sx(n.x), sy(n.y), r, 0, 7); ctx.fill(); }
       for (const t of world.things) { ctx.beginPath(); ctx.arc(sx(t.x), sy(t.y), r, 0, 7); ctx.fill(); }
     }
@@ -210,7 +215,7 @@ const LocalMap = (() => {
         ctx.restore();
       }
       // Resources.
-      const r = Math.min(11, Math.max(3.2, 900 * view.s));
+      const r = Math.min(11, Math.max(3.2, 9 * U * view.s));
       for (const n of world.nodes) {
         if (!resOn(n.res) || !prefs.purity[n.purity]) continue;
         const x = sx(n.x), y = sy(n.y);
@@ -250,8 +255,8 @@ const LocalMap = (() => {
   }
   function niceStep(px) {
     const target = px / view.s;
-    const steps = [100, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
-    return steps.find(s => s >= target) || 100000;
+    const steps = [1, 5, 10, 25, 50, 100, 250, 500, 1000].map(m => m * U);
+    return steps.find(s => s >= target) || 1000 * U;
   }
   function grid(w, h) {
     const step = niceStep(70);
@@ -273,7 +278,7 @@ const LocalMap = (() => {
     ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x, y); ctx.lineTo(x + len, y); ctx.lineTo(x + len, y - 5); ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = '600 11px Figtree, system-ui';
-    ctx.fillText(step >= 100000 ? `${step / 100000} km` : `${meters(step)} m`, x + 4, y - 7);
+    ctx.fillText(step >= 1000 * U ? `${step / 1000 / U} km` : `${meters(step)} m`, x + 4, y - 7);
   }
   function nodeIcon(x, y, n, r) {
     const col = (RES[n.res] || ['', '#ccc'])[1];
@@ -353,7 +358,7 @@ const LocalMap = (() => {
     }
     const b = it.b; return [b.class.replace(/_/g, ' ').replace(/([a-z])([A-Z0-9])/g, '$1 $2').replace(/Mk (\d)/, 'Mk$1'), `${catOf(b.class)[2]}${away}`];
   }
-  const fmtDist = u => u >= 100000 ? `${(u / 100000).toFixed(1)} km` : `${Math.round(u / 100)} m`;
+  const fmtDist = u => u >= 1000 * U ? `${(u / 1000 / U).toFixed(1)} km` : `${Math.round(u / U)} m`;
 
   /* ---------- teleport ---------- */
   // Height for a map spot: just above the nearest thing we know the height of, else a sky drop.
@@ -372,8 +377,12 @@ const LocalMap = (() => {
   }
 
   /* ---------- UI ---------- */
-  function mount(el) {
+  function mount(el, game = '526870') {
     unmount();
+    if (game !== GAME) {
+      G = GAMES[game]; GAME = G.id = game; WORLD = G.world; U = G.unit;
+      world = null; worldAt = 0; worldError = ''; bg = null; bgError = ''; me = null; trail = []; pins = []; view = null; follow = false;
+    }
     host = el;
     dpr = window.devicePixelRatio || 1;
     host.classList.add('lm');
@@ -462,11 +471,11 @@ const LocalMap = (() => {
     if (a === 'in') zoomAt(c.clientWidth / 2, c.clientHeight / 2, 1.6);
     if (a === 'out') zoomAt(c.clientWidth / 2, c.clientHeight / 2, 1 / 1.6);
     if (a === 'fit') fit();
-    if (a === 'find') me ? flyTo(me[0], me[1], Math.max(view.s, 0.01)) : toast('Not connected', 'start Satisfactory first');
-    if (a === 'follow') { follow = !follow; b.classList.toggle('on', follow); if (follow && me) flyTo(me[0], me[1], Math.max(view.s, 0.01)); }
+    if (a === 'find') me ? flyTo(me[0], me[1], Math.max(view.s, 1 / U)) : toast('Not connected', `start ${G.name} first`);
+    if (a === 'follow') { follow = !follow; b.classList.toggle('on', follow); if (follow && me) flyTo(me[0], me[1], Math.max(view.s, 1 / U)); }
     if (a === 'refresh') { loadWorld(); toast('Map', 'reading the world again'); }
     if (a === 'panel') { prefs.panel = !prefs.panel; savePrefs(); host.querySelector('.lm-layers').classList.toggle('min', !prefs.panel); }
-    if (a === 'pinhere') me ? addPin(me[0], me[1], me[2] + 50) : toast('Not connected', 'start Satisfactory first');
+    if (a === 'pinhere') me ? addPin(me[0], me[1], me[2] + 0.5 * U) : toast('Not connected', `start ${G.name} first`);
     if (a === 'res') { prefs.res[b.dataset.k] = !resOn(b.dataset.k); savePrefs(); buildLegend(); dirty = true; }
     if (a === 'resall') { const on = b.dataset.k === 'all'; Object.keys(RES).forEach(k => prefs.res[k] = on); savePrefs(); buildLegend(); dirty = true; }
     if (a === 'nearest') nearest(b.dataset.k);
@@ -478,7 +487,7 @@ const LocalMap = (() => {
     if (a === 'terrain') { prefs.terrain = !prefs.terrain; savePrefs(); buildLegend(); dirty = true; }
     if (a === 'trail') { prefs.trail = !prefs.trail; savePrefs(); buildLegend(); dirty = true; }
     if (a === 'cleartrail') { trail = me ? [[me[0], me[1]]] : []; dirty = true; }
-    if (a === 'pinfly') { const p = pins.find(q => q.id == b.dataset.k); if (p) flyTo(p.x, p.y, Math.max(view.s, 0.01)); }
+    if (a === 'pinfly') { const p = pins.find(q => q.id == b.dataset.k); if (p) flyTo(p.x, p.y, Math.max(view.s, 1 / U)); }
     if (a === 'pintp') { const p = pins.find(q => q.id == b.dataset.k); if (p) teleport(p.x, p.y, p.z ?? heightNear(p.x, p.y)); }
     if (a === 'pindel') { pins = pins.filter(q => q.id != b.dataset.k); savePins(); }
   }
@@ -489,7 +498,7 @@ const LocalMap = (() => {
     if (!list.length) return toast((RES[res] || [res])[0], 'none with the selected purities');
     const n = list.reduce((a, b) => Math.hypot(a.x - from[0], a.y - from[1]) < Math.hypot(b.x - from[0], b.y - from[1]) ? a : b);
     prefs.res[res] = true; savePrefs(); buildLegend();
-    flyTo(n.x, n.y, Math.max(view.s, 0.012));
+    flyTo(n.x, n.y, Math.max(view.s, 1.2 / U));
   }
 
   function chip(on, a, k, label, col, extra = '') {
@@ -504,7 +513,7 @@ const LocalMap = (() => {
       for (const l of world.lines) lines[l.kind] = (lines[l.kind] || 0) + 1;
     }
     const resKeys = Object.keys(RES).filter(k => !world || count[k]);
-    ui.legend.innerHTML = `
+    ui.legend.innerHTML = (G.scan ? `
       <div class="lm-sec"><span>Resources</span><button class="lm-link" data-lm="resall" data-k="all">All</button><button class="lm-link" data-lm="resall" data-k="none">None</button></div>
       <div class="lm-chips">${resKeys.map(k => chip(resOn(k), 'res', k, `${RES[k][0]}${count[k] ? ` <em>${count[k]}</em>` : ''}`, RES[k][1], ' title="Click to show or hide. Right-click: fly to the nearest one."')).join('')}</div>
       <div class="lm-chips">${PURITY.map((p, i) => chip(prefs.purity[i], 'purity', i, p)).join('')}</div>
@@ -520,7 +529,7 @@ const LocalMap = (() => {
       <div class="lm-chips">
         ${chip(prefs.buildings, 'buildings', '', `Buildings${world?.buildings.length ? ` <em>${world.buildings.length}</em>` : ''}`, '#f3b73f')}
         ${Object.entries(LINES).map(([k, [l, c]]) => chip(prefs.lines[k], 'line', k, `${l}${lines[k] ? ` <em>${lines[k]}</em>` : ''}`, c)).join('')}
-      </div>
+      </div>` : '') + `
       <div class="lm-sec"><span>Map</span><button class="lm-link" data-lm="cleartrail">Clear trail</button></div>
       <div class="lm-chips">${chip(prefs.terrain, 'terrain', '', 'Terrain')}${chip(prefs.trail, 'trail', '', 'Your trail')}</div>
       ${bgError ? `<p class="lm-note">Terrain unavailable: ${esc(bgError)}</p>` : ''}`;
@@ -530,17 +539,18 @@ const LocalMap = (() => {
     if (!ui.pins) return;
     ui.pins.innerHTML = pins.length ? pins.map(p => `
       <div class="lm-pin"><button class="lm-pinname" data-lm="pinfly" data-k="${p.id}" title="Show on the map"><i style="background:${p.color}"></i>${esc(p.name)}</button>
-        <button class="lm-mini" data-lm="pintp" data-k="${p.id}" title="Teleport">Go</button><button class="lm-mini" data-lm="pindel" data-k="${p.id}" title="Delete">✕</button></div>`).join('')
+        ${G.teleport ? `<button class="lm-mini" data-lm="pintp" data-k="${p.id}" title="Teleport">Go</button>` : ''}<button class="lm-mini" data-lm="pindel" data-k="${p.id}" title="Delete">✕</button></div>`).join('')
       : '<p class="lm-note">Right-click the map to drop a pin, or pin where you stand.</p>';
   }
   function status() {
     if (!ui.status) return;
     const age = worldAt ? Math.round((Date.now() - worldAt) / 1000) : null;
-    const where = me ? `You: ${Math.round(meters(me[0]))}, ${Math.round(meters(me[1]))} · ${Math.round(meters(me[2]))} m up` : 'Not connected';
+    const where = me ? `You: ${Math.round(meters(me[0]))}, ${Math.round(meters(me[1]))} · ${me[2] < 0 ? `${Math.round(meters(-me[2]))} m deep` : `${Math.round(meters(me[2]))} m up`}` : `Not connected · start ${G.name}`;
     ui.status.innerHTML = `<span class="${me ? 'on' : ''}">${where}</span>${ui.status.dataset.cursor ? `<span>Cursor ${ui.status.dataset.cursor}</span>` : ''}${age != null ? `<span>World read ${age}s ago</span>` : ''}`;
-    const showEmpty = !world;
+    const showEmpty = G.scan ? !world : !bg && !!bgError;
     ui.empty.hidden = !showEmpty;
-    if (showEmpty) ui.empty.innerHTML = `<b>${worldError.includes('Start') || !worldError ? 'Start Satisfactory to see your world' : 'Couldn’t read the world'}</b><span>${worldError && !worldError.includes('Start') ? esc(worldError) : 'Resources, collectibles and your factory appear once a save is loaded.'}</span>`;
+    if (showEmpty && !G.scan) ui.empty.innerHTML = `<b>Couldn’t build the map</b><span>${esc(bgError)}</span>`;
+    else if (showEmpty) ui.empty.innerHTML = `<b>${worldError.includes('Start') || !worldError ? `Start ${G.name} to see your world` : 'Couldn’t read the world'}</b><span>${worldError && !worldError.includes('Start') ? esc(worldError) : 'Resources, collectibles and your factory appear once a save is loaded.'}</span>`;
   }
 
   const PIN_COLORS = ['#3ddc84', '#4da3ff', '#ffb02e', '#ff5c7a', '#b98cff', '#e8e8e8'];
@@ -561,7 +571,7 @@ const LocalMap = (() => {
     menu = document.createElement('div');
     menu.className = 'lm-menu';
     menu.innerHTML = `<div class="lm-mt"><b>${esc(title[0])}</b><span>${esc(title[1])}</span></div>
-      <button data-m="tp">Teleport here${z == null ? ' <em>sky drop</em>' : ''}</button>
+      ${G.teleport ? `<button data-m="tp">Teleport here${z == null ? ' <em>sky drop</em>' : ''}</button>` : ''}
       ${it?.type === 'pin' ? '<button data-m="ren">Rename pin</button><button data-m="del">Delete pin</button>' : '<button data-m="pin">Drop a pin here</button>'}
       <button data-m="center">Center here</button>`;
     menu.style.left = Math.min(px, cv.clientWidth - 220) + 'px';

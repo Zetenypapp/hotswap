@@ -147,6 +147,7 @@ impl Trainer {
                             sn1.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }))
                         }))
                         .unwrap_or_else(|_| Some(Err("Lost track of the game, reconnecting".into())));
+                        me.0.lock().unwrap().pos = sn1.as_ref().and_then(|s| s.pos);
                         match result {
                             Some(Ok(true)) => Status { game: game.clone(), connected: true, message: "Connected".into() },
                             Some(Err(e)) => {

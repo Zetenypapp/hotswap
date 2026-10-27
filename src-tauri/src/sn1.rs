@@ -63,11 +63,14 @@ pub struct Session {
     speed_orig: HashMap<&'static str, f32>,
     /// Speed factors last applied: (swim, walk).
     speed_last: (f32, f32),
+    /// For the map: east, north (as map y, so south is positive), height, and facing in degrees.
+    pub pos: Option<[f64; 4]>,
+    camera: u64,
 }
 
 impl Session {
     pub fn new(m: Mono) -> Session {
-        Session { m, t: Targets::default(), off: HashMap::new(), switched: HashMap::new(), speed_orig: HashMap::new(), speed_last: (1.0, 1.0) }
+        Session { m, t: Targets::default(), off: HashMap::new(), switched: HashMap::new(), speed_orig: HashMap::new(), speed_last: (1.0, 1.0), pos: None, camera: 0 }
     }
 
     /// Offset of `class.field`, cached.
@@ -149,6 +152,7 @@ impl Session {
             self.speed_last = (1.0, 1.0);
             self.resolve(player);
         }
+        self.pos = self.locate();
         let none = HashMap::new();
         let v = values.unwrap_or(&none);
         let on = |k: &str| v.get(k).is_some_and(|x| *x != 0.0);
@@ -205,6 +209,19 @@ impl Session {
         }
         self.speeds(t, (v.get("swim-speed").copied().unwrap_or(100.0) / 100.0) as f32, (v.get("walk-speed").copied().unwrap_or(100.0) / 100.0) as f32);
         Ok(true)
+    }
+
+    /// Where the camera (the player's eyes) is, from the world streamer's cached copy.
+    fn locate(&mut self) -> Option<[f64; 4]> {
+        if self.camera == 0 {
+            self.camera = self.static_obj("LargeWorldStreamer", "main")?;
+        }
+        let po = self.f("LargeWorldStreamer", "<cachedCameraPosition>k__BackingField")?;
+        let fo = self.f("LargeWorldStreamer", "<cachedCameraForward>k__BackingField")?;
+        let v = |a: u64| [0, 4, 8].map(|i| self.m.p.read::<f32>(a + i).unwrap_or(f32::NAN) as f64);
+        let ([x, y, z], [fx, _, fz]) = (v(self.camera + po), v(self.camera + fo));
+        // Map y points south (screen down), so north (+z) is negated; the map's yaw is clockwise from east.
+        (x.is_finite() && z.is_finite()).then(|| [x, -z, y, (-fz).atan2(fx).to_degrees()])
     }
 
     fn fill_oxygen(&mut self, mgr: u64) {
