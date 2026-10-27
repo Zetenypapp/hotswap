@@ -58,6 +58,30 @@ pub fn ensure(install: &Path, dir: &Path) -> Result<(), String> {
     std::fs::write(stamp_file, stamp).map_err(|e| e.to_string())
 }
 
+/// Writes a square `rgb` image of `size` x `size` as the overview (half size) and 2 x 2 full-size tiles.
+pub fn write_set(dir: &Path, rgb: &[u8], size: usize) -> Result<(), String> {
+    let half = size / 2;
+    let mut overview = vec![0u8; half * half * 3];
+    for y in 0..half {
+        for x in 0..half {
+            for i in 0..3 {
+                let s: u32 = [(0, 0), (1, 0), (0, 1), (1, 1)].iter().map(|(dx, dy)| rgb[((y * 2 + dy) * size + x * 2 + dx) * 3 + i] as u32).sum();
+                overview[(y * half + x) * 3 + i] = (s / 4) as u8;
+            }
+        }
+    }
+    write_jpeg(&dir.join(OVERVIEW), &overview, half)?;
+    for (tx, ty) in [(0, 0), (0, 1), (1, 0), (1, 1)] {
+        let mut part = vec![0u8; half * half * 3];
+        for y in 0..half {
+            let src = ((ty * half + y) * size + tx * half) * 3;
+            part[y * half * 3..(y + 1) * half * 3].copy_from_slice(&rgb[src..src + half * 3]);
+        }
+        write_jpeg(&dir.join(tile_file(tx, ty)), &part, half)?;
+    }
+    Ok(())
+}
+
 pub fn write_jpeg(path: &Path, rgb: &[u8], size: usize) -> Result<(), String> {
     let tmp = path.with_extension("tmp");
     let enc = jpeg_encoder::Encoder::new_file(&tmp, 88).map_err(|e| e.to_string())?;

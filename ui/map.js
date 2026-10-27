@@ -5,6 +5,7 @@ const LocalMap = (() => {
   // and which features it has (a live world scan with resources and buildings, teleporting).
   const GAMES = {
     '526870': { name: 'Satisfactory', world: { x0: -324698.832031, x1: 425301.832031, y0: -375000, y1: 375000 }, unit: 100, scan: true, teleport: true },
+    '387990': { name: 'Scrap Mechanic', world: { x0: -4096, x1: 4096, y0: -4096, y1: 4096 }, unit: 1, scan: false, teleport: true },
     '264710': { name: 'Subnautica', world: { x0: -2048, x1: 2048, y0: -2048, y1: 2048 }, unit: 1, scan: false, teleport: false, styles: [['satellite', 'Satellite'], ['depth', 'Depth']] },
   };
   let G = GAMES['526870'], GAME = G.id = '526870', WORLD = G.world, U = G.unit;
@@ -100,6 +101,7 @@ const LocalMap = (() => {
     } catch (e) { worldError = String(e); if (!world) world = null; }
     buildLegend(); dirty = true;
   }
+  let bgTried = 0;
   async function loadBackground() {
     if (bg) return;
     try {
@@ -140,6 +142,8 @@ const LocalMap = (() => {
       if (!last || Math.hypot(p[0] - last[0], p[1] - last[1]) > 500) { trail.push([p[0], p[1]]); trail = trail.slice(-2000); }
       if (follow) { view.cx = p[0]; view.cy = p[1]; }
       if (G.scan && !world && !worldError.includes('Start')) loadWorld();
+      // Some maps (Scrap Mechanic) are only saved once a world loads: try again now and then.
+      if (!bg && bgError && Date.now() - (bgTried || 0) > 10000) { bgTried = Date.now(); bgError = ''; loadBackground(); }
     }
     status(); dirty = true;
   }

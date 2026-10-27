@@ -433,7 +433,7 @@ function renderLibrary() {
 
 /* ---------- Maps ---------- */
 // Steam app IDs with an interactive map (opened in its own window by the backend).
-const MAP_GAMES = ['526870', '264710'];
+const MAP_GAMES = ['526870', '264710', '387990'];
 // Games that also have Satisfactory Calculator's web map.
 const WEB_MAPS = ['526870'];
 

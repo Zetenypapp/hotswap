@@ -8,6 +8,8 @@ mod iostore;
 mod mapimage;
 mod modfiles;
 mod modloader;
+mod ksp;
+mod scrap;
 mod repo;
 mod mono;
 mod sn1;
@@ -312,6 +314,7 @@ async fn map_background(app: AppHandle, watch: State<'_, watch::Watch>, game: St
     // Satisfactory: the game's own map texture. Subnautica: rendered from its terrain files.
     tauri::async_runtime::spawn_blocking(move || match g.as_str() {
         trainer::SATISFACTORY => mapimage::ensure(&install, &d),
+        scrap::SCRAP => scrap::ensure_map(&install, &d),
         sn1::SUBNAUTICA => sn1map::ensure(&install.join(r"Subnautica_Data\StreamingAssets\SNUnmanagedData\Build18"), &d, style.unwrap_or(sn1map::Style::Satellite)),
         _ => Err("No map for this game".into()),
     })
@@ -850,6 +853,28 @@ fn main() {
             let addr = m.static_addr(c, f);
             println!("static {f} at {addr:X?} = {:X?}", addr.and_then(|x| m.p.ptr(x)));
         }
+        return;
+    }
+    // Dev aid: `hotswap --scrap-test <survival folder copy>` adds and removes the bridge.
+    if let Some(i) = std::env::args().position(|a| a == "--scrap-test") {
+        let dir = PathBuf::from(std::env::args().nth(i + 1).unwrap_or_default());
+        println!("install: {:?}", scrap::install(&dir));
+        scrap::uninstall(&dir);
+        println!("removed");
+        return;
+    }
+    // Dev aid: `hotswap --scrap-map <install> <out dir>` renders the map from a saved world.
+    if let Some(i) = std::env::args().position(|a| a == "--scrap-map") {
+        let a: Vec<String> = std::env::args().collect();
+        println!("{:?}", scrap::ensure_map(&PathBuf::from(&a[i + 1]), &PathBuf::from(&a[i + 2])));
+        return;
+    }
+    // Dev aid: `hotswap --ksp-peek` prints what the KSP trainer sees.
+    if std::env::args().any(|a| a == "--ksp-peek") {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let pid = sys.processes().values().find(|p| p.name().to_string_lossy() == "KSP_x64.exe").map(|p| p.pid().as_u32());
+        match pid.map(mono::Mono::attach) { Some(Ok(m)) => ksp::peek(m), Some(Err(e)) => println!("attach failed: {e}"), None => println!("not running") }
         return;
     }
     // Dev aid: `hotswap --sn1-peek` prints Subnautica's live player speed values.

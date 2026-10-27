@@ -259,25 +259,7 @@ pub fn ensure(data: &Path, dir: &Path, style: Style) -> Result<(), String> {
     }
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let rgb = render(data, style)?;
-    let half = SIZE / 2;
-    let mut overview = vec![0u8; half * half * 3];
-    for y in 0..half {
-        for x in 0..half {
-            for i in 0..3 {
-                let s: u32 = [(0, 0), (1, 0), (0, 1), (1, 1)].iter().map(|(dx, dy)| rgb[((y * 2 + dy) * SIZE + x * 2 + dx) * 3 + i] as u32).sum();
-                overview[(y * half + x) * 3 + i] = (s / 4) as u8;
-            }
-        }
-    }
-    mapimage::write_jpeg(&dir.join(mapimage::OVERVIEW), &overview, half)?;
-    for (tx, ty) in [(0, 0), (0, 1), (1, 0), (1, 1)] {
-        let mut part = vec![0u8; half * half * 3];
-        for y in 0..half {
-            let src = ((ty * half + y) * SIZE + tx * half) * 3;
-            part[y * half * 3..(y + 1) * half * 3].copy_from_slice(&rgb[src..src + half * 3]);
-        }
-        mapimage::write_jpeg(&dir.join(mapimage::tile_file(tx, ty)), &part, half)?;
-    }
+    mapimage::write_set(dir, &rgb, SIZE)?;
     std::fs::write(stamp_file, stamp).map_err(|e| e.to_string())
 }
 

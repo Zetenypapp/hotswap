@@ -76,6 +76,8 @@ impl Trainer {
             let mut sn2: Option<crate::sn2::Session> = None;
             let mut sn1: Option<crate::sn1::Session> = None;
             let mut repo: Option<crate::repo::Session> = None;
+            let mut ksp: Option<crate::ksp::Session> = None;
+            let mut scrap: Option<crate::scrap::Session> = None;
             let mut last_attach: Option<Instant> = None;
             let mut last = Status { game: None, connected: false, message: String::new() };
             loop {
@@ -181,11 +183,50 @@ impl Trainer {
                             _ => Status { game: game.clone(), connected: false, message: "Waiting for the game to load".into() },
                         }
                     }
+                    Some(crate::scrap::SCRAP) => {
+                        let pid = pid_of(crate::scrap::SCRAP);
+                        if pid.is_none() {
+                            scrap = None; // the game closed: take the bridge out of its scripts
+                        } else if scrap.is_none() && last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
+                            last_attach = Some(Instant::now());
+                            scrap = pid.and_then(|pid| crate::scrap::Session::attach(pid).map_err(|e| log(&format!("scrap attach: {e}"))).ok());
+                        }
+                        let result = scrap.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions, teleport));
+                        me.0.lock().unwrap().pos = scrap.as_ref().and_then(|s| s.pos);
+                        match result {
+                            Some(Ok(true)) => Status { game: game.clone(), connected: true, message: "Connected".into() },
+                            Some(Err(e)) => Status { game: game.clone(), connected: false, message: e },
+                            Some(Ok(false)) => Status { game: game.clone(), connected: false, message: "Waiting for a survival world. Already in one? Go back to the menu and load it again.".into() },
+                            None => Status { game: game.clone(), connected: false, message: "Waiting for the game to start".into() },
+                        }
+                    }
+                    Some(crate::ksp::KSP) => {
+                        if ksp.is_none() && last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
+                            last_attach = Some(Instant::now());
+                            ksp = pid_of(crate::ksp::KSP)
+                                .and_then(|pid| crate::mono::Mono::attach(pid).map_err(|e| log(&format!("ksp attach: {e}"))).ok())
+                                .map(crate::ksp::Session::new);
+                        }
+                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            ksp.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions))
+                        }))
+                        .unwrap_or_else(|_| Some(Err("Lost track of the game, reconnecting".into())));
+                        match result {
+                            Some(Ok(true)) => Status { game: game.clone(), connected: true, message: "Connected".into() },
+                            Some(Err(e)) => {
+                                ksp = None;
+                                Status { game: game.clone(), connected: false, message: e }
+                            }
+                            _ => Status { game: game.clone(), connected: false, message: "Waiting for the game to load".into() },
+                        }
+                    }
                     _ => {
                         session = None;
                         sn2 = None;
                         sn1 = None;
                         repo = None;
+                        ksp = None;
+                        scrap = None;
                         me.0.lock().unwrap().pos = None;
                         Status { game: game.clone(), connected: false, message: String::new() }
                     }
