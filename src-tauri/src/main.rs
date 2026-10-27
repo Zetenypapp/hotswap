@@ -4,6 +4,8 @@ mod appinfo;
 mod epic;
 mod gog;
 mod home;
+mod iostore;
+mod mapimage;
 mod steam;
 mod trainer;
 mod ue;
@@ -191,6 +193,31 @@ async fn map_world(watch: State<'_, watch::Watch>, game: String) -> Result<world
         .map_err(|e| e.to_string())?
 }
 
+#[derive(serde::Serialize)]
+struct MapBackground {
+    overview: PathBuf,
+    /// (tile x, tile y, image); 2 x 2 tiles cover the map.
+    tiles: Vec<(usize, usize, PathBuf)>,
+}
+
+/// The map background, made from the game's own map texture in the user's install (built once,
+/// then cached in the app data folder).
+#[tauri::command]
+async fn map_background(app: AppHandle, watch: State<'_, watch::Watch>, game: String) -> Result<MapBackground, String> {
+    if game != trainer::SATISFACTORY {
+        return Err("No map for this game".into());
+    }
+    let install = watch.install_of(&game).ok_or("Game isn't installed")?;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("map").join(&game);
+    let d = dir.clone();
+    tauri::async_runtime::spawn_blocking(move || mapimage::ensure(&install, &d)).await.map_err(|e| e.to_string())??;
+    let _ = app.asset_protocol_scope().allow_directory(&dir, false);
+    Ok(MapBackground {
+        overview: dir.join(mapimage::OVERVIEW),
+        tiles: [(0, 0), (0, 1), (1, 0), (1, 1)].into_iter().map(|(x, y)| (x, y, dir.join(mapimage::tile_file(x, y)))).collect(),
+    })
+}
+
 #[tauri::command]
 fn map_hide(app: AppHandle) {
     if let Some(v) = app.get_webview("map") {
@@ -321,6 +348,13 @@ fn main() {
             Ok(rva) => println!("{} = 0x{rva:X} ({:?})", a[i + 2], t.elapsed()),
             Err(e) => println!("error: {e} ({:?})", t.elapsed()),
         }
+        return;
+    }
+    // Dev aid: `hotswap --map-image <out dir>` builds the map background from the game files.
+    if let Some(out) = std::env::args().skip_while(|a| a != "--map-image").nth(1) {
+        let t = std::time::Instant::now();
+        let install = std::path::Path::new(r"D:\SteamLibrary\steamapps\common\Satisfactory");
+        println!("{:?} in {:?}", mapimage::ensure(install, std::path::Path::new(&out)), t.elapsed());
         return;
     }
     // Dev aid: `hotswap --world-scan` prints what the map would draw.
@@ -603,7 +637,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
             fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart,
-            map_show, map_hide, map_world, map_player, map_teleport, map_pins_load, map_pins_save
+            map_show, map_hide, map_world, map_background, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hotswap");

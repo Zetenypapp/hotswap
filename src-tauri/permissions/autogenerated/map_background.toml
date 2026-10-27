@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-map-background"
+description = "Enables the map_background command without any pre-configured scope."
+commands.allow = ["map_background"]
+
+[[permission]]
+identifier = "deny-map-background"
+description = "Denies the map_background command without any pre-configured scope."
+commands.deny = ["map_background"]

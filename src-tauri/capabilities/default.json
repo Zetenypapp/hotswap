@@ -33,6 +33,7 @@
     "allow-map-pins-save",
     "allow-map-show",
     "allow-map-hide",
-    "allow-map-world"
+    "allow-map-world",
+    "allow-map-background"
   ]
 }

@@ -40,11 +40,13 @@ const LocalMap = (() => {
   let host, cv, ctx, ui = {}, timers = [], world = null, worldAt = 0, me = null, trail = [], pins = [];
   let view = null, dpr = 1, dirty = true, follow = false, hover = null, menu = null, drag = null, ro;
   let worldError = '', loop = 0;
+  // Map background from the game's own map texture: an overview image, and full-size tiles for close up.
+  let bg = null, bgError = '';
   const prefs = loadPrefs();
 
   function loadPrefs() {
     const d = { res: {}, purity: [true, true, true], things: { slugs: true, somersloops: true, spheres: true, pods: true }, hideOpened: true,
-      buildings: true, lines: { belt: true, pipe: true, rail: true, power: false, hyper: true }, trail: true, panel: true };
+      terrain: true, buildings: true, lines: { belt: true, pipe: true, rail: true, power: false, hyper: true }, trail: true, panel: true };
     try { return Object.assign(d, JSON.parse(localStorage.getItem('hotswap.map') || '{}')); } catch { return d; }
   }
   function savePrefs() { try { localStorage.setItem('hotswap.map', JSON.stringify(prefs)); } catch {} }
@@ -93,6 +95,37 @@ const LocalMap = (() => {
     } catch (e) { worldError = String(e); if (!world) world = null; }
     buildLegend(); dirty = true;
   }
+  async function loadBackground() {
+    if (bg) return;
+    try {
+      const r = await invoke('map_background', { game: GAME });
+      const img = src => { const i = new Image(); i.onload = () => { dirty = true; }; i.src = fileSrc(src); return i; };
+      bg = { overview: img(r.overview), tiles: r.tiles.map(([x, y, src]) => ({ x, y, src, img: null })), img };
+    } catch (e) { bgError = String(e); buildLegend(); }
+    dirty = true;
+  }
+  function drawBackground() {
+    if (!bg || !prefs.terrain) return false;
+    const W = WORLD.x1 - WORLD.x0, H = WORLD.y1 - WORLD.y0;
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    const o = bg.overview;
+    if (o.complete && o.naturalWidth) ctx.drawImage(o, sx(WORLD.x0), sy(WORLD.y0), W * view.s, H * view.s);
+    // Close up, draw the full-size tiles that are on screen (loaded the first time they're needed).
+    if (view.s * W > o.naturalWidth * 1.2) {
+      for (const t of bg.tiles) {
+        const x0 = WORLD.x0 + t.x * W / 2, y0 = WORLD.y0 + t.y * H / 2;
+        const px = sx(x0), py = sy(y0), pw = W / 2 * view.s, ph = H / 2 * view.s;
+        if (px > cv.clientWidth || py > cv.clientHeight || px + pw < 0 || py + ph < 0) continue;
+        if (!t.img) t.img = bg.img(t.src);
+        if (t.img.complete && t.img.naturalWidth) ctx.drawImage(t.img, px, py, pw, ph);
+      }
+    }
+    // A little darker, so markers stand out on the light terrain.
+    ctx.fillStyle = 'rgba(8,10,14,.22)';
+    ctx.fillRect(sx(WORLD.x0), sy(WORLD.y0), W * view.s, H * view.s);
+    return true;
+  }
+
   async function loadMe() {
     let p = null;
     try { p = await invoke('map_player'); } catch {}
@@ -137,19 +170,22 @@ const LocalMap = (() => {
     ctx.clearRect(0, 0, w, h);
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#3ddc84';
 
-    // World area and a soft land hint around everything the game knows about.
-    ctx.fillStyle = 'rgba(255,255,255,.025)';
-    roundRect(sx(WORLD.x0), sy(WORLD.y0), (WORLD.x1 - WORLD.x0) * view.s, (WORLD.y1 - WORLD.y0) * view.s, 18);
-    ctx.fill();
+    // The game's map, or without it the world area and a soft land hint around everything we know about.
+    const terrain = drawBackground();
+    if (!terrain) {
+      ctx.fillStyle = 'rgba(255,255,255,.025)';
+      roundRect(sx(WORLD.x0), sy(WORLD.y0), (WORLD.x1 - WORLD.x0) * view.s, (WORLD.y1 - WORLD.y0) * view.s, 18);
+      ctx.fill();
+    }
     // Fades out as you zoom in, where it would just be big blobs.
     const hint = Math.max(0, Math.min(1, (0.004 - view.s) / 0.003));
-    if (world && hint > 0) {
+    if (world && hint > 0 && !terrain) {
       ctx.fillStyle = `rgba(120,140,170,${(0.05 * hint).toFixed(3)})`;
       const r = Math.max(6, 12000 * view.s);
       for (const n of world.nodes) { ctx.beginPath(); ctx.arc(sx(n.x), sy(n.y), r, 0, 7); ctx.fill(); }
       for (const t of world.things) { ctx.beginPath(); ctx.arc(sx(t.x), sy(t.y), r, 0, 7); ctx.fill(); }
     }
-    grid(w, h);
+    if (!terrain) grid(w, h);
 
     if (world) {
       // Factory: lines under buildings.
@@ -233,6 +269,7 @@ const LocalMap = (() => {
   function scaleBar(w, h) {
     const step = niceStep(110), len = step * view.s;
     const x = 18, y = h - 18;
+    ctx.fillStyle = 'rgba(11,13,16,.75)'; roundRect(x - 8, y - 24, len + 16, 30, 9); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x, y); ctx.lineTo(x + len, y); ctx.lineTo(x + len, y - 5); ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = '600 11px Figtree, system-ui';
@@ -367,7 +404,7 @@ const LocalMap = (() => {
     ro = new ResizeObserver(() => { dirty = true; }); ro.observe(host);
     bind();
     buildLegend(); renderPins(); status();
-    loadPins(); loadMe();
+    loadPins(); loadMe(); loadBackground();
     if (!world || Date.now() - worldAt > 20000) loadWorld();
     timers.push(setInterval(loadMe, 400), setInterval(loadWorld, 20000), setInterval(status, 1000));
     const id = ++loop;
@@ -438,6 +475,7 @@ const LocalMap = (() => {
     if (a === 'opened') { prefs.hideOpened = !prefs.hideOpened; savePrefs(); buildLegend(); dirty = true; }
     if (a === 'line') { prefs.lines[b.dataset.k] = !prefs.lines[b.dataset.k]; savePrefs(); buildLegend(); dirty = true; }
     if (a === 'buildings') { prefs.buildings = !prefs.buildings; savePrefs(); buildLegend(); dirty = true; }
+    if (a === 'terrain') { prefs.terrain = !prefs.terrain; savePrefs(); buildLegend(); dirty = true; }
     if (a === 'trail') { prefs.trail = !prefs.trail; savePrefs(); buildLegend(); dirty = true; }
     if (a === 'cleartrail') { trail = me ? [[me[0], me[1]]] : []; dirty = true; }
     if (a === 'pinfly') { const p = pins.find(q => q.id == b.dataset.k); if (p) flyTo(p.x, p.y, Math.max(view.s, 0.01)); }
@@ -483,8 +521,9 @@ const LocalMap = (() => {
         ${chip(prefs.buildings, 'buildings', '', `Buildings${world?.buildings.length ? ` <em>${world.buildings.length}</em>` : ''}`, '#f3b73f')}
         ${Object.entries(LINES).map(([k, [l, c]]) => chip(prefs.lines[k], 'line', k, `${l}${lines[k] ? ` <em>${lines[k]}</em>` : ''}`, c)).join('')}
       </div>
-      <div class="lm-sec"><span>You</span><button class="lm-link" data-lm="cleartrail">Clear trail</button></div>
-      <div class="lm-chips">${chip(prefs.trail, 'trail', '', 'Trail')}</div>`;
+      <div class="lm-sec"><span>Map</span><button class="lm-link" data-lm="cleartrail">Clear trail</button></div>
+      <div class="lm-chips">${chip(prefs.terrain, 'terrain', '', 'Terrain')}${chip(prefs.trail, 'trail', '', 'Your trail')}</div>
+      ${bgError ? `<p class="lm-note">Terrain unavailable: ${esc(bgError)}</p>` : ''}`;
     ui.legend.querySelectorAll('[data-lm="res"]').forEach(b => b.addEventListener('contextmenu', e => { e.preventDefault(); nearest(b.dataset.k); }));
   }
   function renderPins() {

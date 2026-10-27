@@ -33,6 +33,11 @@ impl Watch {
         *self.targets.lock().unwrap() = list;
     }
 
+    /// Install folder of a scanned game.
+    pub fn install_of(&self, id: &str) -> Option<PathBuf> {
+        self.targets.lock().unwrap().iter().find(|t| t.0 == id).map(|t| PathBuf::from(&t.1))
+    }
+
     pub fn running(&self) -> Option<String> {
         self.running.lock().unwrap().clone()
     }
