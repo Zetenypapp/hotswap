@@ -16,11 +16,14 @@ pub struct Session {
     god_orig: Option<u8>,
     /// Other game switches we turned on: address -> the value before.
     switched: HashMap<u64, u8>,
+    /// The grabber's own strengths (with your upgrades) before scaling: field -> value.
+    grab_orig: HashMap<&'static str, f32>,
+    grabber: u64,
 }
 
 impl Session {
     pub fn new(m: Mono) -> Session {
-        Session { m, avatar: 0, health: 0, controller: 0, off: HashMap::new(), god_orig: None, switched: HashMap::new() }
+        Session { m, avatar: 0, health: 0, controller: 0, off: HashMap::new(), god_orig: None, switched: HashMap::new(), grab_orig: HashMap::new(), grabber: 0 }
     }
 
     fn f(&mut self, class: &str, field: &'static str) -> Option<u64> {
@@ -127,6 +130,32 @@ impl Session {
                 if let Some(base) = self.read_f32(pc, "PlayerController", orig).filter(|b| *b > 0.0) {
                     self.write_f32(pc, "PlayerController", field, base * f);
                 }
+            }
+        }
+        // Carrying: grab and throw strength as a percentage of your own (upgrades included).
+        if let Some(g) = self.static_obj("PhysGrabber", "instance").filter(|&g| g != 0) {
+            if g != self.grabber {
+                self.grabber = g;
+                self.grab_orig.clear();
+            }
+            for (key, field) in [("grab-strength", "grabStrength"), ("throw-strength", "throwStrength")] {
+                let f = (v.get(key).copied().unwrap_or(100.0) / 100.0) as f32;
+                if !self.grab_orig.contains_key(field) {
+                    match self.read_f32(g, "PhysGrabber", field) {
+                        Some(b) if b > 0.0 => { self.grab_orig.insert(field, b); }
+                        _ => continue,
+                    }
+                }
+                let base = self.grab_orig[field];
+                // Upgrades bought mid-run raise the game's value: take that as the new base.
+                if let Some(cur) = self.read_f32(g, "PhysGrabber", field) {
+                    let last = base * f;
+                    if (cur - last).abs() > 0.01 && (cur - base).abs() > 0.01 && f != 1.0 {
+                        self.grab_orig.insert(field, cur);
+                    }
+                }
+                let base = self.grab_orig[field];
+                self.write_f32(g, "PhysGrabber", field, base * f);
             }
         }
         // Round: infinite battery (the game's debug switch) and completing every extraction point.

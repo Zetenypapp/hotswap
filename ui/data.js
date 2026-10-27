@@ -16,6 +16,7 @@ const CATALOG = {
   ]},
   3241660: { genre: 'Horror co-op', solo: true, cats: [
     { name: 'Player', mods: [T('Infinite Health', 'The game\'s own god mode, and health kept full.'), T('Infinite Stamina'), T('Infinite Jumps', 'Jump again in mid-air as often as you like.'), S('Movement Speed', 50, 300, 10, 100)] },
+    { name: 'Carrying', mods: [S('Grab Strength', 100, 1000, 50, 100, 'Carry heavy things without strength upgrades. Percent of your current strength.'), S('Throw Strength', 100, 1000, 50, 100)] },
     { name: 'Round', mods: [T('Infinite Battery', 'Items and weapons never run out of battery.'), A('Complete Extractions', 'Marks every extraction point done, so you can head to the truck.')] },
     { name: 'World', mods: [T('Valuables Never Break'), A('Add $10,000')] },
   ]},
@@ -57,7 +58,7 @@ const LIVE = {
     'free-production', 'no-power-required', 'no-fuel-needed', 'turbo-production',
     'save-position', 'teleport-to-saved-position',
   ],
-  3241660: ['infinite-health', 'infinite-stamina', 'infinite-jumps', 'movement-speed', 'infinite-battery', 'complete-extractions'],
+  3241660: ['infinite-health', 'infinite-stamina', 'infinite-jumps', 'movement-speed', 'grab-strength', 'throw-strength', 'infinite-battery', 'complete-extractions'],
   264710: [
     'infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'swim-speed', 'walk-speed',
     'free-crafting', 'unlock-all-blueprints', 'instant-building', 'instant-scanning', 'fast-growing',
