@@ -157,28 +157,32 @@ fn migrate_old_data(app: &tauri::App) {
     }
 }
 
-/// Interactive maps, opened in their own window. The map page is someone else's site, so that
-/// window may only call the `map_*` commands (see capabilities/map.json).
+/// Interactive maps, shown as a second web view inside the main window over the Maps page.
+/// The map page is someone else's site, so that view may only call the `map_*` commands
+/// (see capabilities/map.json).
 const MAPS: [(&str, &str); 1] = [(trainer::SATISFACTORY, "https://satisfactory-calculator.com/en/interactive-map")];
 
+/// Shows the map for `game` at the given spot (CSS pixels of the main window), creating it on first use.
+/// Async on purpose: creating a web view from a sync command deadlocks on Windows.
 #[tauri::command]
-fn open_map(app: AppHandle, game: String) -> Result<(), String> {
+async fn map_show(app: AppHandle, game: String, x: f64, y: f64, w: f64, h: f64) -> Result<(), String> {
     let url = MAPS.iter().find(|m| m.0 == game).ok_or("No map for this game")?.1;
-    if let Some(w) = app.get_webview_window("map") {
-        let _ = w.unminimize();
-        return w.set_focus().map_err(|e| e.to_string());
+    let (pos, size) = (tauri::LogicalPosition::new(x, y), tauri::LogicalSize::new(w.max(1.0), h.max(1.0)));
+    if let Some(v) = app.get_webview("map") {
+        v.set_position(pos).and_then(|_| v.set_size(size)).and_then(|_| v.show()).map_err(|e| e.to_string())?;
+        return v.set_focus().map_err(|e| e.to_string());
     }
-    let main = app.get_webview_window("main").ok_or("no main window")?;
-    let size = main.inner_size().map_err(|e| e.to_string())?;
-    let scale = main.scale_factor().unwrap_or(1.0);
-    tauri::WebviewWindowBuilder::new(&app, "map", tauri::WebviewUrl::External(url.parse().map_err(|e| format!("{e}"))?))
-        .title("Hotswap · Satisfactory map")
-        .inner_size(size.width as f64 / scale * 0.9, size.height as f64 / scale * 0.9)
-        .center()
-        .initialization_script(include_str!("../../ui/map-overlay.js"))
-        .build()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    let main = app.get_window("main").ok_or("no main window")?;
+    let view = tauri::webview::WebviewBuilder::new("map", tauri::WebviewUrl::External(url.parse().map_err(|e| format!("{e}"))?))
+        .initialization_script(include_str!("../../ui/map-overlay.js"));
+    main.add_child(view, pos, size).map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn map_hide(app: AppHandle) {
+    if let Some(v) = app.get_webview("map") {
+        let _ = v.hide();
+    }
 }
 
 /// The player's x, y, z and yaw while a supported game is running and connected.
@@ -510,7 +514,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
             fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart,
-            open_map, map_player, map_teleport, map_pins_load, map_pins_save
+            map_show, map_hide, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hotswap");

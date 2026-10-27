@@ -27,10 +27,11 @@
     "allow-set-close-to-tray",
     "allow-get-autostart",
     "allow-set-autostart",
-    "allow-open-map",
     "allow-map-player",
     "allow-map-teleport",
     "allow-map-pins-load",
-    "allow-map-pins-save"
+    "allow-map-pins-save",
+    "allow-map-show",
+    "allow-map-hide"
   ]
 }

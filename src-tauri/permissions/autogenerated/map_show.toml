@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-map-show"
+description = "Enables the map_show command without any pre-configured scope."
+commands.allow = ["map_show"]
+
+[[permission]]
+identifier = "deny-map-show"
+description = "Denies the map_show command without any pre-configured scope."
+commands.deny = ["map_show"]
