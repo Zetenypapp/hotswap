@@ -26,11 +26,13 @@ pub struct Session {
     science_orig: Option<(u64, f32)>,
     rep_orig: Option<(u64, f32)>,
     last_vessel: u64,
+    /// Parts made tough by Invincible Craft: part -> its crash tolerance, g tolerance and max pressure.
+    tough: HashMap<u64, (f32, f64, f64)>,
 }
 
 impl Session {
     pub fn new(m: Mono) -> Session {
-        Session { m, off: HashMap::new(), switched: HashMap::new(), funds_orig: None, science_orig: None, rep_orig: None, last_vessel: 0 }
+        Session { m, off: HashMap::new(), switched: HashMap::new(), funds_orig: None, science_orig: None, rep_orig: None, last_vessel: 0, tough: HashMap::new() }
     }
 
     fn f(&mut self, class: &'static str, field: &'static str) -> Option<u64> {
@@ -71,23 +73,28 @@ impl Session {
         }
     }
 
-    /// Every resource on the active vessel's parts: (address of the PartResource, its name).
-    fn vessel_resources(&mut self) -> Vec<(u64, String)> {
-        let mut out = Vec::new();
-        let Some(fg) = self.static_obj("FlightGlobals", "_fetch") else { return out };
-        let Some(vessel) = self.f("FlightGlobals", "activeVessel").and_then(|o| self.m.p.ptr(fg + o)).filter(|&v| v != 0) else { return out };
-        let (Some(po), Some(ro), Some(no)) = (self.f("Vessel", "parts"), self.f("Part", "_resources"), self.f("PartResource", "resourceName")) else { return out };
-        // DictionaryValueList<int, PartResource> keeps its values in a List as well.
-        let dict_o = self.f("PartResourceList", "dict").unwrap_or(0x10);
-        let list_o = self.f("DictionaryValueList`2", "list").unwrap_or(0x18);
-        let Some(parts) = self.m.p.ptr(vessel + po).filter(|&l| l != 0) else { return out };
-        let (Some(items), Some(n)) = (self.m.p.ptr(parts + 0x10), self.m.p.read::<i32>(parts + 0x18)) else { return out };
+    /// Every part of the vessel you're flying.
+    fn vessel_parts(&mut self) -> Vec<u64> {
+        let Some(fg) = self.static_obj("FlightGlobals", "_fetch") else { return vec![] };
+        let Some(vessel) = self.f("FlightGlobals", "activeVessel").and_then(|o| self.m.p.ptr(fg + o)).filter(|&v| v != 0) else { return vec![] };
+        let Some(po) = self.f("Vessel", "parts") else { return vec![] };
+        let Some(parts) = self.m.p.ptr(vessel + po).filter(|&l| l != 0) else { return vec![] };
+        let (Some(items), Some(n)) = (self.m.p.ptr(parts + 0x10), self.m.p.read::<i32>(parts + 0x18)) else { return vec![] };
         if vessel != self.last_vessel {
             self.last_vessel = vessel;
             log(&format!("ksp: active vessel 0x{vessel:X}, {n} parts"));
         }
-        for i in 0..n.clamp(0, 2000) as u64 {
-            let Some(part) = self.m.p.ptr(items + 0x20 + i * 8).filter(|&p| p != 0) else { continue };
+        (0..n.clamp(0, 2000) as u64).filter_map(|i| self.m.p.ptr(items + 0x20 + i * 8).filter(|&p| p != 0)).collect()
+    }
+
+    /// Every resource on the parts: (address of the PartResource, its name).
+    fn vessel_resources(&mut self, parts: &[u64]) -> Vec<(u64, String)> {
+        let mut out = Vec::new();
+        let (Some(ro), Some(no)) = (self.f("Part", "_resources"), self.f("PartResource", "resourceName")) else { return out };
+        // DictionaryValueList<int, PartResource> keeps its values in a List as well.
+        let dict_o = self.f("PartResourceList", "dict").unwrap_or(0x10);
+        let list_o = self.f("DictionaryValueList`2", "list").unwrap_or(0x18);
+        for &part in parts {
             let Some(list) = self.m.p.ptr(part + ro).and_then(|r| self.m.p.ptr(r + dict_o)).and_then(|d| self.m.p.ptr(d + list_o)).filter(|&l| l != 0) else { continue };
             let (Some(ritems), Some(rn)) = (self.m.p.ptr(list + 0x10), self.m.p.read::<i32>(list + 0x18)) else { continue };
             for j in 0..rn.clamp(0, 64) as u64 {
@@ -97,6 +104,35 @@ impl Session {
             }
         }
         out
+    }
+
+    /// Invincible Craft: parts shrug off impacts, g-forces and pressure. The game's own No Crash
+    /// Damage switch doesn't stop every impact, so each part's limits go up too (put back when off).
+    fn toughen(&mut self, parts: &[u64], on: bool) {
+        let (Some(c), Some(g), Some(pr)) = (self.f("Part", "crashTolerance"), self.f("Part", "gTolerance"), self.f("Part", "maxPressure")) else { return };
+        if on {
+            for &part in parts {
+                if !self.tough.contains_key(&part) {
+                    let (Some(oc), Some(og), Some(op)) = (self.m.p.read::<f32>(part + c), self.m.p.read::<f64>(part + g), self.m.p.read::<f64>(part + pr)) else { continue };
+                    self.tough.insert(part, (oc, og, op));
+                }
+                if self.m.p.read::<f32>(part + c).is_some_and(|v| v < 1e5) {
+                    self.m.p.write(part + c, 1e6f32);
+                    self.m.p.write(part + g, 1e9f64);
+                    self.m.p.write(part + pr, 1e9f64);
+                }
+            }
+        } else if !self.tough.is_empty() {
+            // Only parts still on the vessel: others may be gone from memory.
+            for &part in parts {
+                if let Some((oc, og, op)) = self.tough.get(&part).copied() {
+                    self.m.p.write(part + c, oc);
+                    self.m.p.write(part + g, og);
+                    self.m.p.write(part + pr, op);
+                }
+            }
+            self.tough.clear();
+        }
     }
 
     /// Fills resources picked by `pick` to their maximum.
@@ -146,10 +182,12 @@ impl Session {
             }
         }
 
-        // Refills on the vessel you're flying.
+        // The vessel you're flying: toughness and refills.
         let (fuel, mono, flight) = (on("unlimited-fuel"), on("unlimited-monopropellant"), on("unlimited-flight-resources"));
+        let parts = if invincible || !self.tough.is_empty() || fuel || mono || flight { self.vessel_parts() } else { vec![] };
+        self.toughen(&parts, invincible);
         if fuel || mono || flight {
-            let res = self.vessel_resources();
+            let res = self.vessel_resources(&parts);
             self.refill(&res, |n| {
                 (fuel && n != "MonoPropellant" && (FUELS.contains(&n) || n.contains("Fuel") || n.contains("Propellant")))
                     || (mono && n == "MonoPropellant")
@@ -253,7 +291,8 @@ pub fn peek(m: Mono) {
     println!("offsets: parts {:?} _resources {:?} dict {:?} list {:?} name {:?} amount {:?} max {:?}",
         s.f("Vessel", "parts"), s.f("Part", "_resources"), s.f("PartResourceList", "dict"), s.f("DictionaryValueList`2", "list"),
         s.f("PartResource", "resourceName"), s.f("PartResource", "amount"), s.f("PartResource", "maxAmount"));
-    let res = s.vessel_resources();
+    let parts = s.vessel_parts();
+    let res = s.vessel_resources(&parts);
     let (ao, mo) = (s.f("PartResource", "amount").unwrap_or(0), s.f("PartResource", "maxAmount").unwrap_or(0));
     for (r, n) in res.iter().take(40) {
         println!("  {n}: {:?} / {:?}", s.m.p.read::<f64>(r + ao), s.m.p.read::<f64>(r + mo));
