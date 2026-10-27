@@ -683,6 +683,28 @@ fn main() {
         }
         return;
     }
+    // Dev aid: `hotswap --sn1-peek` prints Subnautica's live player speed values.
+    if std::env::args().any(|a| a == "--sn1-peek") {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let pid = sys.processes().values().find(|p| p.name().to_string_lossy() == "Subnautica.exe").map(|p| p.pid().as_u32());
+        let Some(Ok(mut m)) = pid.map(mono::Mono::attach) else { return println!("not attached") };
+        let pc_cls = m.class("", "Player").unwrap();
+        let player = m.static_addr(pc_cls, "main").and_then(|a| m.p.ptr(a)).unwrap();
+        let o = m.field(pc_cls, "<playerController>k__BackingField").unwrap() as u64;
+        let pc = m.p.ptr(player + o).unwrap();
+        let c = m.class("", "PlayerController").unwrap();
+        for (n, off, ty) in m.fields_of(c) { if ty.contains("Single") || ty.contains("Motor") { println!("PC {n} = {:?} {:X?}", m.p.read::<f32>(pc + off as u64), m.p.ptr(pc + off as u64)); } }
+        let (uwo, ao) = (m.field(c, "underWaterController").unwrap() as u64, m.field(c, "activeController").unwrap() as u64);
+        let uw = m.p.ptr(pc + uwo).unwrap();
+        let act = m.p.ptr(pc + ao);
+        println!("underwater 0x{uw:X} active {act:X?}");
+        let uc = m.class("", "UnderwaterMotor").unwrap();
+        for (n, off, ty) in m.fields_of(uc) { if off != 0 && ty.contains("Single") { println!("UW {n} = {:?}", m.p.read::<f32>(uw + off as u64)); } }
+        let mc = m.class("", "PlayerMotor").unwrap();
+        for (n, off, ty) in m.fields_of(mc) { if ty.contains("Single") { println!("PM {n} = {:?}", m.p.read::<f32>(uw + off as u64)); } }
+        return;
+    }
     // Dev aid: `hotswap --world-scan` prints what the map would draw.
     if std::env::args().any(|a| a == "--world-scan") {
         let mut sys = sysinfo::System::new();

@@ -22,6 +22,8 @@ const FLAGS: [(&str, u32); 6] = [
 struct Targets {
     player: u64,
     cheats: u64,
+    /// GameModeUtils.currentGameMode: Creative and Freedom include some of the cheat flags.
+    mode: u64,
     no_damage: u64,
     no_cost: u64,
     live: u64,
@@ -35,7 +37,9 @@ struct Targets {
 }
 
 /// Player speed limits: (PlayerController default, motor field it's copied into, which slider).
-const SPEEDS: [(&str, &str, &str); 11] = [
+const SPEEDS: [(&str, &str, &str); 13] = [
+    ("swimWaterAcceleration", "waterAcceleration", "swim"),
+    ("seaglideWaterAcceleration", "waterAcceleration", "glide"),
     ("swimForwardMaxSpeed", "forwardMaxSpeed", "swim"),
     ("swimBackwardMaxSpeed", "backwardMaxSpeed", "swim"),
     ("swimStrafeMaxSpeed", "strafeMaxSpeed", "swim"),
@@ -53,8 +57,6 @@ pub struct Session {
     m: Mono,
     t: Targets,
     off: HashMap<&'static str, u64>,
-    /// Cheat bits we switched on (only those are switched back off).
-    ours: u32,
     /// Console cheat switches we turned on: address -> the value before.
     switched: HashMap<u64, u8>,
     /// The game's own speed limits (PlayerController field -> value), read once per player.
@@ -65,7 +67,7 @@ pub struct Session {
 
 impl Session {
     pub fn new(m: Mono) -> Session {
-        Session { m, t: Targets::default(), off: HashMap::new(), ours: 0, switched: HashMap::new(), speed_orig: HashMap::new(), speed_last: (1.0, 1.0) }
+        Session { m, t: Targets::default(), off: HashMap::new(), switched: HashMap::new(), speed_orig: HashMap::new(), speed_last: (1.0, 1.0) }
     }
 
     /// Offset of `class.field`, cached.
@@ -92,6 +94,7 @@ impl Session {
         let mut t = Targets { player, ..Default::default() };
         if let Some(c) = self.m.class("", "GameModeUtils") {
             t.cheats = self.m.static_addr(c, "currentCheats").unwrap_or(0);
+            t.mode = self.m.static_addr(c, "currentGameMode").unwrap_or(0);
         }
         t.no_damage = self.static_obj("NoDamageConsoleCommand", "main").unwrap_or(0);
         t.no_cost = self.static_obj("NoCostConsoleCommand", "main").unwrap_or(0);
@@ -141,7 +144,6 @@ impl Session {
             return Ok(false); // main menu or loading
         }
         if player != self.t.player {
-            self.ours = 0;
             self.switched.clear();
             self.speed_orig.clear();
             self.speed_last = (1.0, 1.0);
@@ -152,17 +154,13 @@ impl Session {
         let on = |k: &str| v.get(k).is_some_and(|x| *x != 0.0);
         let t = self.t;
 
-        // Game cheat flags.
+        // Game cheat flags: on while the mod is on, otherwise whatever the game mode itself has
+        // (so a flag left on by an earlier Hotswap run is cleared too).
         if let Some(cur) = self.m.p.read::<u32>(t.cheats).filter(|_| t.cheats != 0) {
+            let mode = self.m.p.read::<u32>(t.mode).filter(|_| t.mode != 0).unwrap_or(0);
             let mut want = cur;
             for (k, bit) in FLAGS {
-                if on(k) && cur & bit == 0 {
-                    want |= bit;
-                    self.ours |= bit;
-                } else if !on(k) && self.ours & bit != 0 {
-                    want &= !bit;
-                    self.ours &= !bit;
-                }
+                if on(k) || mode & bit != 0 { want |= bit } else { want &= !bit }
             }
             if want != cur {
                 self.m.p.write(t.cheats, want);
@@ -233,6 +231,14 @@ impl Session {
         if t.controller == 0 || (swim, walk) == self.speed_last {
             return;
         }
+        // An earlier Hotswap run may have scaled these already in this same game session; its
+        // record (kept per game process) holds the real values and what was applied.
+        if self.speed_orig.is_empty() {
+            if let Some((orig, last)) = speed_file_load(self.m.p.pid) {
+                self.speed_orig = orig;
+                self.speed_last = last;
+            }
+        }
         let (old_swim, old_walk) = self.speed_last;
         for (pc_field, _, _) in SPEEDS {
             if !self.speed_orig.contains_key(pc_field) {
@@ -253,7 +259,8 @@ impl Session {
             if motor == 0 || old <= 0.0 {
                 continue;
             }
-            for field in ["forwardMaxSpeed", "backwardMaxSpeed", "strafeMaxSpeed", "verticalMaxSpeed"] {
+            // In water the top speed is acceleration against drag, so acceleration scales too.
+            for field in ["forwardMaxSpeed", "backwardMaxSpeed", "strafeMaxSpeed", "verticalMaxSpeed", "waterAcceleration", "groundAcceleration"] {
                 if let Some(o) = self.f("PlayerMotor", field) {
                     if let Some(cur) = self.m.p.read::<f32>(motor + o) {
                         self.m.p.write(motor + o, cur / old * new);
@@ -262,5 +269,34 @@ impl Session {
             }
         }
         self.speed_last = (swim, walk);
+        speed_file_save(self.m.p.pid, &self.speed_orig, self.speed_last);
+        // An earlier version used the motors' debug multiplier; put it back to normal.
+        if let Some(o) = self.f("PlayerMotor", "debugSpeedMult") {
+            for motor in [t.swim_motor, t.walk_motor] {
+                if motor != 0 && self.m.p.read::<f32>(motor + o).is_some_and(|x| x != 1.0) {
+                    self.m.p.write(motor + o, 1.0f32);
+                }
+            }
+        }
+    }
+}
+
+fn speed_file() -> Option<std::path::PathBuf> {
+    Some(std::path::Path::new(&std::env::var("APPDATA").ok()?).join("app.hotswap.desktop").join("subnautica_speeds.json"))
+}
+
+/// The real speed values and the factors applied, if recorded for this game process.
+fn speed_file_load(pid: u32) -> Option<(HashMap<&'static str, f32>, (f32, f32))> {
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(speed_file()?).ok()?).ok()?;
+    if v["pid"].as_u64()? != pid as u64 {
+        return None;
+    }
+    let orig = SPEEDS.iter().filter_map(|(k, _, _)| Some((*k, v["orig"][*k].as_f64()? as f32))).collect();
+    Some((orig, (v["swim"].as_f64()? as f32, v["walk"].as_f64()? as f32)))
+}
+
+fn speed_file_save(pid: u32, orig: &HashMap<&'static str, f32>, last: (f32, f32)) {
+    if let Some(p) = speed_file() {
+        let _ = std::fs::write(p, serde_json::json!({ "pid": pid, "orig": orig, "swim": last.0, "walk": last.1 }).to_string());
     }
 }
