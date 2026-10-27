@@ -67,12 +67,15 @@ impl Watch {
         let (_, dir) = self.targets.lock().unwrap().iter().find(|(gid, _)| gid == id).cloned()?;
         let mut sys = System::new();
         sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing().with_exe(UpdateKind::Always));
-        sys.processes().values().find(|p| {
-            p.exe().is_some_and(|e| {
-                let e = e.to_string_lossy().to_lowercase();
-                e.starts_with(&dir) && e.ends_with("-win64-shipping.exe")
-            })
-        }).map(|p| p.pid().as_u32())
+        // Unreal games run a "-Win64-Shipping" exe (the launcher exe is only a stub); Unity games
+        // run their main exe, the one with a "<name>_Data" folder next to it.
+        let exes: Vec<(u32, String)> = sys.processes().values()
+            .filter_map(|p| Some((p.pid().as_u32(), p.exe()?.to_string_lossy().to_lowercase())))
+            .filter(|(_, e)| e.starts_with(&dir) && e.ends_with(".exe"))
+            .collect();
+        exes.iter().find(|(_, e)| e.ends_with("-win64-shipping.exe"))
+            .or_else(|| exes.iter().find(|(_, e)| std::path::Path::new(&format!("{}_Data", e.trim_end_matches(".exe"))).is_dir()))
+            .map(|(pid, _)| *pid)
     }
 
     /// Ends every process running from the game's install folder. Returns how many were ended.

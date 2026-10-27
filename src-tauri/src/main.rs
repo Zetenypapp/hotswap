@@ -8,6 +8,8 @@ mod iostore;
 mod mapimage;
 mod modfiles;
 mod modloader;
+mod mono;
+mod sn1;
 mod sn2;
 mod steam;
 mod trainer;
@@ -655,6 +657,29 @@ fn main() {
                 let a = s + pr.offset as u64;
                 println!("  {} base {:?} current {:?}", pr.name, u.p.read::<f32>(a + 8), u.p.read::<f32>(a + 12));
             }
+        }
+        return;
+    }
+    // Dev aid: `hotswap --mono <process name part> <Class> [static field]` lists a Unity class's
+    // fields through Mono, and the object a static field points to.
+    if let Some(i) = std::env::args().position(|a| a == "--mono") {
+        let a: Vec<String> = std::env::args().collect();
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let pid = sys.processes().values().find(|p| p.name().to_string_lossy().to_lowercase().contains(&a[i + 1].to_lowercase())).map(|p| p.pid().as_u32());
+        let mut m = match pid.map(mono::Mono::attach) { Some(Ok(m)) => m, Some(Err(e)) => return println!("attach failed: {e}"), None => return println!("not running") };
+        println!("attached");
+        let Some(cls_name) = a.get(i + 2) else { return };
+        let (ns, name) = cls_name.rsplit_once('.').unwrap_or(("", cls_name));
+        let Some(c) = m.class(ns, name) else { return println!("class {cls_name} not found") };
+        if a.get(i + 3).map(|s| s.as_str()) == Some("enum") {
+            for (n, v) in m.enum_values(c) { println!("  {n} = {v}"); }
+            return;
+        }
+        for (n, off, ty) in m.fields_of(c) { println!("  {n} @0x{off:X} : {ty}"); }
+        if let Some(f) = a.get(i + 3) {
+            let addr = m.static_addr(c, f);
+            println!("static {f} at {addr:X?} = {:X?}", addr.and_then(|x| m.p.ptr(x)));
         }
         return;
     }

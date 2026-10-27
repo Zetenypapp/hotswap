@@ -74,6 +74,7 @@ impl Trainer {
         thread::spawn(move || {
             let mut session: Option<Session> = None;
             let mut sn2: Option<crate::sn2::Session> = None;
+            let mut sn1: Option<crate::sn1::Session> = None;
             let mut last_attach: Option<Instant> = None;
             let mut last = Status { game: None, connected: false, message: String::new() };
             loop {
@@ -135,9 +136,30 @@ impl Trainer {
                             _ => Status { game: game.clone(), connected: false, message: "Waiting for the game to load".into() },
                         }
                     }
+                    Some(crate::sn1::SUBNAUTICA) => {
+                        if sn1.is_none() && last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
+                            last_attach = Some(Instant::now());
+                            sn1 = pid_of(crate::sn1::SUBNAUTICA)
+                                .and_then(|pid| crate::mono::Mono::attach(pid).map_err(|e| log(&format!("sn1 attach: {e}"))).ok())
+                                .map(crate::sn1::Session::new);
+                        }
+                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            sn1.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }))
+                        }))
+                        .unwrap_or_else(|_| Some(Err("Lost track of the game, reconnecting".into())));
+                        match result {
+                            Some(Ok(true)) => Status { game: game.clone(), connected: true, message: "Connected".into() },
+                            Some(Err(e)) => {
+                                sn1 = None;
+                                Status { game: game.clone(), connected: false, message: e }
+                            }
+                            _ => Status { game: game.clone(), connected: false, message: "Waiting for the game to load".into() },
+                        }
+                    }
                     _ => {
                         session = None;
                         sn2 = None;
+                        sn1 = None;
                         me.0.lock().unwrap().pos = None;
                         Status { game: game.clone(), connected: false, message: String::new() }
                     }

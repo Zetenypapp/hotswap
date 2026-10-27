@@ -31,6 +31,12 @@ const CATALOG = {
     { name: 'Player', mods: [T('Infinite Health'), T('No Hunger'), T('No Thirst')] },
     { name: 'Building', mods: [T('Free Crafting'), T('Infinite Components'), T('Infinite Batteries')] },
   ]},
+  264710: { genre: 'Underwater survival', cats: [
+    { name: 'Player', mods: [T('Infinite Health', 'No damage, and health stays full.'), T('Infinite Oxygen'), T('No Hunger'), T('No Thirst')] },
+    { name: 'Movement', mods: [S('Swim Speed', 10, 500, 10, 100, 'Percent of normal swim speed.'), S('Walk Speed', 10, 500, 10, 100, 'Percent of normal walking speed.')] },
+    { name: 'Crafting', mods: [T('Free Crafting', 'Crafting and building need no materials.'), T('Unlock All Blueprints'), T('Instant Building'), T('Instant Scanning'), T('Fast Growing', 'Plants grow and eggs hatch almost instantly.')] },
+    { name: 'World', mods: [T('Infinite Energy', 'Tools, vehicles and bases never run out of power.'), T('No Crush Depth', 'Vehicles can dive to any depth.'), T('Passive Creatures', "Creatures don't attack.")] },
+  ]},
   1962700: { genre: 'Underwater survival', cats: [
     { name: 'Player', mods: [T('Infinite Health', 'Health stays full and damage is ignored.'), T('Infinite Oxygen'), T('No Hunger'), T('No Thirst'), T('No Temperature Damage', 'Heat and cold do no damage.'), T('Free Dash', 'Dashing costs no oxygen.')] },
     { name: 'Movement', mods: [S('Swim Speed', 10, 500, 10, 100, 'Percent of normal swim speed.'), S('Walk Speed', 10, 500, 10, 100, 'Percent of normal walking speed.')] },
@@ -49,6 +55,11 @@ const LIVE = {
     'walking-speed', 'jump-height', 'game-speed', 'super-speed', 'gravity-strength',
     'free-production', 'no-power-required', 'no-fuel-needed', 'turbo-production',
     'save-position', 'teleport-to-saved-position',
+  ],
+  264710: [
+    'infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'swim-speed', 'walk-speed',
+    'free-crafting', 'unlock-all-blueprints', 'instant-building', 'instant-scanning', 'fast-growing',
+    'infinite-energy', 'no-crush-depth', 'passive-creatures',
   ],
   1962700: [
     'infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'no-temperature-damage', 'free-dash',
