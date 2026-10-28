@@ -5,10 +5,11 @@ const Mods = (() => {
   const GAMES = [
     { id: '526870', source: 'ficsit.app', url: 'https://ficsit.app' },
     { id: '1962700', source: 'Nexus Mods', url: 'https://www.nexusmods.com/subnautica2', nexus: 'subnautica2' },
-    { id: '3241660', source: 'Thunderstore', url: 'https://thunderstore.io/c/repo', thunder: 'repo' },
+    { id: '3241660', source: 'Thunderstore', url: 'https://thunderstore.io/c/repo', thunder: 'repo', nexus: 'repo' },
     { id: '220200', source: 'SpaceDock', url: 'https://spacedock.info', thunder: 'ksp' },
-    { id: '264710', source: 'Thunderstore', url: 'https://thunderstore.io/c/subnautica', thunder: 'subnautica' },
-    { id: '848450', source: 'Thunderstore', url: 'https://thunderstore.io/c/subnautica-below-zero', thunder: 'subnautica-below-zero' },
+    { id: '264710', source: 'Thunderstore', url: 'https://thunderstore.io/c/subnautica', thunder: 'subnautica', nexus: 'subnautica' },
+    { id: '848450', source: 'Thunderstore', url: 'https://thunderstore.io/c/subnautica-below-zero', thunder: 'subnautica-below-zero', nexus: 'subnauticabelowzero' },
+    { id: '1520370', source: 'Nexus Mods', url: 'https://www.nexusmods.com/monbazou', nexus: 'monbazou', bepinex: true },
   ];
   let GAME = null; // the game whose mod page is open, or null for the game grid
   // Installed mods are only read for Satisfactory, the one game with a mod source so far.
@@ -18,10 +19,16 @@ const Mods = (() => {
   let searchTimer;
   // Nexus Mods games (mods are files: UE4SS, Lua and pak mods).
   const N = { mods: [], downloads: [], results: [], count: 0, loading: false, error: '', builtIn: false, busy: '', clicked: null };
-  const isNexus = () => !!GAMES.find(x => x.id === GAME)?.nexus;
+  const info_ = () => GAMES.find(x => x.id === GAME) || {};
+  // Games with mods on both Thunderstore and Nexus Mods: which one the user browses (remembered).
+  const both = () => !!(info_().thunder && info_().nexus);
+  const src = () => both() ? (state.modSrc?.[GAME] || 'thunder') : info_().thunder ? 'thunder' : 'nexus';
+  const isNexus = () => !!info_().nexus && src() === 'nexus';
+  // BepInEx games: Nexus files install into BepInEx, and installed mods show Thunderstore-style.
+  const isBep = () => !!(info_().bepinex || info_().thunder);
   // Thunderstore games (BepInEx mods, installed straight from Thunderstore with their dependencies).
   const T = { mods: [], results: [], count: 0, loading: false, error: '', busy: '' };
-  const isThunder = () => !!GAMES.find(x => x.id === GAME)?.thunder;
+  const isThunder = () => !!info_().thunder && src() === 'thunder';
   const findMore = more => isThunder() ? tSearch(more) : isNexus() ? nSearch(more) : search(more);
 
   const running = () => RUNNING === gid();
@@ -109,7 +116,7 @@ const Mods = (() => {
     if (body.dataset.view !== GAME + S.tab) {
       body.dataset.view = GAME + S.tab;
       body.innerHTML = `
-        <div class="lib-head"><button class="chip" data-modgame="">‹ All games</button><h1>${esc(gameOf(GAME).name)}</h1><span class="meta">${S.build && !isNexus() && !isThunder() ? `Game build ${S.build} · ` : ''}mods from <a href="${info.url}" ${ext}>${esc(info.source)}</a></span>
+        <div class="lib-head"><button class="chip" data-modgame="">‹ All games</button><h1>${esc(gameOf(GAME).name)}</h1><span class="meta">${S.build && !isNexus() && !isThunder() ? `Game build ${S.build} · ` : ''}${both() ? `<span class="chips">${[['thunder', 'Thunderstore'], ['nexus', 'Nexus Mods']].map(([k, l]) => `<button class="chip${src() === k ? ' on' : ''}" data-modsrc="${k}">${l}</button>`).join('')}</span>` : `mods from <a href="${info.url}" ${ext}>${esc(info.source)}</a>`}</span>
           <div class="chips"><button class="chip${S.tab === 'installed' ? ' on' : ''}" data-modtab="installed">Installed</button><button class="chip${S.tab === 'browse' ? ' on' : ''}" data-modtab="browse">Browse</button></div></div>
         <div id="modsWarn"></div>
         ${S.tab === 'browse' ? `<div class="mods-bar"><label class="search mods-search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
@@ -185,11 +192,12 @@ const Mods = (() => {
   }
 
   document.addEventListener('click', e => {
-    const t = e.target.closest('[data-modgame],[data-modtab],[data-modsort],[data-modinstall],[data-modtoggle],[data-modremove],[data-modcheck],[data-modmore],[data-modupall]');
+    const t = e.target.closest('[data-modgame],[data-modtab],[data-modsrc],[data-modsort],[data-modinstall],[data-modtoggle],[data-modremove],[data-modcheck],[data-modmore],[data-modupall]');
     if (!t) return;
     const d = t.dataset;
     if ('modgame' in d) { if (GAME !== (d.modgame || null)) { T.results = []; T.count = 0; T.mods = []; N.results = []; N.count = 0; } GAME = d.modgame || null; render(); }
     else if (d.modtab) { S.tab = d.modtab; render(); }
+    else if (d.modsrc) { state.modSrc = { ...state.modSrc, [GAME]: d.modsrc }; save(); T.results = []; N.results = []; $('modsBody').dataset.view = ''; render(); }
     else if (d.modsort) { S.sort = d.modsort; document.querySelectorAll('[data-modsort]').forEach(b => b.classList.toggle('on', b === t)); findMore(false); }
     else if (d.modinstall) install(d.modinstall, d.name);
     else if (d.modtoggle) { const on = t.getAttribute('aria-checked') !== 'true'; act('mods_set_enabled', { reference: d.modtoggle, enabled: on }, [d.modtoggle, on ? 'on' : 'off']); }
@@ -201,7 +209,8 @@ const Mods = (() => {
 
   /* ---------- Nexus Mods games ---------- */
   async function nRefresh() {
-    try { N.mods = await invoke('fmods_list', { game: GAME }); N.error = ''; } catch (e) { N.error = String(e); }
+    if (isBep()) { try { T.mods = await invoke('ts_list', { game: GAME }); T.error = ''; } catch (e) { T.error = String(e); } }
+    else try { N.mods = await invoke('fmods_list', { game: GAME }); N.error = ''; } catch (e) { N.error = String(e); }
     try { N.downloads = await invoke('fmods_downloads'); } catch {}
     list();
   }
@@ -216,7 +225,7 @@ const Mods = (() => {
   async function nInstall(path, name) {
     if (running()) return toast('Close the game first', 'then change mods');
     N.busy = path; list();
-    try { const what = await invoke('fmods_install', { game: GAME, path }); toast(what, 'installed'); }
+    try { const what = await invoke(isBep() ? 'ts_install_file' : 'fmods_install', { game: GAME, path }); toast(what, 'installed'); }
     catch (e) { toast(`Couldn't install ${name}`, String(e)); }
     N.busy = ''; nRefresh();
   }
@@ -236,8 +245,9 @@ const Mods = (() => {
   }
   function nexusList(el) {
     $('modsWarn').innerHTML = running() ? '<div class="mods-warn">The game is running. Close it to install, change or remove mods.</div>' : '';
-    const hasLoader = N.mods.some(m => m.kind === 'ue4ss');
+    const hasLoader = isBep() || N.mods.some(m => m.kind === 'ue4ss');
     const loaderTip = hasLoader ? '' : `<div class="mods-warn">Most mods need <b>UE4SS</b>. <a href="https://www.nexusmods.com/subnautica2/mods/36?tab=files" ${ext}>Download UE4SS</a>, then install it below.</div>`;
+    if (S.tab === 'installed' && isBep()) { el.innerHTML = downloadsBox() + tInstalled(); return; }
     if (S.tab === 'installed') {
       const shown = N.mods.filter(m => N.builtIn || !m.built_in);
       const hidden = N.mods.length - shown.length;
@@ -260,8 +270,8 @@ const Mods = (() => {
           <div class="mod-txt"><b>${esc(m.name)}</b><span>by ${esc(m.author)} · ${fmtN(m.downloads)} downloads</span></div></div>
         <p>${esc(m.summary || '')}</p>
         <div class="mod-foot"><span class="meta">${esc(m.version || '')}</span>
-          <a class="btn outline" href="https://www.nexusmods.com/subnautica2/mods/${m.modId}" ${ext}>Details</a>
-          <a class="btn accent" href="https://www.nexusmods.com/subnautica2/mods/${m.modId}?tab=files" ${ext} data-ndownload="${m.modId}">Download</a></div>
+          <a class="btn outline" href="https://www.nexusmods.com/${info_().nexus}/mods/${m.modId}" ${ext}>Details</a>
+          <a class="btn accent" href="https://www.nexusmods.com/${info_().nexus}/mods/${m.modId}?tab=files" ${ext} data-ndownload="${m.modId}">Download</a></div>
       </div>`).join('')}</div>
       ${N.loading ? '<p class="empty">Loading…</p>' : N.results.length < N.count ? '<div class="mods-more"><button class="btn" data-modmore>Load more</button></div>' : N.results.length ? '' : '<p class="empty">No mods found.</p>'}
       <p class="meta mods-foot">Nexus Mods only lets apps download for premium members, so Download opens the mod's files on Nexus. Once it's downloaded, install it from the box at the top or under Installed.</p>`;
@@ -311,9 +321,14 @@ const Mods = (() => {
   function thunderList(el) {
     $('modsWarn').innerHTML = running() ? '<div class="mods-warn">The game is running. Close it to install, change or remove mods.</div>' : '';
     const ksp = GAME === '220200';
-    if (S.tab === 'installed') {
+    if (S.tab === 'installed') { el.innerHTML = tInstalled(); return; }
+    thunderBrowse(el);
+  }
+  function tInstalled() {
+    const ksp = GAME === '220200';
+    {
       const n = T.mods.filter(m => !m.loader).length;
-      el.innerHTML = `<div class="mods-tools"><span class="meta">${n} installed</span></div>
+      return `<div class="mods-tools"><span class="meta">${n} installed</span></div>
         ${T.error ? `<p class="empty">${esc(T.error)}</p>` : T.mods.length ? `<div class="mods-rows">${T.mods.map(m => `<div class="mod-row${m.enabled ? '' : ' off'}">
           <span class="mod-ico">${esc(m.name[0])}</span>
           <div class="mod-txt"><b>${esc(m.name)}</b><span>${esc(m.id)} · ${esc(m.version)}${m.loader ? ' · the mod loader itself, needed by other mods' : ''}</span></div>
@@ -321,8 +336,9 @@ const Mods = (() => {
           <button class="btn outline" data-tremove="${esc(m.id)}" data-name="${esc(m.name)}">Remove</button>`}</div>`).join('')}</div>`
           : `<div class="empty-page small"><h1>No mods yet</h1><p>${ksp ? 'Find mods in Browse. They install straight from SpaceDock into GameData.' : 'Find mods in Browse. HotSwap installs BepInEx and everything a mod needs automatically.'}</p></div>`}
         <p class="meta mods-foot">${ksp ? 'Mods go in GameData; turned-off mods move to GameData_off. SpaceDock doesn’t list what a mod needs, so check its page (many need ModuleManager). Mods can break saves: keep backups.' : `Mods go in the game’s BepInEx\plugins folder, laid out like r2modman. Turned-off mods move to BepInEx\plugins_off. In co-op, everyone usually needs the same mods. Mods can break saves: keep backups.`}</p>`;
-      return;
     }
+  }
+  function thunderBrowse(el) {
     const have = new Map(T.mods.map(m => [m.id, m]));
     el.innerHTML = `${T.error ? `<p class="empty">${esc(T.error)}</p>` : ''}
       <div class="mod-grid">${T.results.map(m => {
