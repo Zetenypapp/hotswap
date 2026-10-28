@@ -108,6 +108,22 @@ impl Session {
             self.m.p.write(addr, v);
         }
     }
+    /// Keeps a game number at `factor` times its own value (put back at 1).
+    fn scale(&mut self, addr: u64, factor: f32) {
+        if factor != 1.0 {
+            if !self.floats.contains_key(&addr) {
+                if let Some(base) = self.m.p.read::<f32>(addr) {
+                    self.floats.insert(addr, base);
+                }
+            }
+            if let Some(&base) = self.floats.get(&addr) {
+                self.hold_f32(addr, true, base * factor);
+            }
+        } else {
+            self.hold_f32(addr, false, 0.0);
+        }
+    }
+
     /// Raises a game number to at least `min` (no putting back: a refill).
     fn fill_f32(&mut self, addr: u64, min: f32) {
         if self.m.p.read::<f32>(addr).is_some_and(|v| v < min) {
@@ -289,6 +305,46 @@ impl Session {
                 if let Some(base) = self.ints.get_mut(&addr) {
                     *base = base.saturating_add(10_000);
                 }
+            }
+        }
+        // Walking and jumping, as a percentage of normal.
+        for (key, field) in [("walk-speed", "movementNormalSpeed"), ("jump-height", "jumpSpeed")] {
+            let factor = (v.get(key).copied().unwrap_or(100.0) / 100.0) as f32;
+            for w in self.objects("CMF", "AdvancedWalkerController", Duration::from_secs(5), 4) {
+                let Some(o) = self.f("CMF", "AdvancedWalkerController", field) else { break };
+                self.scale(w + o, factor);
+            }
+        }
+        // Time: UniStorm's time flow switch (Enabled 0, Disabled 1) and the time of day (0..1).
+        if let Some(sky) = self.static_obj("UniStorm", "UniStormSystem", "Instance") {
+            let (day, freeze) = (on("always-day"), on("freeze-time"));
+            if let Some(o) = self.f("UniStorm", "UniStormSystem", "TimeFlow") {
+                let addr = sky + o;
+                if day || freeze {
+                    if !self.ints.contains_key(&addr) {
+                        if let Some(x) = self.m.p.read::<i32>(addr) {
+                            self.ints.insert(addr, x);
+                        }
+                    }
+                    if self.m.p.read::<i32>(addr) != Some(1) {
+                        self.m.p.write(addr, 1i32);
+                    }
+                } else if let Some(x) = self.ints.remove(&addr) {
+                    self.m.p.write(addr, x);
+                }
+            }
+            if day {
+                if let Some(o) = self.f("UniStorm", "UniStormSystem", "m_TimeFloat") {
+                    if self.m.p.read::<f32>(sky + o).is_some_and(|t| (t - 0.5).abs() > 0.01) {
+                        self.m.p.write(sky + o, 0.5f32);
+                    }
+                }
+            }
+        }
+        // Demolition derby: your car takes no damage.
+        for d in self.objects("", "Event_DerbyDemolition_Vehicle", Duration::from_secs(10), 32) {
+            if let Some(o) = self.f("", "Event_DerbyDemolition_Vehicle", "canTakeDamage") {
+                self.hold_u8(d + o, on("no-derby-damage"), 0);
             }
         }
         if on("infinite-fuel") {
