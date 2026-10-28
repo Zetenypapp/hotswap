@@ -50,6 +50,19 @@ const CATALOG = {
     { name: 'Crafting', mods: [T('Free Crafting', 'Crafting and building need no materials.'), T('Unlock All Blueprints'), T('Instant Building'), T('Instant Scanning'), T('Fast Growing', 'Plants grow and eggs hatch almost instantly.')] },
     { name: 'World', mods: [T('Infinite Energy', 'Tools, vehicles and bases never run out of power.'), T('No Crush Depth', 'Vehicles can dive to any depth.'), T('Passive Creatures', "Creatures don't attack.")] },
   ]},
+  457140: { genre: 'Colony sim', cats: [
+    { name: 'Building', mods: [T('Instant Build', 'The developers’ debug mode: buildings, digging and deconstruction finish instantly and need no materials.'),
+      T('Sandbox Tools', 'Unlocks the game’s sandbox tools for this colony (press Shift+S in game). The game remembers the colony used sandbox.')] },
+    { name: 'Colony', mods: [T('Printing Pod Always Ready', 'New duplicants and care packages to pick from at any time.'), S('Max Game Speed', 100, 1000, 50, 100, 'Percent of the fastest speed setting. Click the speed 3 button again after changing it.')] },
+  ]},
+  1520370: { genre: 'Driving sim', cats: [
+    { name: 'Needs', mods: [T('No Hunger', 'Your poutine bar stays full.'), T('No Thirst', 'Your maple syrup bar stays full.'), T('No Sleep', 'Your energy bar stays full.'), T('No Anxiety', 'Your anxiety bar stays full.')] },
+    { name: 'Money', mods: [T('Unlimited Money', 'Keeps your cash topped up. Turning it off puts your balance back.'), A('Add $10,000')] },
+    { name: 'Vehicles', mods: [T('Infinite Fuel', 'Every fuel tank stays full.')] },
+  ]},
+  758690: { genre: 'Survival', cats: [
+    { name: 'Player', mods: [T('Immortality', 'The game’s own cheat: you can’t die.'), T('No Hunger', 'Hunger doesn’t go down.'), T('No Thirst', 'Thirst doesn’t go down.'), T('Infinite Stamina', 'Running and jumping cost no stamina.')] },
+  ]},
   848450: { genre: 'Underwater survival', cats: [
     { name: 'Player', mods: [T('Infinite Health', 'No damage, and health stays full.'), T('Infinite Oxygen'), T('No Hunger'), T('No Thirst'), T('No Freezing', 'Your body heat never drops, even outside in the cold.')] },
     { name: 'Movement', mods: [S('Swim Speed', 10, 500, 10, 100, 'Percent of normal swim speed.'), S('Walk Speed', 10, 500, 10, 100, 'Percent of normal walking speed.')] },
@@ -78,6 +91,9 @@ const LIVE = {
   220200: ['unlimited-fuel', 'unlimited-monopropellant', 'unlimited-flight-resources', 'invincible-craft', 'no-overheating', 'unlimited-funds', 'unlimited-research-points', 'max-reputation', 'any-contract',
     'add-100-000-funds', 'add-1-000-science', 'add-100-reputation', 'part-clipping', 'free-attachment', 'unlimited-inventory', 'gravity', 'show-biomes'],
   3241660: ['infinite-health', 'infinite-stamina', 'infinite-jumps', 'movement-speed', 'grab-strength', 'throw-strength', 'enemy-radar', 'infinite-battery', 'complete-extractions'],
+  457140: ['instant-build', 'sandbox-tools', 'printing-pod-always-ready', 'max-game-speed'],
+  1520370: ['no-hunger', 'no-thirst', 'no-sleep', 'no-anxiety', 'unlimited-money', 'add-10-000', 'infinite-fuel'],
+  758690: ['immortality', 'no-hunger', 'no-thirst', 'infinite-stamina'],
   848450: ['infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'no-freezing', 'swim-speed', 'walk-speed', 'free-crafting', 'unlock-all-blueprints',
     'fast-growing', 'infinite-energy', 'no-crush-depth', 'passive-creatures'],
   264710: [
