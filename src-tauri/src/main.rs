@@ -19,6 +19,7 @@ mod sn1map;
 mod sn2;
 mod steam;
 mod trainer;
+mod spacedock;
 mod thunderstore;
 mod ue;
 mod voice;
@@ -421,30 +422,56 @@ fn thunder_game(watch: &watch::Watch, game: &str, changing: bool) -> Result<(thu
     Ok((thunderstore::Game { root: watch.install_of(game).ok_or("Game isn't installed")? }, community))
 }
 
+// KSP's mods come from SpaceDock (spacedock.rs) through the same commands and shapes.
+fn ksp_game(watch: &watch::Watch, game: &str, changing: bool) -> Option<Result<spacedock::Game, String>> {
+    (game == ksp::KSP).then(|| {
+        if changing && watch.running().as_deref() == Some(game) {
+            return Err("Close the game first, then change mods".into());
+        }
+        Ok(spacedock::Game { root: watch.install_of(game).ok_or("Game isn't installed")? })
+    })
+}
+
 #[tauri::command]
 async fn ts_search(game: String, query: String, sort: String, offset: usize) -> Result<serde_json::Value, String> {
+    if game == ksp::KSP {
+        return tauri::async_runtime::spawn_blocking(move || spacedock::search(&query, &sort, offset)).await.map_err(|e| e.to_string())?;
+    }
     let (_, community) = THUNDER_GAMES.iter().find(|g| g.0 == game).ok_or("No Thunderstore mods for this game")?;
     tauri::async_runtime::spawn_blocking(move || thunderstore::search(community, &query, &sort, offset)).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn ts_list(watch: State<watch::Watch>, game: String) -> Result<Vec<thunderstore::Installed>, String> {
-    Ok(thunder_game(&watch, &game, false)?.0.list())
+fn ts_list(watch: State<watch::Watch>, game: String) -> Result<serde_json::Value, String> {
+    if let Some(g) = ksp_game(&watch, &game, false) {
+        return Ok(g?.list());
+    }
+    serde_json::to_value(thunder_game(&watch, &game, false)?.0.list()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn ts_install(watch: State<'_, watch::Watch>, game: String, id: String) -> Result<Vec<String>, String> {
+    if let Some(g) = ksp_game(&watch, &game, true) {
+        let g = g?;
+        return tauri::async_runtime::spawn_blocking(move || g.install(&id)).await.map_err(|e| e.to_string())?;
+    }
     let (g, community) = thunder_game(&watch, &game, true)?;
     tauri::async_runtime::spawn_blocking(move || g.install(community, &id)).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 fn ts_set_enabled(watch: State<watch::Watch>, game: String, id: String, enabled: bool) -> Result<(), String> {
+    if let Some(g) = ksp_game(&watch, &game, true) {
+        return g?.set_enabled(&id, enabled);
+    }
     thunder_game(&watch, &game, true)?.0.set_enabled(&id, enabled)
 }
 
 #[tauri::command]
 fn ts_remove(watch: State<watch::Watch>, game: String, id: String) -> Result<(), String> {
+    if let Some(g) = ksp_game(&watch, &game, true) {
+        return g?.remove(&id);
+    }
     thunder_game(&watch, &game, true)?.0.remove(&id)
 }
 

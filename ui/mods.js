@@ -6,6 +6,7 @@ const Mods = (() => {
     { id: '526870', source: 'ficsit.app', url: 'https://ficsit.app' },
     { id: '1962700', source: 'Nexus Mods', url: 'https://www.nexusmods.com/subnautica2', nexus: 'subnautica2' },
     { id: '3241660', source: 'Thunderstore', url: 'https://thunderstore.io/c/repo', thunder: 'repo' },
+    { id: '220200', source: 'SpaceDock', url: 'https://spacedock.info', thunder: 'ksp' },
   ];
   let GAME = null; // the game whose mod page is open, or null for the game grid
   // Installed mods are only read for Satisfactory, the one game with a mod source so far.
@@ -307,6 +308,7 @@ const Mods = (() => {
   }
   function thunderList(el) {
     $('modsWarn').innerHTML = running() ? '<div class="mods-warn">The game is running. Close it to install, change or remove mods.</div>' : '';
+    const ksp = GAME === '220200';
     if (S.tab === 'installed') {
       const n = T.mods.filter(m => !m.loader).length;
       el.innerHTML = `<div class="mods-tools"><span class="meta">${n} installed</span></div>
@@ -315,8 +317,8 @@ const Mods = (() => {
           <div class="mod-txt"><b>${esc(m.name)}</b><span>${esc(m.id)} · ${esc(m.version)}${m.loader ? ' · the mod loader itself, needed by other mods' : ''}</span></div>
           ${m.loader ? '' : `<button class="switch" role="switch" aria-checked="${m.enabled}" data-ttoggle="${esc(m.id)}" title="${m.enabled ? 'Turn off (keeps it installed)' : 'Turn on'}"></button>
           <button class="btn outline" data-tremove="${esc(m.id)}" data-name="${esc(m.name)}">Remove</button>`}</div>`).join('')}</div>`
-          : '<div class="empty-page small"><h1>No mods yet</h1><p>Find mods in Browse. HotSwap installs BepInEx and everything a mod needs automatically.</p></div>'}
-        <p class="meta mods-foot">Mods go in the game’s BepInEx\plugins folder, laid out like r2modman. Turned-off mods move to BepInEx\plugins_off. In co-op, everyone usually needs the same mods. Mods can break saves: keep backups.</p>`;
+          : `<div class="empty-page small"><h1>No mods yet</h1><p>${ksp ? 'Find mods in Browse. They install straight from SpaceDock into GameData.' : 'Find mods in Browse. HotSwap installs BepInEx and everything a mod needs automatically.'}</p></div>`}
+        <p class="meta mods-foot">${ksp ? 'Mods go in GameData; turned-off mods move to GameData_off. SpaceDock doesn’t list what a mod needs, so check its page (many need ModuleManager). Mods can break saves: keep backups.' : `Mods go in the game’s BepInEx\plugins folder, laid out like r2modman. Turned-off mods move to BepInEx\plugins_off. In co-op, everyone usually needs the same mods. Mods can break saves: keep backups.`}</p>`;
       return;
     }
     const have = new Map(T.mods.map(m => [m.id, m]));
@@ -328,7 +330,7 @@ const Mods = (() => {
           <div class="mod-txt"><b>${esc(m.name)}</b><span>by ${esc(m.owner)} · ${fmtN(m.downloads)} downloads</span></div></div>
         <p>${esc(m.description)}</p>
         <div class="mod-foot"><span class="meta">${esc(m.version)}</span>
-          <a class="btn outline" href="https://thunderstore.io/c/repo/p/${esc(m.owner)}/${esc(m.id.slice(m.owner.length + 1))}/" ${ext}>Details</a>
+          <a class="btn outline" href="${esc(m.page)}" ${ext}>Details</a>
           ${T.busy === m.id ? '<span class="mod-prog">Installing…</span>'
             : h && h.version === m.version ? `<span class="mod-have">Installed ${esc(h.version)}</span>`
             : `<button class="btn accent" data-tinstall="${esc(m.id)}" data-name="${esc(m.name)}">${h ? `Update to ${esc(m.version)}` : 'Install'}</button>`}</div>

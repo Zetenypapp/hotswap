@@ -28,6 +28,7 @@ pub struct Package {
     rating: u64,
     version: String,
     updated: String,
+    page: String,
     #[serde(skip)]
     url: String,
     #[serde(skip)]
@@ -76,6 +77,7 @@ fn packages(community: &str) -> Result<Vec<Package>, String> {
                 rating: p["rating_score"].as_u64().unwrap_or(0),
                 version: last["version_number"].as_str().unwrap_or("").to_string(),
                 updated: p["date_updated"].as_str().unwrap_or("").to_string(),
+                page: p["package_url"].as_str().unwrap_or("").to_string(),
                 url: last["download_url"].as_str()?.to_string(),
                 // "Owner-Name-1.2.3" -> "Owner-Name"
                 deps: last["dependencies"].as_array().map(|d| d.iter().filter_map(|x| x.as_str()).map(|s| s.rsplitn(2, '-').nth(1).unwrap_or(s).to_string()).collect()).unwrap_or_default(),
