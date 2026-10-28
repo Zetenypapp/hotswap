@@ -28,6 +28,8 @@
   .note .bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--c); border-radius: 0 3px 3px 0; transition: width .25s; }
   .note .ic { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: rgba(255, 255, 255, .08); color: var(--muted); flex: none; }
   .note.is-on .ic { background: var(--c); color: var(--ink); }
+  .card .mi { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; flex: none; background: rgba(255, 255, 255, .07); color: var(--muted); }
+  .card.on .mi { background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c); }
 
   /* Cheat sheet */
   #sheet { width: 400px; max-height: 70vh; overflow: hidden; padding: 12px; border-radius: 20px; animation: in .16s ease-out; }
@@ -192,7 +194,7 @@
     if (p.kind === 'discord') return dcToast(p);
     const n = document.createElement('div');
     n.className = 'note glass' + (p.on ? ' is-on' : '');
-    n.innerHTML = `<span class="ic">${BOLT}</span><span class="t"><b>${esc(p.title)}</b><span>${esc(p.game)}</span></span><span class="v${p.on ? ' on' : ''}">${esc(p.value)}</span>`
+    n.innerHTML = `<span class="ic">${modIcon(p.title)}</span><span class="t"><b>${esc(p.title)}</b><span>${esc(p.game)}</span></span><span class="v${p.on ? ' on' : ''}">${esc(p.value)}</span>`
       + (p.pct != null ? `<span class="bar" style="width:${Math.max(2, Math.min(100, p.pct))}%"></span>` : '');
     $('toasts').prepend(n);
     while ($('toasts').children.length > 4) $('toasts').lastChild.remove();
@@ -207,6 +209,58 @@
     $('toasts').prepend(n);
     while ($('toasts').children.length > 4) $('toasts').lastChild.remove();
     setTimeout(() => { n.classList.add('out'); setTimeout(() => n.remove(), 320); }, 5000);
+  }
+
+  // Mod icons, picked from the mod's name (first match wins; the bolt otherwise).
+  const ICON_PATHS = {
+    heart: '<path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7Z"/>',
+    food: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>',
+    drink: '<path d="M6 8l1.75 12.28a2 2 0 0 0 2 1.72h4.54a2 2 0 0 0 2-1.72L18 8M5 8h14M7 15a6.47 6.47 0 0 1 5 0 6.47 6.47 0 0 0 5 0M12 8l1-6h2"/>',
+    air: '<path d="M12.8 19.6A2 2 0 1 0 14 16H2M17.5 8a2.5 2.5 0 1 1 2 4H2M9.8 4.4A2 2 0 1 1 11 8H2"/>',
+    battery: '<rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2M6 11v2M10 11v2"/>',
+    fuel: '<path d="M3 22h12M4 9h10M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 4 0V9.83a2 2 0 0 0-.59-1.42L18 5"/>',
+    money: '<circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .9-3 2s1.3 1.7 3 2 3 .9 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6v2M12 16v2"/>',
+    speed: '<path d="M12 14l4-4M3.34 19a10 10 0 1 1 17.32 0"/>',
+    jump: '<path d="M12 19V5M5 12l7-7 7 7"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+    cold: '<path d="M12 2v20M2 12h20M4.9 4.9l14.2 14.2M19.1 4.9 4.9 19.1"/>',
+    build: '<path d="M2 20h20M5 20V9l7-5 7 5v11M9 20v-6h6v6"/>',
+    flask: '<path d="M9 3h6M10 3v6L4 20a1 1 0 0 0 .9 1.5h14.2A1 1 0 0 0 20 20l-6-11V3"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>',
+    smile: '<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>',
+    pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+    box: '<path d="M21 8l-9-5-9 5v8l9 5 9-5V8ZM3 8l9 5 9-5M12 13v8"/>',
+    star: '<path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+  };
+  const ICON_RULES = [
+    [/health|invincib|immortal|god mode|no damage|heal/i, 'heart'],
+    [/hunger|food|calorie|poutine|eat/i, 'food'],
+    [/thirst|water|drink|syrup/i, 'drink'],
+    [/oxygen|breath|air/i, 'air'],
+    [/fuel|gas/i, 'fuel'],
+    [/battery|energy|power|electric/i, 'battery'],
+    [/money|cash|\$|fund|credit|coin|cost|price/i, 'money'],
+    [/jump/i, 'jump'],
+    [/speed|walk|run|swim|sprint|fast|movement/i, 'speed'],
+    [/always day|daylight|noon/i, 'sun'],
+    [/time|clock|day|night/i, 'clock'],
+    [/sleep|fatigue|stamina|tired/i, 'moon'],
+    [/freez|cold|temperature|heat/i, 'cold'],
+    [/build|construct|place/i, 'build'],
+    [/research|science|tech|unlock|blueprint|scan/i, 'flask'],
+    [/stress|anxiety|sanity|mood|passive|peaceful/i, 'smile'],
+    [/crush|pressure|armor|shield|protect|crash|derby|damage/i, 'shield'],
+    [/teleport|waypoint|position/i, 'pin'],
+    [/item|inventory|resource|craft|stack|cargo|grab|throw/i, 'box'],
+    [/reputation|xp|level|star/i, 'star'],
+    [/radar|map|reveal|visib|see/i, 'eye'],
+  ];
+  function modIcon(name, size = 16) {
+    const k = ICON_RULES.find(([re]) => re.test(name || ''))?.[1];
+    return k ? `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[k]}</svg>` : BOLT;
   }
 
   /* ---------- Cheat sheet ---------- */
@@ -310,7 +364,7 @@
       : m.type === 'slider' ? `<span class="val">${esc(m.shown)}</span>` : '<span class="apply">Apply</span>';
     const keys = m.keys.map(k => `<kbd>${esc(k)}</kbd>`).join('');
     return `<div class="card${m.on ? ' on' : ''}${i === sel ? ' sel' : ''}${locked ? ' locked' : ''}" data-i="${i}">
-      <div class="row"><span class="nm">${m.pinned ? '📌 ' : ''}${esc(m.name)}</span>${keys}${ctl}</div>
+      <div class="row"><span class="mi">${modIcon(m.name, 15)}</span><span class="nm">${m.pinned ? '📌 ' : ''}${esc(m.name)}</span>${keys}${ctl}</div>
       ${m.type === 'slider' ? `<input type="range" min="${m.min}" max="${m.max}" step="${m.step}" value="${m.value}" style="--p:${pct}" data-range="${i}"${locked ? ' disabled' : ''}>` : ''}
       ${m.info && m.type !== 'slider' ? `<span class="info">${esc(m.info)}</span>` : ''}</div>`;
   }

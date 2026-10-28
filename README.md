@@ -81,6 +81,20 @@ Maps → Satisfactory opens a map drawn from your running game:
 
 **Subnautica** gets a map rendered from the game's own terrain files: a satellite-style view of the seabed (or a depth map), your live position and heading, and pins.
 
+## 🎛️ In-game overlay
+
+Press **Insert** in game for a full menu over the game: every mod as a card with its icon, categories, profiles, pause and all-off, usable with the mouse or arrow keys. An optional **HUD** keeps your active mods, session time, CPU, RAM and the clock in a corner.
+
+The overlay is its own see-through window on top of the game, so nothing is injected and it can't trip anti-cheat. Run games in **borderless or windowed** mode; exclusive fullscreen draws over it.
+
+## 💬 Discord
+
+- 🟢 **Status on your profile:** "Playing HotSwap" with the game and how many mods are on (turn it off in Settings)
+- 🎙️ **Mute and deafen keybinds:** buttons in the overlay that press your Discord keybinds
+- 🔊 **Discord voice (beta, opt-in):** who's in your call, who's talking (also on the HUD), real mute, deafen and leave, per-person volume, mic and headphone volume, noise suppression, switching voice channels, and Discord notifications as overlay toasts
+
+Discord only gives voice access to apps it has approved, so Discord voice connects as **Discord's own StreamKit overlay**, the same way open-source overlays like [Discover](https://github.com/trigg/Discover) do. Discord asks you once to authorize "StreamKit", and the token stays on your PC. It's unofficial and may stop working if Discord changes it; everything else keeps working.
+
 ## 🧩 Mod loader
 
 Mods has a page per game. For Satisfactory, Browse searches every mod on [ficsit.app](https://ficsit.app) and installs it with one click, together with the Satisfactory Mod Loader and any other mods it needs. Downloads are checked against ficsit.app's SHA-256 hashes. Installed mods can be updated, turned off or removed. It uses the same folders as Satisfactory Mod Manager, so both work side by side. For Subnautica 2, HotSwap browses Nexus Mods and installs the .zip, .7z or .pak you download (UE4SS, Lua and pak mods).
@@ -100,7 +114,8 @@ Mods has a page per game. For Satisfactory, Browse searches every mod on [ficsit
 - ⏱️ **Playtime and sessions:** Steam hours plus time played with HotSwap
 - 🔍 **Ctrl+K palette:** jump to any game, page, mod or action
 - 📍 **Teleport hotkeys:** save your position and jump back to it
-- 🔊 **Sounds and in-game overlay** when mods change, in the corner you pick, plus a hotkey cheat sheet (hold Ctrl+F1). The overlay is its own window over the game (nothing is injected), so run games in **borderless or windowed** mode; exclusive fullscreen covers it.
+- 🔊 **Sounds and toasts** when mods change, with an icon per mod, in the corner you pick, plus a hotkey cheat sheet (hold Ctrl+F1)
+- 🗂️ **Sidebar split:** games with HotSwap mods on top, the rest of your library below
 - 🔄 **Auto-updates:** signed updates from GitHub releases, installed with one click
 - 🎨 **Accent colors, tray icon, start with Windows**
 

@@ -203,13 +203,13 @@ impl Session {
     }
 
     fn handle(&mut self, v: Value) -> Result<(), String> {
-        crate::trainer::log(&format!("voice: got {}", v.to_string().chars().take(160).collect::<String>()));
         let cmd = v["cmd"].as_str().unwrap_or("");
         let evt = v["evt"].as_str().unwrap_or("");
         let data = &v["data"];
         let purpose = v["nonce"].as_str().and_then(|n| self.pending.remove(n)).unwrap_or("");
         if evt == "ERROR" {
             let msg = data["message"].as_str().unwrap_or("Discord said no").to_string();
+            crate::trainer::log(&format!("voice: {cmd} refused: {msg}"));
             return match purpose {
                 "auth" => {
                     // Saved token expired or was revoked: ask again.
