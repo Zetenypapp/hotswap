@@ -53,6 +53,9 @@ const CATALOG = {
   457140: { genre: 'Colony sim', cats: [
     { name: 'Building', mods: [T('Instant Build', 'The developers’ debug mode: buildings, digging and deconstruction finish instantly and need no materials.'),
       T('Sandbox Tools', 'Unlocks the game’s sandbox tools for this colony (press Shift+S in game). The game remembers the colony used sandbox.')] },
+    { name: 'Duplicants', mods: [T('No Stress'), T('No Hunger', 'Calories stay as full as they’ve been.'), T('Infinite Breath', 'Duplicants never run out of breath.'),
+      T('No Fatigue', 'Stamina stays full: no need to sleep.'), T('No Bladder', 'No bathroom breaks.'), T('Full Health', 'Health stays at its best.')] },
+    { name: 'Research', mods: [T('Instant Research', 'The current research finishes as soon as a duplicant works on it.')] },
     { name: 'Colony', mods: [T('Printing Pod Always Ready', 'New duplicants and care packages to pick from at any time.'), S('Max Game Speed', 100, 1000, 50, 100, 'Percent of the fastest speed setting. Click the speed 3 button again after changing it.')] },
   ]},
   1520370: { genre: 'Driving sim', cats: [
@@ -95,7 +98,7 @@ const LIVE = {
   220200: ['unlimited-fuel', 'unlimited-monopropellant', 'unlimited-flight-resources', 'invincible-craft', 'no-overheating', 'unlimited-funds', 'unlimited-research-points', 'max-reputation', 'any-contract',
     'add-100-000-funds', 'add-1-000-science', 'add-100-reputation', 'part-clipping', 'free-attachment', 'unlimited-inventory', 'gravity', 'show-biomes'],
   3241660: ['infinite-health', 'infinite-stamina', 'infinite-jumps', 'movement-speed', 'grab-strength', 'throw-strength', 'enemy-radar', 'infinite-battery', 'complete-extractions'],
-  457140: ['instant-build', 'sandbox-tools', 'printing-pod-always-ready', 'max-game-speed'],
+  457140: ['instant-build', 'sandbox-tools', 'printing-pod-always-ready', 'max-game-speed', 'no-stress', 'no-hunger', 'infinite-breath', 'no-fatigue', 'no-bladder', 'full-health', 'instant-research'],
   1520370: ['no-hunger', 'no-thirst', 'no-sleep', 'no-anxiety', 'unlimited-money', 'add-10-000', 'infinite-fuel'],
   758690: ['immortality', 'no-hunger', 'no-thirst', 'infinite-stamina', 'movement-speed', 'infinite-oxygen', 'infinite-suit-energy', 'no-radiation', 'free-building', 'infinite-rover-battery'],
   848450: ['infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'no-freezing', 'swim-speed', 'walk-speed', 'free-crafting', 'unlock-all-blueprints',

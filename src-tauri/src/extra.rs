@@ -28,6 +28,8 @@ pub struct Session {
     found: HashMap<String, (Vec<u64>, Instant)>,
     /// The highest a game value has been this session (refills go back up to it).
     best: HashMap<u64, f32>,
+    /// Names read from game objects, by address.
+    names: HashMap<u64, String>,
 }
 
 /// Where a survival kit Value<float> keeps its number (after two delegate fields).
@@ -35,7 +37,7 @@ const VALUE_CURRENT: u64 = 0x20;
 
 impl Session {
     pub fn new(game: &'static str, m: Mono) -> Session {
-        Session { game, m, off: HashMap::new(), bools: HashMap::new(), floats: HashMap::new(), ints: HashMap::new(), found: HashMap::new(), best: HashMap::new() }
+        Session { game, m, off: HashMap::new(), bools: HashMap::new(), floats: HashMap::new(), ints: HashMap::new(), found: HashMap::new(), best: HashMap::new(), names: HashMap::new() }
     }
 
     fn f(&mut self, ns: &str, class: &str, field: &str) -> Option<u64> {
@@ -143,6 +145,18 @@ impl Session {
                 }
             }
         }
+        self.oni_duplicants(v);
+        // Instant research: the current research's progress is filled, so it completes the next time
+        // a duplicant adds a point.
+        if on("instant-research") {
+            if let Some(r) = self.static_obj("", "Research", "Instance") {
+                if let Some(inv) = self.ptr(r, "", "Research", "activeResearch").and_then(|t| self.ptr(t, "", "TechInstance", "progressInventory")) {
+                    if let Some(dict) = self.ptr(inv, "", "ResearchPointInventory", "PointsByTypeID") {
+                        self.fill_dict_floats(dict, 1_000_000.0);
+                    }
+                }
+            }
+        }
         // The fastest speed button, as a percentage of its normal speed.
         if let (Some(scr), Some(o)) = (self.static_obj("", "SpeedControlScreen", "<Instance>k__BackingField"), self.f("", "SpeedControlScreen", "ultraSpeed")) {
             let factor = (v.get("max-game-speed").copied().unwrap_or(100.0) / 100.0) as f32;
@@ -161,6 +175,77 @@ impl Session {
             }
         }
         Ok(true)
+    }
+
+    /// Duplicant needs: each is an AmountInstance (value) whose Amount has an Id ("Stress", ...).
+    /// Only amounts on duplicants are touched: their game objects are the ones that have Stress.
+    fn oni_duplicants(&mut self, v: &HashMap<String, f64>) {
+        let on = |k: &str| v.get(k).is_some_and(|x| *x != 0.0);
+        const WANT: [(&str, &str, bool); 6] = [
+            ("no-stress", "Stress", false), ("no-bladder", "Bladder", false),
+            ("no-hunger", "Calories", true), ("infinite-breath", "Breath", true), ("no-fatigue", "Stamina", true), ("full-health", "HitPoints", true),
+        ];
+        if !WANT.iter().any(|(k, _, _)| on(k)) {
+            return;
+        }
+        const AI: &str = "Klei.AI";
+        let (Some(vo), Some(mo), Some(go), Some(io)) = (
+            self.f(AI, "AmountInstance", "value"),
+            self.f(AI, "AmountInstance", "modifier"),
+            self.f(AI, "AmountInstance", "<gameObject>k__BackingField"),
+            self.f(AI, "Amount", "Id"),
+        ) else { return };
+        let amounts = self.objects(AI, "AmountInstance", Duration::from_secs(15), 20_000);
+        // Amount names, read once per Amount.
+        let mut list = Vec::with_capacity(amounts.len());
+        for a in amounts {
+            let (Some(amount), Some(obj)) = (self.m.p.ptr(a + mo), self.m.p.ptr(a + go)) else { continue };
+            let id = match self.names.get(&amount) {
+                Some(n) => n.clone(),
+                None => {
+                    let n = self.m.p.ptr(amount + io).map(|s| self.m.string(s)).unwrap_or_default();
+                    self.names.insert(amount, n.clone());
+                    n
+                }
+            };
+            list.push((a, obj, id));
+        }
+        let dupes: std::collections::HashSet<u64> = list.iter().filter(|(_, _, id)| id == "Stress").map(|(_, o, _)| *o).collect();
+        for (a, obj, id) in list {
+            if !dupes.contains(&obj) {
+                continue;
+            }
+            let Some(&(k, _, up)) = WANT.iter().find(|(_, name, _)| *name == id) else { continue };
+            let addr = a + vo;
+            let Some(cur) = self.m.p.read::<f32>(addr).filter(|x| x.is_finite()) else { continue };
+            if up {
+                // Kept at the highest it's been (needs bars start full).
+                let best = self.best.entry(addr).or_insert(cur);
+                *best = best.max(cur);
+                let b = *best;
+                if on(k) && cur < b {
+                    self.m.p.write(addr, b);
+                }
+            } else if on(k) && cur > 0.0 {
+                self.m.p.write(addr, 0.0f32);
+            }
+        }
+    }
+
+    /// Sets every value of a Dictionary<string, float> to at least `min` (Mono's layout: entries
+    /// array at +0x18; each entry is hash, next, key, value: 24 bytes from +0x20 in the array).
+    fn fill_dict_floats(&mut self, dict: u64, min: f32) {
+        let Some(entries) = self.m.p.ptr(dict + 0x18).filter(|&e| e != 0) else { return };
+        let Some(len) = self.m.p.read::<u64>(entries + 0x18).filter(|&l| l > 0 && l < 64) else { return };
+        for i in 0..len {
+            let e = entries + 0x20 + i * 24;
+            // Unused slots have no key.
+            if self.m.p.ptr(e + 8).is_some_and(|k| k != 0) {
+                if self.m.p.read::<f32>(e + 16).is_some_and(|x| x.is_finite() && x < min) {
+                    self.m.p.write(e + 16, min);
+                }
+            }
+        }
     }
 
     fn mon_bazou(&mut self, v: &HashMap<String, f64>, actions: &[String]) -> Result<bool, String> {
