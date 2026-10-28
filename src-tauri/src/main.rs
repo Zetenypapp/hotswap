@@ -20,6 +20,7 @@ mod sn2;
 mod steam;
 mod trainer;
 mod ue;
+mod voice;
 mod vdf;
 mod watch;
 mod world;
@@ -641,6 +642,24 @@ fn press_keys(combo: String) -> Result<(), String> {
     inputs.extend(keys.iter().rev().map(|&k| ev(k, KEYEVENTF_KEYUP)));
     let sent = unsafe { SendInput(inputs.len() as u32, inputs.as_ptr(), std::mem::size_of::<INPUT>() as i32) };
     if sent as usize == inputs.len() { Ok(()) } else { Err("Windows blocked the key press".into()) }
+}
+
+/// Discord voice (beta, see voice.rs): connect, disconnect, the current call, and mute or deafen.
+#[tauri::command]
+fn voice_start(voice: State<voice::Voice>) {
+    voice.start();
+}
+#[tauri::command]
+fn voice_stop(voice: State<voice::Voice>) {
+    voice.stop();
+}
+#[tauri::command]
+fn voice_state(voice: State<voice::Voice>) -> voice::State {
+    voice.state()
+}
+#[tauri::command]
+fn voice_set(voice: State<voice::Voice>, mute: Option<bool>, deaf: Option<bool>) -> Result<(), String> {
+    voice.set(mute, deaf)
 }
 
 /// CPU and memory use in percent, for the overlay HUD.
@@ -1325,6 +1344,7 @@ fn main() {
         .manage(Mini::default())
         .manage(Stats::default())
         .manage(discord::Discord::default())
+        .manage(voice::Voice::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -1364,7 +1384,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
             fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart,
-            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, overlay_menu, overlay_input, press_keys, system_stats, discord_presence, radar_show, set_mini, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
+            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, overlay_menu, overlay_input, press_keys, voice_start, voice_stop, voice_state, voice_set, system_stats, discord_presence, radar_show, set_mini, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running HotSwap");

@@ -28,6 +28,7 @@ sha2 = "0.10"
 zip = { version = "4", default-features = false, features = ["deflate"] }
 tauri-plugin-dialog = "2"
 sevenz-rust = "0.6"
+tungstenite = "0.24"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"

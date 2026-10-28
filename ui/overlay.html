@@ -80,6 +80,16 @@
   .dc-row kbd { font: inherit; font-size: 12px; font-weight: 800; padding: 6px 10px; border-radius: 9px; background: rgba(255, 255, 255, .1); cursor: pointer; }
   .dc-row kbd.rec { background: #5865f2; }
   .dc-note { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 4px 2px 0; }
+  .dc-call { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 14px; background: rgba(88, 101, 242, .12); }
+  .dc-call .hd2 { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; color: var(--soft); }
+  .dc-call .hd2 .sp { flex: 1; }
+  .dc-ppl { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
+  .dc-p { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 11px; background: rgba(255, 255, 255, .05); min-width: 0; }
+  .dc-p img { width: 30px; height: 30px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px transparent; transition: box-shadow .1s; }
+  .dc-p.talk img { box-shadow: 0 0 0 2px #23a55a; }
+  .dc-p b { flex: 1; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dc-p .ic { font-size: 11px; font-weight: 800; color: #f23f43; }
+  .btn.red { background: #f23f43; color: #fff; }
   .m-bar { display: flex; align-items: center; gap: 8px; padding: 0 18px 12px; flex-wrap: wrap; }
   .tab { height: 30px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
   .tab:hover { color: var(--fg); background: rgba(255, 255, 255, .06); }
@@ -136,6 +146,16 @@
   const DC_KEYS = [['mute', 'Toggle Mute', 'Ctrl+Shift+F9'], ['deafen', 'Toggle Deafen', 'Ctrl+Shift+F10']];
   const dcCombo = id => { try { const k = localStorage.getItem('hs.dc.' + id); if (k) return k; } catch {} return DC_KEYS.find(k => k[0] === id)[2]; };
   let view = 'mods', recording = null;
+  // Discord voice (beta): connects as Discord's StreamKit overlay; on once the user opts in.
+  let voice = null;
+  const voiceOn = () => { try { return localStorage.getItem('hs.dc.voice') === '1'; } catch { return false; } };
+  const voiceOpt = on => { try { localStorage.setItem('hs.dc.voice', on ? '1' : '0'); } catch {} };
+  if (voiceOn()) invoke('voice_start').catch(() => {});
+  setInterval(async () => {
+    if (!menu || view !== 'discord' || !voiceOn()) return;
+    const v = await invoke('voice_state').catch(() => null);
+    if (JSON.stringify(v) !== JSON.stringify(voice)) { voice = v; renderMenu(); }
+  }, 400);
   const BOLT = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>';
 
   function theme(p) {
@@ -219,11 +239,22 @@
     renderFoot();
     $('menu').querySelector('.card.sel')?.scrollIntoView({ block: 'nearest' });
   }
+  function voicePanel() {
+    if (!voiceOn()) return `<div class="dc-row"><div class="t"><b>See your call (beta)</b><span>Who’s in your voice channel, who’s talking, and real mute and deafen. Discord only lets its approved apps do this, so HotSwap connects as Discord’s own StreamKit overlay: Discord will ask once to authorize “StreamKit”. Unofficial, so it may stop working if Discord changes it.</span></div><button class="btn" data-voice="on">Connect</button></div>`;
+    const v = voice || { status: 'connecting', message: 'Connecting…', members: [] };
+    if (v.status !== 'ready') return `<div class="dc-row"><div class="t"><b>${v.status === 'error' ? 'Discord voice: not connected' : v.status === 'authorizing' ? 'Check Discord' : 'Connecting…'}</b><span>${esc(v.message)}</span></div><button class="btn" data-voice="off">Turn off</button></div>`;
+    const ppl = v.members.map(m => `<div class="dc-p${m.speaking ? ' talk' : ''}"><img src="${esc(m.avatar)}" alt=""><b>${esc(m.name)}</b>${m.deaf ? '<span class="ic">DEAF</span>' : m.mute ? '<span class="ic">MUTED</span>' : ''}</div>`).join('');
+    return `<div class="dc-call"><div class="hd2">${v.channel ? `🔊 ${esc(v.channel)}` : 'Not in a voice channel'}<span class="sp"></span>
+        <button class="btn${v.mute ? ' red' : ''}" data-vset="mute">${v.mute ? 'Unmute' : 'Mute'}</button><button class="btn${v.deaf ? ' red' : ''}" data-vset="deaf">${v.deaf ? 'Undeafen' : 'Deafen'}</button>
+        <button class="btn" data-voice="off" title="Disconnect HotSwap from Discord voice">Turn off</button></div>
+        ${ppl ? `<div class="dc-ppl">${ppl}</div>` : ''}</div>`;
+  }
   function discordPanel() {
-    return `<div class="dc-panel">${DC_KEYS.map(([id, name]) => `<div class="dc-row"><div class="t"><b>${name}</b><span>Presses your Discord keybind</span></div>
+    const live = voiceOn() && voice?.status === 'ready';
+    return `<div class="dc-panel">${voicePanel()}${live ? '' : DC_KEYS.map(([id, name]) => `<div class="dc-row"><div class="t"><b>${name}</b><span>Presses your Discord keybind</span></div>
         <kbd class="${recording === id ? 'rec' : ''}" data-rec="${id}" title="Click, then press new keys">${recording === id ? 'Press keys…' : esc(dcCombo(id))}</kbd>
         <button class="btn" data-dc="${id}">${name.replace('Toggle ', '')}</button></div>`).join('')}
-      <p class="dc-note">In Discord, open Settings → Keybinds and add <b>Toggle Mute</b> and <b>Toggle Deafen</b> with the same keys shown here. Click a key to change it. HotSwap can’t see whether you’re muted, so the buttons only toggle.</p></div>`;
+      ${live ? '' : `<p class="dc-note">In Discord, open Settings → Keybinds and add <b>Toggle Mute</b> and <b>Toggle Deafen</b> with the same keys shown here. Click a key to change it. HotSwap can’t see whether you’re muted, so the buttons only toggle.</p>`}</div>`;
   }
   function card(m, i) {
     const locked = !m.live || menu.paused;
@@ -260,9 +291,11 @@
     if (!menu) return;
     const t = e.target;
     if (t.matches('input[type=range]')) return;
-    const v = t.closest('[data-view],[data-rec],[data-dc]');
+    const v = t.closest('[data-view],[data-rec],[data-dc],[data-voice],[data-vset]');
     if (v) {
-      if (v.dataset.view) { view = v.dataset.view; recording = null; }
+      if (v.dataset.voice) { const on = v.dataset.voice === 'on'; voiceOpt(on); voice = null; invoke(on ? 'voice_start' : 'voice_stop').catch(() => {}); }
+      else if (v.dataset.vset) { const k = v.dataset.vset; if (voice) { voice[k] = !voice[k]; invoke('voice_set', { [k]: voice[k] }).catch(() => {}); } }
+      else if (v.dataset.view) { view = v.dataset.view; recording = null; }
       else if (v.dataset.rec) recording = recording === v.dataset.rec ? null : v.dataset.rec;
       else invoke('press_keys', { combo: dcCombo(v.dataset.dc) }).catch(() => {});
       return renderMenu();
