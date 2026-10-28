@@ -1,4 +1,4 @@
-// Hotswap layer on top of the Satisfactory Calculator interactive map (runs inside the map window).
+// HotSwap layer on top of the Satisfactory Calculator interactive map (runs inside the map window).
 // Adds a live "you are here" marker, right-click teleport, and saved pins. The site's own map
 // (zoom, layers, resources) is untouched; we only draw on its Leaflet map.
 (() => {
@@ -44,7 +44,7 @@
     const status = document.getElementById('hs-status');
     if (!p) {
       if (me) { me.remove(); me = null; }
-      status.textContent = 'Not connected · start Satisfactory with Hotswap open';
+      status.textContent = 'Not connected · start Satisfactory with HotSwap open';
       status.className = 'hs-off';
       return;
     }
@@ -146,7 +146,7 @@
     const d = document.createElement('div');
     d.id = 'hs-panel';
     d.innerHTML = `
-      <header><span class="hs-logo">⇄</span><b>Hotswap</b><button id="hs-min" title="Collapse">–</button></header>
+      <header><span class="hs-logo">⇄</span><b>HotSwap</b><button id="hs-min" title="Collapse">–</button></header>
       <div id="hs-body">
         <div id="hs-status" class="hs-off">Connecting…</div>
         <div class="hs-btns">

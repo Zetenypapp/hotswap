@@ -1,5 +1,5 @@
 //! Reads Unity games that run on Mono. Instead of guessing Mono's internal layouts (they change
-//! between Unity versions), Hotswap asks Mono itself: it calls the runtime's exported API
+//! between Unity versions), HotSwap asks Mono itself: it calls the runtime's exported API
 //! (mono_class_from_name, mono_class_get_field_from_name, ...) from a short-lived thread in the
 //! game, attached to Mono for the call. The answers (field offsets, static field addresses, class
 //! vtables) are cached, and the mods themselves are plain memory reads and writes.

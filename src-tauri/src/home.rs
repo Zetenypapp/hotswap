@@ -51,7 +51,7 @@ pub struct Home {
 fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(8))
-        .user_agent("Hotswap/0.1 (desktop game companion)")
+        .user_agent("HotSwap/0.1 (desktop game companion)")
         .build()
 }
 

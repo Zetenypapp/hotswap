@@ -1,4 +1,4 @@
-//! Reads what the Hotswap map shows from a running Satisfactory: resource nodes, collectibles,
+//! Reads what the HotSwap map shows from a running Satisfactory: resource nodes, collectibles,
 //! buildings, and belts, pipes and power lines as lines. Everything comes from the game's memory;
 //! no map data or artwork is bundled.
 

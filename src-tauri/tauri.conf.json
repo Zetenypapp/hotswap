@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Hotswap",
+  "productName": "HotSwap",
   "version": "0.2.9",
   "identifier": "app.hotswap.desktop",
   "build": {
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Hotswap",
+        "title": "HotSwap",
         "width": 1440,
         "height": 880,
         "minWidth": 1000,
@@ -36,7 +36,7 @@
     "targets": [
       "nsis"
     ],
-    "publisher": "Hotswap",
+    "publisher": "HotSwap",
     "shortDescription": "Swap the way you play, in real time.",
     "windows": {
       "nsis": {

@@ -196,7 +196,7 @@ fn launch_game(launches: State<Launches>, id: String) -> Result<(), String> {
     let result = match launch {
         steam::Launch::Url(url) => std::process::Command::new("explorer.exe").arg(url).spawn(),
         steam::Launch::Exe { path, dir } => std::process::Command::new(path).current_dir(dir).spawn(),
-        steam::Launch::None => return Err("Hotswap doesn't know how to start this game".into()),
+        steam::Launch::None => return Err("HotSwap doesn't know how to start this game".into()),
     };
     result.map(|_| ()).map_err(|e| e.to_string())
 }
@@ -281,7 +281,7 @@ async fn map_show(app: AppHandle, game: String, x: f64, y: f64, w: f64, h: f64) 
     main.add_child(view, pos, size).map(|_| ()).map_err(|e| e.to_string())
 }
 
-/// Everything the Hotswap map draws, read live from the running game.
+/// Everything the HotSwap map draws, read live from the running game.
 #[tauri::command]
 async fn map_world(watch: State<'_, watch::Watch>, game: String) -> Result<world::World, String> {
     if game != trainer::SATISFACTORY {
@@ -512,7 +512,7 @@ async fn overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String>
     // One pixel short of the full height, so Windows doesn't treat it as a fullscreen app.
     let (w, h) = (m.size().width as f64 / s, m.size().height as f64 / s - 1.0);
     let win = tauri::WebviewWindowBuilder::new(app, "overlay", tauri::WebviewUrl::App("overlay.html".into()))
-        .title("Hotswap overlay")
+        .title("HotSwap overlay")
         .inner_size(w, h)
         .position(x, y)
         .decorations(false)
@@ -659,7 +659,7 @@ async fn radar_show(app: AppHandle, show: bool, corner: Option<String>) -> Resul
         return Ok(());
     }
     let win = tauri::WebviewWindowBuilder::new(&app, "radar", tauri::WebviewUrl::App("radar.html".into()))
-        .title("Hotswap radar")
+        .title("HotSwap radar")
         .inner_size(size, size)
         .position(x, y)
         .decorations(false)
@@ -688,7 +688,7 @@ struct UpdateInfo {
     notes: String,
 }
 
-/// A newer Hotswap release on GitHub, if there is one (signed; checked against the built-in key).
+/// A newer HotSwap release on GitHub, if there is one (signed; checked against the built-in key).
 #[tauri::command]
 async fn check_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
     use tauri_plugin_updater::UpdaterExt;
@@ -766,11 +766,11 @@ fn fit_window(app: &tauri::App, show: bool) {
 }
 
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Open Hotswap", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Hotswap", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open HotSwap", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit HotSwap", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quit])?;
     let mut tray = TrayIconBuilder::with_id("main")
-        .tooltip("Hotswap")
+        .tooltip("HotSwap")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -1339,5 +1339,5 @@ fn main() {
             map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, overlay_menu, overlay_input, system_stats, discord_presence, radar_show, set_mini, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Hotswap");
+        .expect("error while running HotSwap");
 }

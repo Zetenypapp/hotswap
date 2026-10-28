@@ -1,6 +1,6 @@
-//! Discord Rich Presence: shows what you're playing with Hotswap on your Discord profile. Talks to the
+//! Discord Rich Presence: shows what you're playing with HotSwap on your Discord profile. Talks to the
 //! Discord app on this PC through its local pipe (no SDK, no login, nothing sent anywhere else).
-//! Needs the ID of Hotswap's application in Discord's developer portal.
+//! Needs the ID of HotSwap's application in Discord's developer portal.
 
 use serde_json::{json, Value};
 use std::{
@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-/// Hotswap's application ID from discord.com/developers (empty: presence is off).
+/// HotSwap's application ID from discord.com/developers (empty: presence is off).
 pub const APP_ID: &str = "";
 
 /// Sends wanted activities to the presence thread (None clears it).

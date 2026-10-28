@@ -157,7 +157,7 @@ impl Session {
     }
 
     /// A console cheat: off in a normal game, so off unless its mod is on (not "put back what was
-    /// there", which would keep a cheat stuck on after Hotswap restarts while the game runs).
+    /// there", which would keep a cheat stuck on after HotSwap restarts while the game runs).
     fn switch(&mut self, addr: u64, on: bool) {
         if addr != 0 && self.m.p.read::<u8>(addr).is_some_and(|v| v != on as u8) {
             self.m.p.write(addr, on as u8);
@@ -221,7 +221,7 @@ impl Session {
         let t = self.t;
 
         // Game cheat flags: on while the mod is on, otherwise whatever the game mode itself has
-        // (so a flag left on by an earlier Hotswap run is cleared too).
+        // (so a flag left on by an earlier HotSwap run is cleared too).
         if let Some(cur) = self.m.p.read::<u32>(t.cheats).filter(|_| t.cheats != 0) {
             let mode = self.m.p.read::<u32>(t.mode).filter(|_| t.mode != 0).unwrap_or(0);
             let mut want = cur;
@@ -343,7 +343,7 @@ impl Session {
         if t.controller == 0 || (swim, walk) == self.speed_last {
             return;
         }
-        // An earlier Hotswap run may have scaled these already in this same game session; its
+        // An earlier HotSwap run may have scaled these already in this same game session; its
         // record (kept per game process) holds the real values and what was applied.
         if self.speed_orig.is_empty() {
             if let Some((orig, last)) = speed_file_load(self.m.p.pid) {

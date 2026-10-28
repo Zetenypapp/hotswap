@@ -1,7 +1,7 @@
 //! Mod manager for Unreal games modded the UE4SS way (Subnautica 2): UE4SS itself, its Lua mods
 //! (Binaries/Win64/ue4ss/Mods/<Name>, switched on by an enabled.txt), and .pak mods in
 //! Content/Paks/~mods and Content/Paks/LogicMods. Mods come from Nexus Mods: browsing uses the
-//! public API, downloading happens on the website, and Hotswap installs the downloaded archive.
+//! public API, downloading happens on the website, and HotSwap installs the downloaded archive.
 
 use serde::Serialize;
 use serde_json::{json, Value};

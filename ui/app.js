@@ -1,4 +1,4 @@
-// Hotswap UI. Runs inside the Tauri window; also opens in a plain browser with demo data for quick styling work.
+// HotSwap UI. Runs inside the Tauri window; also opens in a plain browser with demo data for quick styling work.
 
 const tauri = window.__TAURI__;
 const invoke = tauri?.core?.invoke;
@@ -293,7 +293,7 @@ function renderSide() {
     return `<button class="gamebtn${plain ? ' plain' : ''}${x.id === state.game && state.view === 'game' ? ' on' : ''}" data-game="${x.id}">${tile(x)}<span class="name">${esc(x.name)}</span>${n ? `<span class="count">${n}</span>` : ''}</button>`;
   };
   const games = pick(gamesOnly()), soft = pick(softwareOnly());
-  // Games Hotswap can mod come first, in their own section; everything else under a divider.
+  // Games HotSwap can mod come first, in their own section; everything else under a divider.
   const modded = games.filter(hasLiveMods), other = games.filter(g => !hasLiveMods(g));
   $('gameCount').textContent = gamesOnly().length;
   let html = !games.length ? '<p class="empty" style="padding:6px 10px">No games match.</p>'
@@ -450,7 +450,7 @@ const MAP_NAMES = { 526870: 'Satisfactory', 264710: 'Subnautica', 387990: 'Scrap
 const WEB_MAPS = ['526870'];
 
 let mapOpen = null, mapShown = false; // app ID of the map being shown on the Maps page
-let mapMode = 'local'; // 'local' = Hotswap's own map, 'web' = Satisfactory Calculator
+let mapMode = 'local'; // 'local' = HotSwap's own map, 'web' = Satisfactory Calculator
 
 function renderMaps() {
   setAmbient(null);
@@ -463,7 +463,7 @@ function renderMaps() {
   if (!open || mapMode !== 'local') LocalMap.unmount();
   $('mapsBody').innerHTML = open ? `
     <div class="lib-head map-head"><button class="chip" data-mapback>‹ All maps</button><h1>${esc(open.name)}</h1>
-      ${WEB_MAPS.includes(String(open.appId)) ? `<div class="seg-tabs"><button class="chip${mapMode === 'local' ? ' on' : ''}" data-mapmode="local">Hotswap map</button><button class="chip${mapMode === 'web' ? ' on' : ''}" data-mapmode="web">Detailed map</button></div>` : ''}
+      ${WEB_MAPS.includes(String(open.appId)) ? `<div class="seg-tabs"><button class="chip${mapMode === 'local' ? ' on' : ''}" data-mapmode="local">HotSwap map</button><button class="chip${mapMode === 'web' ? ' on' : ''}" data-mapmode="web">Detailed map</button></div>` : ''}
       <span class="meta">${mapMode === 'web' ? 'By Satisfactory Calculator (their site, their ads).' : WEB_MAPS.includes(String(open.appId)) ? 'Live from your game. Right-click to teleport or pin.' : 'Made from your game\'s terrain files. Right-click to drop a pin.'}</span></div>
     <div id="mapHost" class="map-host">${mapMode === 'web' ? '<span>Loading map…</span>' : ''}</div>` : `
     <div class="lib-head"><h1>Maps</h1><span class="meta">Resources, collectibles and your factory, live. Pin spots and teleport.</span></div>
@@ -471,7 +471,7 @@ function renderMaps() {
       <span class="nm">${esc(g.name)}</span><span class="sub">Interactive map${RUNNING === g.id ? ' · live' : ''}</span></button>`).join('')}
       ${SOON_MAPS.map(id => LIB.find(g => String(g.appId) === id) || buildGame({ appId: +id, name: MAP_NAMES[id] })).map(g => `<button class="lib-item soon-item" disabled><span class="art">${capsule(g)}</span>
       <span class="nm">${esc(g.name)}</span><span class="sub">Coming soon</span></button>`).join('')}</div>
-    <p class="meta" style="margin-top:22px">The Hotswap map is drawn from your running game. The detailed map is <a href="https://satisfactory-calculator.com" ${ext}>Satisfactory Calculator</a>, shown as-is.</p>`;
+    <p class="meta" style="margin-top:22px">The HotSwap map is drawn from your running game. The detailed map is <a href="https://satisfactory-calculator.com" ${ext}>Satisfactory Calculator</a>, shown as-is.</p>`;
   if (open && mapMode === 'local') {
     const host = $('mapHost');
     host.style.height = Math.max(300, innerHeight - host.getBoundingClientRect().top - 16) + 'px';
@@ -538,11 +538,11 @@ function renderSettings() {
       <div class="set-row"><div class="txt"><b>Reset all key bindings</b><span>Puts every mod back on its default hotkey.</span></div><button class="btn" id="resetBinds">Reset</button></div>
     </div>
     ${invoke ? `<div class="set-group"><h2>Discord</h2>
-      <div class="set-row"><div class="txt"><b>Show in Discord</b><span>Your Discord status shows the game you're playing with Hotswap and how many mods are on. Needs the Discord app running on this PC.${DISCORD_ERR ? ` <i>${esc(DISCORD_ERR)}.</i>` : ''}</span></div>${sw('setDiscord', state.discord)}</div>
+      <div class="set-row"><div class="txt"><b>Show in Discord</b><span>Your Discord status shows the game you're playing with HotSwap and how many mods are on. Needs the Discord app running on this PC.${DISCORD_ERR ? ` <i>${esc(DISCORD_ERR)}.</i>` : ''}</span></div>${sw('setDiscord', state.discord)}</div>
     </div>` : ''}
     ${invoke ? `<div class="set-group"><h2>Startup and tray</h2>
-      <div class="set-row"><div class="txt"><b>Start with Windows</b><span>Hotswap opens quietly in the tray when you sign in, so hotkeys are ready when you start a game.</span></div>${sw('setAutostart', AUTOSTART)}</div>
-      <div class="set-row"><div class="txt"><b>Close to tray</b><span>The close button hides Hotswap in the tray instead of quitting. Quit from the tray icon's menu.</span></div>${sw('setTray', state.closeToTray)}</div>
+      <div class="set-row"><div class="txt"><b>Start with Windows</b><span>HotSwap opens quietly in the tray when you sign in, so hotkeys are ready when you start a game.</span></div>${sw('setAutostart', AUTOSTART)}</div>
+      <div class="set-row"><div class="txt"><b>Close to tray</b><span>The close button hides HotSwap in the tray instead of quitting. Quit from the tray icon's menu.</span></div>${sw('setTray', state.closeToTray)}</div>
     </div>` : ''}
     <div class="set-group"><h2>Library</h2>
       <div class="set-row"><div class="txt"><b>Steam install</b><span>${esc(STEAM.root || 'Not found.')}</span></div><button class="btn" id="rescanBtn">Rescan</button></div>
@@ -557,12 +557,12 @@ function renderSettings() {
       <div class="set-row"><div class="txt"><b>Reset all mod settings</b><span>Turns every mod off in every profile of every game. Profiles, notes and favorites stay.</span></div><button class="btn danger" id="wipeBtn">Reset</button></div>
     </div>
     <div class="set-group"><h2>About and updates</h2>
-      <div class="set-row"><div class="txt"><b>Hotswap ${esc(VERSION || '')}</b><span>${UPDATE ? `Version ${esc(UPDATE.version)} is available.` : esc(UPDATE_MSG || 'Free, open source, no ads.')} Game art is read from your local Steam cache. Figtree font under the SIL Open Font License.</span></div>
+      <div class="set-row"><div class="txt"><b>HotSwap ${esc(VERSION || '')}</b><span>${UPDATE ? `Version ${esc(UPDATE.version)} is available.` : esc(UPDATE_MSG || 'Free, open source, no ads.')} Game art is read from your local Steam cache. Figtree font under the SIL Open Font License.</span></div>
         ${invoke ? (UPDATE ? '<button class="btn" id="updateBtn">Update now</button>' : '<button class="btn" id="checkUpdateBtn">Check now</button>') : ''}</div>
       <div class="set-row"><div class="txt"><b>What's new</b><span>The release notes for this version.</span></div><button class="btn" id="whatsNewBtn">Show</button></div>
-      <div class="set-row"><div class="txt"><b>Found a bug or want a game added?</b><span>Opens a GitHub issue with your Hotswap version already filled in.</span></div>
+      <div class="set-row"><div class="txt"><b>Found a bug or want a game added?</b><span>Opens a GitHub issue with your HotSwap version already filled in.</span></div>
         <div class="btnrow"><a class="btn" href="${esc(bugUrl())}" ${ext}>Report a bug</a><a class="btn" href="${esc(requestUrl())}" ${ext}>Request a game</a></div></div>
-      ${invoke ? `<div class="set-row"><div class="txt"><b>Check for updates automatically</b><span>Looks for a new release on GitHub when Hotswap starts. Updates are signed, and nothing installs without your click.</span></div>${sw('setAutoUpdate', state.autoUpdate)}</div>` : ''}
+      ${invoke ? `<div class="set-row"><div class="txt"><b>Check for updates automatically</b><span>Looks for a new release on GitHub when HotSwap starts. Updates are signed, and nothing installs without your click.</span></div>${sw('setAutoUpdate', state.autoUpdate)}</div>` : ''}
     </div>`;
 }
 
@@ -600,7 +600,7 @@ function renderGame() {
         g.software ? 'Software' : g.genre,
         g.software ? '' : g.anticheat.length ? 'Mods off' : total ? `${total} mods` : 'No mods yet',
         g.playtime ? `${hours(g.playtime)} played on Steam` : '',
-        (() => { const ms = state.sessions.filter(s => s.g === g.id).reduce((t, s) => t + s.end - s.start, 0) + (live && sessionStart ? Date.now() - sessionStart : 0); return ms ? `${duration(ms)} played with Hotswap` : ''; })(),
+        (() => { const ms = state.sessions.filter(s => s.g === g.id).reduce((t, s) => t + s.end - s.start, 0) + (live && sessionStart ? Date.now() - sessionStart : 0); return ms ? `${duration(ms)} played with HotSwap` : ''; })(),
         g.source !== 'steam' ? SOURCES[g.source] : '',
         g.solo ? 'Solo or private sessions only' : '',
       ].filter(Boolean).join(' · ')}</div>
@@ -663,13 +663,13 @@ function renderMods() {
   const g = game(), q = query();
   if (g.anticheat.length && !g.software) {
     $('mods').innerHTML = `<div class="nomods">${img(g.art.logo, 'logo')}<h2>Mods are off for ${esc(g.name)}</h2>
-      <p>This game uses ${esc(g.anticheat.join(' and '))}. Changing it while anti-cheat is running can get your account banned, so Hotswap doesn't offer mods here.</p></div>`;
+      <p>This game uses ${esc(g.anticheat.join(' and '))}. Changing it while anti-cheat is running can get your account banned, so HotSwap doesn't offer mods here.</p></div>`;
     return;
   }
   if (!g.cats.length) {
     $('mods').innerHTML = g.software
       ? `<div class="nomods">${img(g.art.logo, 'logo')}<h2>${esc(g.name)} is software</h2>
-        <p>Steam lists this as ${g.steamType ? `a${/^[aeiou]/.test(g.steamType) ? 'n' : ''} ${esc(g.steamType)}` : 'software'}, not a game, so Hotswap doesn't add mods to it.</p></div>`
+        <p>Steam lists this as ${g.steamType ? `a${/^[aeiou]/.test(g.steamType) ? 'n' : ''} ${esc(g.steamType)}` : 'software'}, not a game, so HotSwap doesn't add mods to it.</p></div>`
       : `<div class="nomods">${img(g.art.logo, 'logo')}<h2>No mods for ${esc(g.name)} yet</h2>
         <p>Mods are added game by game. This one isn't in the catalog yet, but your notes and favorites still work.</p>
         <a class="btn accent" href="${esc(requestUrl(g))}" ${ext}>Request mods for ${esc(g.name)}</a></div>`;
@@ -713,8 +713,8 @@ function renderPanel() {
   const total = mine.reduce((sum, s) => sum + (s.end - s.start), 0) + (live && sessionStart ? Date.now() - sessionStart : 0);
   const rows = mine.slice(-5).reverse().map(s => `<li><span>${new Date(s.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${new Date(s.start).toTimeString().slice(0, 5)}</span><span>${duration(s.end - s.start)}</span></li>`);
   if (live && sessionStart) rows.unshift(`<li class="now-row"><span>Now playing</span><span>${duration(Date.now() - sessionStart)}</span></li>`);
-  $('sessionsMeta').textContent = [g.playtime ? `${hours(g.playtime)} on Steam` : '', total ? `${duration(total)} with Hotswap` : ''].filter(Boolean).join(' · ');
-  $('sessions').innerHTML = rows.length ? rows.join('') : '<p class="empty">Sessions show up here after you play with Hotswap open.</p>';
+  $('sessionsMeta').textContent = [g.playtime ? `${hours(g.playtime)} on Steam` : '', total ? `${duration(total)} with HotSwap` : ''].filter(Boolean).join(' · ');
+  $('sessions').innerHTML = rows.length ? rows.join('') : '<p class="empty">Sessions show up here after you play with HotSwap open.</p>';
   const ta = $('notes');
   if (document.activeElement !== ta) ta.value = state.notes[g.id] || '';
 }
@@ -827,7 +827,7 @@ function pushMenu() {
   lastMenu = sig;
   overlaySend({ kind: 'menu', open: true, data });
 }
-// `test` opens it from Settings without a game running (with the game Hotswap shows).
+// `test` opens it from Settings without a game running (with the game HotSwap shows).
 function toggleMenu(open = !menuOpen, test = false) {
   if (!invoke || !state.overlay) return;
   const g = test ? game() : findGame(runningId());
@@ -874,7 +874,7 @@ async function syncHud(force) {
 }
 setInterval(() => syncHud(false), 1000);
 
-// Discord: what you're playing with Hotswap, while a game runs.
+// Discord: what you're playing with HotSwap, while a game runs.
 let lastDiscord = '';
 function syncDiscord() {
   if (!invoke) return;
@@ -883,10 +883,10 @@ function syncDiscord() {
   const n = g ? activeCount(g) : 0;
   const activity = on ? {
     details: `Playing ${g.name}`,
-    state: modsOf(g).length ? (state.paused[g.id] ? 'Mods paused' : `${n} mod${n === 1 ? '' : 's'} on`) : 'With Hotswap',
+    state: modsOf(g).length ? (state.paused[g.id] ? 'Mods paused' : `${n} mod${n === 1 ? '' : 's'} on`) : 'With HotSwap',
     timestamps: sessionStart ? { start: Math.floor(sessionStart / 1000) } : undefined,
-    assets: { large_image: 'logo', large_text: 'Hotswap: free, open-source game mods' },
-    buttons: [{ label: 'Get Hotswap', url: REPO_URL }],
+    assets: { large_image: 'logo', large_text: 'HotSwap: free, open-source game mods' },
+    buttons: [{ label: 'Get HotSwap', url: REPO_URL }],
   } : null;
   const sig = JSON.stringify(activity);
   if (sig === lastDiscord) return;
@@ -961,7 +961,7 @@ async function checkUpdate(manual) {
   try {
     UPDATE = await invoke('check_update');
     UPDATE_MSG = UPDATE ? '' : 'You have the latest version.';
-    if (manual) toast(UPDATE ? `Version ${UPDATE.version}` : 'Hotswap is up to date', UPDATE ? 'available' : '');
+    if (manual) toast(UPDATE ? `Version ${UPDATE.version}` : 'HotSwap is up to date', UPDATE ? 'available' : '');
   } catch (e) {
     UPDATE_MSG = "Couldn't check for updates.";
     if (manual) toast("Couldn't check for updates", String(e));
@@ -977,7 +977,7 @@ async function installUpdate() {
   $('updatePill').textContent = 'Updating…';
   state.pendingNotes = { version: UPDATE.version, notes: UPDATE.notes || '' };
   await saveNow();
-  // Hotswap closes and the installer reopens it on the new version.
+  // HotSwap closes and the installer reopens it on the new version.
   invoke('install_update').catch(e => { toast("Update failed", String(e)); $('updatePill').textContent = `Update to ${UPDATE.version}`; });
 }
 
@@ -1054,7 +1054,7 @@ function switchProfile(g, name) {
 }
 
 /* ---------- Status dots, corners and links ---------- */
-// Green: on and live in the game. Amber: on, but Hotswap is still connecting.
+// Green: on and live in the game. Amber: on, but HotSwap is still connecting.
 function modDot(g, m) {
   if (!invoke || !m.live || !isActive(g, m) || !isLive(g) || state.paused[g.id]) return '';
   return TRAINER.connected
@@ -1070,14 +1070,14 @@ function bugUrl() {
   const run = findGame(runningId());
   return issueUrl('Bug: ', [
     '**What happened?**', '', '', '**What did you expect?**', '', '', '**Steps to reproduce**', '1. ', '', '---',
-    `Hotswap ${VERSION || '(browser preview)'}`, `Game: ${run ? `${run.name} (${run.id})` : 'none running'}`,
+    `HotSwap ${VERSION || '(browser preview)'}`, `Game: ${run ? `${run.name} (${run.id})` : 'none running'}`,
     `Trainer: ${run ? TRAINER.connected ? 'connected' : TRAINER.message || 'not connected' : '-'}`,
   ].join('\n'), 'bug');
 }
 function requestUrl(g) {
   return issueUrl(`Game request: ${g?.name || ''}`, [
     `**Game:** ${g?.name || ''}`, `**Store:** ${g ? SOURCES[g.source] : ''}${g?.appId ? ` (app ${g.appId})` : ''}`, '',
-    '**Mods you would like:**', '- ', '', '---', `Hotswap ${VERSION || ''}`,
+    '**Mods you would like:**', '- ', '', '---', `HotSwap ${VERSION || ''}`,
   ].join('\n'), 'game request');
 }
 
@@ -1114,7 +1114,7 @@ function importCode(g, code) {
   try {
     const b = atob(code.trim().replace(/^HS1-/, ''));
     data = JSON.parse(new TextDecoder().decode(Uint8Array.from(b, c => c.charCodeAt(0))));
-  } catch { toast("That isn't a Hotswap share code", ''); return; }
+  } catch { toast("That isn't a HotSwap share code", ''); return; }
   if (String(data.g) !== g.id) { toast('That code is for', findGame(data.g)?.name || 'another game'); return; }
   // Only mods this game has, with values they accept.
   const values = {};
@@ -1155,7 +1155,7 @@ async function showWhatsNew(manual) {
   if (!notes && state.pendingNotes?.version === VERSION) notes = state.pendingNotes.notes;
   state.pendingNotes = null; save();
   if (!notes) { if (manual) toast("Couldn't load the release notes", 'check your connection'); return; }
-  $('wnTitle').textContent = `What's new in Hotswap ${VERSION}`;
+  $('wnTitle').textContent = `What's new in HotSwap ${VERSION}`;
   $('wnBody').innerHTML = mdLite(notes.split(/\n### 📦 Install/)[0]);
   $('wnLink').href = `${REPO_URL}/releases/tag/v${VERSION}`;
   $('whatsNew').hidden = false;
@@ -1220,7 +1220,7 @@ function paletteItems(q) {
   add('Action', 'Rescan library', 'Steam, Epic and GOG', () => scanLibrary().then(() => { render(); toast('Found', `${LIB.length} games`); }), palIcon('action'));
   add('Action', state.panel ? 'Hide side panel' : 'Show side panel', '', () => { state.panel = !state.panel; save(); render(); }, palIcon('action'));
   if (invoke) add('Action', state.mini ? 'Leave mini mode' : 'Mini mode', 'Small window that stays on top', () => setMini(!state.mini), palIcon('action'));
-  add('Action', "What's new", `Hotswap ${VERSION}`, () => showWhatsNew(true), palIcon('action'));
+  add('Action', "What's new", `HotSwap ${VERSION}`, () => showWhatsNew(true), palIcon('action'));
   add('Action', 'Report a bug', 'Opens GitHub', () => openUrl(bugUrl()), palIcon('action'));
   add('Action', 'Request a game', 'Opens GitHub', () => openUrl(requestUrl()), palIcon('action'));
   if (!q) return items;
@@ -1368,7 +1368,7 @@ document.addEventListener('click', e => {
     case 'setAutoUpdate': state.autoUpdate = !state.autoUpdate; save(); render(); break;
     case 'setSounds': state.sounds = !state.sounds; save(); render(); if (state.sounds) chime(true); break;
     case 'setOverlay': state.overlay = !state.overlay; if (!state.overlay) { if (menuOpen) toggleMenu(false); hudOn = false; invoke?.('overlay_close'); } save(); render(); break;
-    case 'testOverlay': overlaySend({ title: 'Hotswap overlay', value: 'On', on: true, game: 'This is how mod changes look in game' }); chime(true); break;
+    case 'testOverlay': overlaySend({ title: 'HotSwap overlay', value: 'On', on: true, game: 'This is how mod changes look in game' }); chime(true); break;
     case 'checkUpdateBtn': checkUpdate(true); break;
     case 'updateBtn': case 'updatePill': installUpdate(); break;
     case 'softToggle': state.softOpen = !state.softOpen; save(); renderSide(); break;
@@ -1443,7 +1443,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.activeElement.id === 'search') { e.target.value = ''; render(); e.target.blur(); return; }
   if (e.altKey && e.key === 'ArrowLeft') { step(-1); return; }
   if (e.altKey && e.key === 'ArrowRight') { step(1); return; }
-  // In the desktop app the system-wide listener handles hotkeys, even while Hotswap has focus.
+  // In the desktop app the system-wide listener handles hotkeys, even while HotSwap has focus.
   if (invoke || typing) return;
   const combo = comboFromEvent(e);
   if (combo && state.playing) { e.preventDefault(); onCombo(combo); }
@@ -1501,6 +1501,6 @@ const icon = (k, s = 16) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"
 })().catch(err => {
   console.error(err);
   document.querySelectorAll('.view').forEach(v => v.hidden = v.id !== 'mapsView');
-  $('mapsBody').innerHTML = `<div class="empty-page"><h1>Hotswap couldn't start</h1>
+  $('mapsBody').innerHTML = `<div class="empty-page"><h1>HotSwap couldn't start</h1>
     <p>${esc(err?.message || err)}</p><button class="btn" onclick="location.reload()">Try again</button></div>`;
 });

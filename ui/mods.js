@@ -144,7 +144,7 @@ const Mods = (() => {
           <button class="switch" role="switch" aria-checked="${m.enabled}" data-modtoggle="${esc(m.reference)}" title="${m.enabled ? 'Turn off (keeps it installed)' : 'Turn on'}"></button>
           <button class="btn outline" data-modremove="${esc(m.reference)}" data-name="${esc(m.name)}" title="Uninstall">Remove</button>
         </div>`;
-      }).join('')}</div>` : `<div class="empty-page small"><h1>No mods yet</h1><p>Find mods in Browse. Hotswap installs the Satisfactory Mod Loader and any other mods they need automatically.</p><button class="btn accent" data-modtab="browse">Browse mods</button></div>`}
+      }).join('')}</div>` : `<div class="empty-page small"><h1>No mods yet</h1><p>Find mods in Browse. HotSwap installs the Satisfactory Mod Loader and any other mods they need automatically.</p><button class="btn accent" data-modtab="browse">Browse mods</button></div>`}
       <p class="meta mods-foot">Mods live in the game's FactoryGame\\Mods folder, the same place Satisfactory Mod Manager uses. Turned-off mods move to a folder next to it. Mods can break saves: keep backups.</p>`;
   }
 

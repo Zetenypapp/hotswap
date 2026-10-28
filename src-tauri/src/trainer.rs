@@ -553,7 +553,7 @@ impl Session {
                     }
                 }
             }
-            // Machines boosted before Hotswap or the game restarted: put back the clocks saved on
+            // Machines boosted before HotSwap or the game restarted: put back the clocks saved on
             // disk, matched by position. 500% is impossible in the normal game, so anything still
             // exactly there without a saved clock goes back to 100% (max 250%). Once per session.
             if !self.turbo_cleaned {
@@ -594,7 +594,7 @@ impl Session {
         for m in self.machines.clone() {
             let (Ok(c), Ok(p), Ok(x)) = (self.off(m, "mCurrentPotential"), self.off(m, "mPendingPotential"), self.off(m, "mMaxPotential")) else { continue };
             if !self.turbo_orig.contains_key(&m) {
-                // Remember the real clock on disk too, so it survives Hotswap or the game restarting.
+                // Remember the real clock on disk too, so it survives HotSwap or the game restarting.
                 let file = saved.get_or_insert_with(turbo_file_load);
                 let read = |o: u64| self.ue.p.read::<f32>(m + o).unwrap_or(1.0);
                 let live = (read(c), read(p), read(x));
@@ -956,7 +956,7 @@ impl Session {
             self.ue.p.write(health + cur_o, normal);
             log(&format!("god health off (max back to {normal})"));
         } else if max >= GOD_HEALTH {
-            // Left over from before a Hotswap restart: back to the player's normal 100.
+            // Left over from before a HotSwap restart: back to the player's normal 100.
             self.ue.p.write(health + max_o, 100.0f32);
             self.ue.p.write(health + cur_o, 100.0f32);
             log("god health off (leftover reset to 100)");

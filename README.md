@@ -1,11 +1,11 @@
-# 🔁 Hotswap
+# 🔁 HotSwap
 
 **Swap the way you play, in real time.**
 
-Hotswap is a free, open-source, ad-free mod app for **single-player** PC games on Windows. Flip mods on and off while the game is running, from the app or with hotkeys that work inside the game.
+HotSwap is a free, open-source, ad-free mod app for **single-player** PC games on Windows. Flip mods on and off while the game is running, from the app or with hotkeys that work inside the game.
 
 > 💡 **Inspired by ArtCraft.**
-> 🤖 **Made by AI.** Hotswap was designed and written by Claude (Anthropic's AI) in Claude Code, directed by [@Zetenypapp](https://github.com/Zetenypapp).
+> 🤖 **Made by AI.** HotSwap was designed and written by Claude (Anthropic's AI) in Claude Code, directed by [@Zetenypapp](https://github.com/Zetenypapp).
 
 > 🎮 **Game support right now: Satisfactory, Subnautica, Subnautica 2, R.E.P.O., Kerbal Space Program, Subnautica: Below Zero, Oxygen Not Included and Mon Bazou.** These are the games with working mod settings so far. Every other game shows up in your library with art, playtime and launching, but its mod list is either empty or marked **Soon**.
 
@@ -13,7 +13,7 @@ Hotswap is a free, open-source, ad-free mod app for **single-player** PC games o
 
 ## 🏭 Satisfactory mods
 
-All of these work live while you play. Hotswap connects to the running game, and the side panel shows **Connected. Mods are live in the game.**
+All of these work live while you play. HotSwap connects to the running game, and the side panel shows **Connected. Mods are live in the game.**
 
 | | Mod | What it does |
 |---|---|---|
@@ -40,7 +40,7 @@ Infinite Health (the game's own god mode), Infinite Stamina, Infinite Jumps, Mov
 
 ## 🐠 Subnautica mods
 
-Infinite Health, Infinite Oxygen, No Hunger, No Thirst, Swim Speed, Walk Speed, Free Crafting, Unlock All Blueprints, Instant Building, Instant Scanning, Fast Growing, Infinite Energy, No Crush Depth and Passive Creatures. Most of them switch the game's own console cheats. Subnautica runs on Unity, and Hotswap looks up its classes and fields by asking the game's Mono runtime.
+Infinite Health, Infinite Oxygen, No Hunger, No Thirst, Swim Speed, Walk Speed, Free Crafting, Unlock All Blueprints, Instant Building, Instant Scanning, Fast Growing, Infinite Energy, No Crush Depth and Passive Creatures. Most of them switch the game's own console cheats. Subnautica runs on Unity, and HotSwap looks up its classes and fields by asking the game's Mono runtime.
 
 ## ❄️ Subnautica: Below Zero mods
 
@@ -66,7 +66,7 @@ No Hunger, No Thirst, No Sleep, No Anxiety, Unlimited Money, Add $10,000, Walk S
 | **Free Crafting / Instant Crafting** | No materials, no waiting (building too) |
 | **Infinite Energy** | Tools, vehicles and batteries never run out |
 
-Subnautica 2 ships without debug symbols, so Hotswap finds the engine's object and name tables by their layout in memory.
+Subnautica 2 ships without debug symbols, so HotSwap finds the engine's object and name tables by their layout in memory.
 
 ## 🗺️ Live map
 
@@ -83,7 +83,7 @@ Maps → Satisfactory opens a map drawn from your running game:
 
 ## 🧩 Mod loader
 
-Mods has a page per game. For Satisfactory, Browse searches every mod on [ficsit.app](https://ficsit.app) and installs it with one click, together with the Satisfactory Mod Loader and any other mods it needs. Downloads are checked against ficsit.app's SHA-256 hashes. Installed mods can be updated, turned off or removed. It uses the same folders as Satisfactory Mod Manager, so both work side by side. For Subnautica 2, Hotswap browses Nexus Mods and installs the .zip, .7z or .pak you download (UE4SS, Lua and pak mods).
+Mods has a page per game. For Satisfactory, Browse searches every mod on [ficsit.app](https://ficsit.app) and installs it with one click, together with the Satisfactory Mod Loader and any other mods it needs. Downloads are checked against ficsit.app's SHA-256 hashes. Installed mods can be updated, turned off or removed. It uses the same folders as Satisfactory Mod Manager, so both work side by side. For Subnautica 2, HotSwap browses Nexus Mods and installs the .zip, .7z or .pak you download (UE4SS, Lua and pak mods).
 
 ## ✨ App features
 
@@ -97,7 +97,7 @@ Mods has a page per game. For Satisfactory, Browse searches every mod on [ficsit
 - 📌 **Pinned mods:** keep your favorites at the top, with a live dot when they're working in game
 - 🪟 **Mini mode:** a small always-on-top window with just the running game's mods
 - 📰 **Live Home:** developer news for your games, Steam deals (via CheapShark), top sellers and new releases
-- ⏱️ **Playtime and sessions:** Steam hours plus time played with Hotswap
+- ⏱️ **Playtime and sessions:** Steam hours plus time played with HotSwap
 - 🔍 **Ctrl+K palette:** jump to any game, page, mod or action
 - 📍 **Teleport hotkeys:** save your position and jump back to it
 - 🔊 **Sounds and in-game overlay** when mods change, in the corner you pick, plus a hotkey cheat sheet (hold Ctrl+F1)
@@ -109,9 +109,9 @@ Mods has a page per game. For Satisfactory, Browse searches every mod on [ficsit
 
 ## ⚙️ How the mods work
 
-Hotswap is a trainer, like a friendlier Cheat Engine:
+HotSwap is a trainer, like a friendlier Cheat Engine:
 
-1. 🔎 **Finds the engine's tables by name.** Unreal Engine games like Satisfactory ship debug symbol files. Hotswap reads them to find the list of every live object and every name in the game.
+1. 🔎 **Finds the engine's tables by name.** Unreal Engine games like Satisfactory ship debug symbol files. HotSwap reads them to find the list of every live object and every name in the game.
 2. 🧭 **Looks values up by name, not by hardcoded offsets.** For example "the player's `CharacterMovement` → `MaxWalkSpeed`". That's why it keeps working after game updates.
 3. ✍️ **Writes the values you pick**, twice a second, so they stick through respawns.
 4. 💉 **Calls game functions when needed.** For things like adding items, it runs the game's own `AddStack` through Unreal's `ProcessEvent`, so the game reacts properly.
@@ -134,7 +134,7 @@ Dev helpers: `hotswap.exe --scan` prints your detected library, `--home` prints 
 
 ## ⚠️ Fair play
 
-Hotswap is for **single-player and private games only**. It refuses to mod anything with anti-cheat, and you shouldn't use it to get an edge over other players.
+HotSwap is for **single-player and private games only**. It refuses to mod anything with anti-cheat, and you shouldn't use it to get an edge over other players.
 
 ## 📜 Credits
 

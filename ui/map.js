@@ -1,4 +1,4 @@
-/* Hotswap's own Satisfactory map, drawn from the running game's memory: resource nodes, collectibles,
+/* HotSwap's own Satisfactory map, drawn from the running game's memory: resource nodes, collectibles,
    your factory, your live position and trail, pins, and right-click teleport. No bundled map art. */
 const LocalMap = (() => {
   // Per game: world bounds in game units (map x = east, map y = south), game units per meter,
