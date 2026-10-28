@@ -555,3 +555,12 @@ body.mini .minibox { display: flex; flex-direction: column; height: 100%; backgr
 .seg.sm span { padding: 4px 10px; font-size: 12px; }
 .slider.sm input[type=number] { width: 64px; height: 30px; }
 .apply.sm { height: 30px; padding: 0 12px; }
+
+/* Sidebar: games with mods, then the rest under a divider */
+.side-sec { display: flex; align-items: center; gap: 6px; padding: 6px 10px 4px; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.side-sec .n { color: var(--dim); }
+.side-sec.other { margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--glass-2); color: var(--muted); }
+.gamebtn.plain .name { color: var(--muted); font-weight: 600; }
+.gamebtn.plain .tile { opacity: .7; }
+.gamebtn.plain:hover .name, .gamebtn.plain.on .name { color: var(--fg); }
+.gamebtn.plain:hover .tile, .gamebtn.plain.on .tile { opacity: 1; }

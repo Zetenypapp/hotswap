@@ -137,6 +137,8 @@ async function scanLibrary() {
 }
 
 const modsOf = g => g.cats.flatMap(c => c.mods);
+// Has mods that work now (not only ones marked Soon), and no anti-cheat.
+const hasLiveMods = g => !g.anticheat.length && modsOf(g).some(m => m.live);
 const gamesOnly = () => LIB.filter(g => !g.software);
 const softwareOnly = () => LIB.filter(g => g.software);
 const findGame = id => LIB.find(g => g.id === String(id));
@@ -286,18 +288,22 @@ function renderSide() {
     let list = src.filter(x => !q || x.name.toLowerCase().includes(q) || modsOf(x).some(m => m.name.toLowerCase().includes(q)));
     return state.sortAZ ? [...list].sort((a, b) => a.name.localeCompare(b.name)) : list;
   };
-  const row = x => {
+  const row = (x, plain) => {
     const n = state.showCounts ? activeCount(x) : 0;
-    return `<button class="gamebtn${x.id === state.game && state.view === 'game' ? ' on' : ''}" data-game="${x.id}">${tile(x)}<span class="name">${esc(x.name)}</span>${n ? `<span class="count">${n}</span>` : ''}</button>`;
+    return `<button class="gamebtn${plain ? ' plain' : ''}${x.id === state.game && state.view === 'game' ? ' on' : ''}" data-game="${x.id}">${tile(x)}<span class="name">${esc(x.name)}</span>${n ? `<span class="count">${n}</span>` : ''}</button>`;
   };
   const games = pick(gamesOnly()), soft = pick(softwareOnly());
+  // Games Hotswap can mod come first, in their own section; everything else under a divider.
+  const modded = games.filter(hasLiveMods), other = games.filter(g => !hasLiveMods(g));
   $('gameCount').textContent = gamesOnly().length;
-  let html = games.map(row).join('') || '<p class="empty" style="padding:6px 10px">No games match.</p>';
+  let html = !games.length ? '<p class="empty" style="padding:6px 10px">No games match.</p>'
+    : (modded.length ? `<div class="side-sec">With mods <span class="n">${modded.length}</span></div>${modded.map(g => row(g)).join('')}` : '')
+      + (other.length ? `<div class="side-sec other">Other games <span class="n">${other.length}</span></div>${other.map(g => row(g, true)).join('')}` : '');
   if (state.showSoftware && soft.length) {
     const open = state.softOpen || !!q;
     html += `<button class="soft-head" id="softToggle" aria-expanded="${open}">Software <span class="n">${soft.length}</span>
       <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
-      ${open ? soft.map(row).join('') : ''}`;
+      ${open ? soft.map(g => row(g, true)).join('') : ''}`;
   }
   $('games').innerHTML = html;
 
