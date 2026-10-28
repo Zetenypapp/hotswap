@@ -100,7 +100,7 @@ Mods has a page per game. For Satisfactory, Browse searches every mod on [ficsit
 - ⏱️ **Playtime and sessions:** Steam hours plus time played with HotSwap
 - 🔍 **Ctrl+K palette:** jump to any game, page, mod or action
 - 📍 **Teleport hotkeys:** save your position and jump back to it
-- 🔊 **Sounds and in-game overlay** when mods change, in the corner you pick, plus a hotkey cheat sheet (hold Ctrl+F1)
+- 🔊 **Sounds and in-game overlay** when mods change, in the corner you pick, plus a hotkey cheat sheet (hold Ctrl+F1). The overlay is its own window over the game (nothing is injected), so run games in **borderless or windowed** mode; exclusive fullscreen covers it.
 - 🔄 **Auto-updates:** signed updates from GitHub releases, installed with one click
 - 🎨 **Accent colors, tray icon, start with Windows**
 

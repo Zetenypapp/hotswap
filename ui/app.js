@@ -524,6 +524,7 @@ function renderSettings() {
       <div class="set-row"><div class="txt"><b>Enable hotkeys</b><span>While a game with mods is running, its hotkeys work everywhere, including inside the game. They're released again when the game closes.</span></div>${sw('setHotkeys', state.hotkeys)}</div>
       <div class="set-row"><div class="txt"><b>Panic key</b><span>Turns off every mod in the running game at once. Click to change it.</span></div>
         <button class="key bindable${listeningPanic ? ' listening' : ''}" id="panicBind">${listeningPanic ? 'Press a key…' : esc(comboLabel(state.panicKey))}</button></div>
+      ${invoke ? `<div class="set-tip"><b>Overlay tip:</b> HotSwap’s overlay is its own window on top of the game, so it never touches the game itself. Set the game’s display mode to <b>Borderless</b> or <b>Windowed</b>; in <b>exclusive fullscreen</b> the game covers the overlay and it won’t show.</div>` : ''}
       ${invoke ? `<div class="set-row"><div class="txt"><b>Cheat sheet key</b><span>Hold it in game to see every mod and its hotkey on the overlay. Click to change.</span></div>
         <button class="key bindable${capture?.mid === SHEET ? ' listening' : ''}${state.sheetKey ? '' : ' unbound'}" id="sheetBind">${capture?.mid === SHEET ? 'Press a key…' : esc(comboLabel(state.sheetKey))}</button></div>` : ''}
       ${invoke ? `<div class="set-row"><div class="txt"><b>Overlay menu key</b><span>Opens a menu over the game where you can flip mods with the mouse or arrow keys. Press it again or Esc to close.</span></div>
