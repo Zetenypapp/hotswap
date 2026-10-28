@@ -183,7 +183,7 @@ impl Trainer {
                             _ => Status { game: game.clone(), connected: false, message: "Waiting for the game to load".into() },
                         }
                     }
-                    Some(crate::scrap::SCRAP) => {
+                    Some(crate::scrap::SCRAP) if crate::scrap::ENABLED => {
                         // Looking for the process is the expensive part: at most every 3 seconds.
                         if last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
                             last_attach = Some(Instant::now());

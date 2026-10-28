@@ -433,7 +433,10 @@ function renderLibrary() {
 
 /* ---------- Maps ---------- */
 // Steam app IDs with an interactive map (opened in its own window by the backend).
-const MAP_GAMES = ['526870', '264710', '387990'];
+const MAP_GAMES = ['526870', '264710'];
+// Shown on the Maps page but not ready yet.
+const SOON_MAPS = ['387990'];
+const MAP_NAMES = { 526870: 'Satisfactory', 264710: 'Subnautica', 387990: 'Scrap Mechanic' };
 // Games that also have Satisfactory Calculator's web map.
 const WEB_MAPS = ['526870'];
 
@@ -442,7 +445,7 @@ let mapMode = 'local'; // 'local' = Hotswap's own map, 'web' = Satisfactory Calc
 
 function renderMaps() {
   setAmbient(null);
-  const list = MAP_GAMES.map(id => LIB.find(g => String(g.appId) === id) || buildGame({ appId: +id, name: CATALOG[id]?.name || 'Satisfactory' }));
+  const list = MAP_GAMES.map(id => LIB.find(g => String(g.appId) === id) || buildGame({ appId: +id, name: MAP_NAMES[id] }));
   const open = list.find(g => String(g.appId) === mapOpen);
   // Re-renders happen on every app event; leave a live map alone instead of rebuilding it.
   const key = open ? `${open.appId}:${mapMode}` : '';
@@ -456,7 +459,9 @@ function renderMaps() {
     <div id="mapHost" class="map-host">${mapMode === 'web' ? '<span>Loading map…</span>' : ''}</div>` : `
     <div class="lib-head"><h1>Maps</h1><span class="meta">Resources, collectibles and your factory, live. Pin spots and teleport.</span></div>
     <div class="lib-grid">${list.map(g => `<button class="lib-item" data-map="${g.appId}"><span class="art">${capsule(g)}</span>
-      <span class="nm">${esc(g.name)}</span><span class="sub">Interactive map${RUNNING === g.id ? ' · live' : ''}</span></button>`).join('')}</div>
+      <span class="nm">${esc(g.name)}</span><span class="sub">Interactive map${RUNNING === g.id ? ' · live' : ''}</span></button>`).join('')}
+      ${SOON_MAPS.map(id => LIB.find(g => String(g.appId) === id) || buildGame({ appId: +id, name: MAP_NAMES[id] })).map(g => `<button class="lib-item soon-item" disabled><span class="art">${capsule(g)}</span>
+      <span class="nm">${esc(g.name)}</span><span class="sub">Coming soon</span></button>`).join('')}</div>
     <p class="meta" style="margin-top:22px">The Hotswap map is drawn from your running game. The detailed map is <a href="https://satisfactory-calculator.com" ${ext}>Satisfactory Calculator</a>, shown as-is.</p>`;
   if (open && mapMode === 'local') {
     const host = $('mapHost');

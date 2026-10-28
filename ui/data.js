@@ -69,8 +69,6 @@ const LIVE = {
     'free-production', 'no-power-required', 'no-fuel-needed', 'turbo-production',
     'save-position', 'teleport-to-saved-position',
   ],
-  387990: ['infinite-health', 'infinite-breath', 'run-speed', 'jump-height', 'unlimited-items', 'easy-craft', 'give-50-components', 'give-100-potato-ammo', 'give-20-batteries',
-    'give-20-gasoline', 'give-20-glowsticks', 'give-50-water', 'no-aggro', 'no-raids', 'always-day', 'gravity'],
   220200: ['unlimited-fuel', 'unlimited-monopropellant', 'unlimited-flight-resources', 'invincible-craft', 'no-overheating', 'unlimited-funds', 'unlimited-research-points', 'max-reputation', 'any-contract',
     'add-100-000-funds', 'add-1-000-science', 'add-100-reputation', 'part-clipping', 'free-attachment', 'unlimited-inventory', 'gravity', 'show-biomes'],
   3241660: ['infinite-health', 'infinite-stamina', 'infinite-jumps', 'movement-speed', 'grab-strength', 'throw-strength', 'enemy-radar', 'infinite-battery', 'complete-extractions'],

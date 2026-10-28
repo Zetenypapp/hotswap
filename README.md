@@ -7,7 +7,7 @@ Hotswap is a free, open-source, ad-free mod app for **single-player** PC games o
 > 💡 **Inspired by ArtCraft.**
 > 🤖 **Made by AI.** Hotswap was designed and written by Claude (Anthropic's AI) in Claude Code, directed by [@Zetenypapp](https://github.com/Zetenypapp).
 
-> 🎮 **Game support right now: Satisfactory, Subnautica, Subnautica 2 and R.E.P.O.** These are the games with working mod settings so far. Every other game shows up in your library with art, playtime and launching, but its mod list is either empty or marked **Soon**.
+> 🎮 **Game support right now: Satisfactory, Subnautica, Subnautica 2, R.E.P.O. and Kerbal Space Program.** These are the games with working mod settings so far. Every other game shows up in your library with art, playtime and launching, but its mod list is either empty or marked **Soon**.
 
 ![Satisfactory mod page](docs/game.png)
 
@@ -29,6 +29,10 @@ All of these work live while you play. Hotswap connects to the running game, and
 | 🏗️ | **No Power Required / No Fuel Needed** | Factories and generators run for free |
 
 Everything happens in the game's memory only. Nothing is written to your save file: restart the game and it's all back to normal. Still, **keep a backup save** while experimenting.
+
+## 🚀 Kerbal Space Program mods
+
+Unlimited Fuel, Unlimited Monopropellant, Unlimited Flight Resources, Invincible Craft, No Overheating, Unlimited Funds, Unlimited Research Points, Max Reputation, Any Contract, Add Funds / Science / Reputation, Part Clipping, Free Attachment, Unlimited Inventory, Gravity and Show Biomes. Most of them flip KSP's own Alt+F12 cheats; the refills work on the vessel you're flying.
 
 ## 👻 R.E.P.O. mods
 

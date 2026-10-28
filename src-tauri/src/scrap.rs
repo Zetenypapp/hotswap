@@ -16,6 +16,9 @@ use std::{
 };
 
 pub const SCRAP: &str = "387990";
+/// Off until the bridge actually loads: the game serves its scripts from a cache, so the patched
+/// files never run yet. While off, Hotswap doesn't touch the game's files.
+pub const ENABLED: bool = false;
 
 const BRIDGE: &str = include_str!("../assets/sm_bridge.lua");
 const BRIDGE_FILE: &str = r"Scripts\hotswap_bridge.lua";
