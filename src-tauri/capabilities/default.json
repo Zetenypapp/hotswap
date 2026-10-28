@@ -63,6 +63,7 @@
     "allow-ts-search",
     "allow-ts-list",
     "allow-ts-install",
+    "allow-ts-install-file",
     "allow-ts-set-enabled",
     "allow-ts-remove",
     "allow-voice-start",

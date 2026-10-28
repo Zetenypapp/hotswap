@@ -412,7 +412,8 @@ async fn fmods_install(app: AppHandle, watch: State<'_, watch::Watch>, game: Str
 }
 
 /// Games whose mods come from Thunderstore: game ID -> Thunderstore community.
-const THUNDER_GAMES: [(&str, &str); 3] = [(repo::REPO, "repo"), (sn1::SUBNAUTICA, "subnautica"), (sn1::BELOW_ZERO, "subnautica-below-zero")];
+/// (Mon Bazou has no Thunderstore community: its BepInEx mods come from Nexus only.)
+const THUNDER_GAMES: [(&str, &str); 4] = [(repo::REPO, "repo"), (sn1::SUBNAUTICA, "subnautica"), (sn1::BELOW_ZERO, "subnautica-below-zero"), (extra::MON_BAZOU, "")];
 
 fn thunder_game(watch: &watch::Watch, game: &str, changing: bool) -> Result<(thunderstore::Game, &'static str), String> {
     let (_, community) = THUNDER_GAMES.iter().find(|g| g.0 == game).ok_or("No Thunderstore mods for this game")?;
@@ -457,6 +458,14 @@ async fn ts_install(watch: State<'_, watch::Watch>, game: String, id: String) ->
     }
     let (g, community) = thunder_game(&watch, &game, true)?;
     tauri::async_runtime::spawn_blocking(move || g.install(community, &id)).await.map_err(|e| e.to_string())?
+}
+
+/// Installs a downloaded mod file (Nexus Mods) into a BepInEx game.
+#[tauri::command]
+async fn ts_install_file(app: AppHandle, watch: State<'_, watch::Watch>, game: String, path: String) -> Result<String, String> {
+    let (g, community) = thunder_game(&watch, &game, true)?;
+    let scratch = app.path().app_cache_dir().map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || g.install_file(community, std::path::Path::new(&path), &scratch)).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1434,7 +1443,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
             fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart,
-            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, overlay_menu, overlay_input, overlay_ready, ts_search, ts_list, ts_install, ts_set_enabled, ts_remove, voice_start, voice_stop, voice_state, voice_send, system_stats, discord_presence, radar_show, set_mini, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
+            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, overlay_menu, overlay_input, overlay_ready, ts_search, ts_list, ts_install, ts_install_file, ts_set_enabled, ts_remove, voice_start, voice_stop, voice_state, voice_send, system_stats, discord_presence, radar_show, set_mini, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running HotSwap");

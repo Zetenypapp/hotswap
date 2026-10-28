@@ -266,6 +266,72 @@ impl Game {
 
 /// Where a file from a mod's zip goes: plugins/ and loose files into the mod's folder, config/
 /// into BepInEx/config, patchers/ into BepInEx/patchers/<id> (as r2modman does).
+/// BepInEx 5 (x64) from its GitHub releases, for games without a Thunderstore pack.
+const BEPINEX_ZIP: &str = "https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.2/BepInEx_win_x64_5.4.23.2.zip";
+
+impl Game {
+    /// Makes sure BepInEx is in the game folder: the community's pack, or plain BepInEx.
+    fn ensure_loader(&self, community: &str) -> Result<(), String> {
+        if self.bep().join("core").is_dir() {
+            return Ok(());
+        }
+        if !community.is_empty() {
+            self.install(community, loader(community))?;
+            return Ok(());
+        }
+        let mut bytes = Vec::new();
+        ureq::get(BEPINEX_ZIP).timeout(Duration::from_secs(120)).call().map_err(|e| format!("Couldn't download BepInEx: {e}"))?
+            .into_reader().take(100 << 20).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
+        zip.extract(&self.root).map_err(|e| format!("Couldn't unpack BepInEx: {e}"))?;
+        let mut idx = self.index();
+        idx.insert("BepInEx-BepInExPack".into(), json!({ "name": "BepInEx", "version": "5.4.23.2" }));
+        self.save_index(&idx)
+    }
+
+    /// Installs a mod downloaded by hand (a .zip or .7z from Nexus Mods), BepInEx first if needed.
+    pub fn install_file(&self, community: &str, file: &Path, scratch: &Path) -> Result<String, String> {
+        self.ensure_loader(community)?;
+        let stem = file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "mod".into());
+        // Nexus names files like "Mod Name-123-1-0-1700000000": keep the name part.
+        let name = stem.split('-').next().unwrap_or(&stem).trim().to_string();
+        let id = format!("nexus-{}", name.replace(|c: char| !c.is_ascii_alphanumeric(), "_"));
+        let tmp = scratch.join("bepunpack");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
+        match file.extension().map(|x| x.to_string_lossy().to_lowercase()).as_deref() {
+            Some("zip") => crate::modfiles::unzip(file, &tmp)?,
+            Some("7z") => sevenz_rust::decompress_file(file, &tmp).map_err(|e| format!("7z: {e}"))?,
+            Some("dll") => {
+                std::fs::copy(file, tmp.join(file.file_name().unwrap())).map_err(|e| e.to_string())?;
+            }
+            _ => return Err("Pick a .zip, .7z or .dll file".into()),
+        }
+        let target = self.on_dir(&id);
+        let _ = std::fs::remove_dir_all(self.off_dir(&id));
+        let _ = std::fs::remove_dir_all(&target);
+        for f in crate::modfiles::walk(&tmp) {
+            let Ok(rel) = f.strip_prefix(&tmp) else { continue };
+            // Anything under a BepInEx folder (however deep) keeps its place in BepInEx.
+            let parts: Vec<_> = rel.components().collect();
+            let rel: PathBuf = match parts.iter().position(|c| c.as_os_str().eq_ignore_ascii_case("BepInEx")) {
+                Some(i) => parts[i..].iter().collect(),
+                None => rel.to_path_buf(),
+            };
+            let out = place(&self.bep(), &target, &id, &rel);
+            if let Some(dir) = out.parent() {
+                std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            }
+            std::fs::copy(&f, &out).map_err(|e| format!("{}: {e}", out.display()))?;
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+        let mut idx = self.index();
+        idx.insert(id, json!({ "name": name, "version": "from Nexus" }));
+        self.save_index(&idx)?;
+        Ok(name)
+    }
+}
+
 fn place(bep: &Path, target: &Path, id: &str, rel: &Path) -> PathBuf {
     let mut parts = rel.components();
     let first = parts.next().map(|c| c.as_os_str().to_string_lossy().to_lowercase()).unwrap_or_default();

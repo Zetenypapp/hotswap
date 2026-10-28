@@ -226,7 +226,7 @@ fn name_of(tmp: &Path) -> String {
     }
 }
 
-fn walk(dir: &Path) -> Vec<PathBuf> {
+pub fn walk(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
@@ -250,7 +250,7 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn unzip(file: &Path, to: &Path) -> Result<(), String> {
+pub fn unzip(file: &Path, to: &Path) -> Result<(), String> {
     let mut z = zip::ZipArchive::new(fs::File::open(file).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     for i in 0..z.len() {
         let mut f = z.by_index(i).map_err(|e| e.to_string())?;
