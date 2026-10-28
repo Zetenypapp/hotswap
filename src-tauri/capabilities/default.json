@@ -63,7 +63,7 @@
     "allow-voice-start",
     "allow-voice-stop",
     "allow-voice-state",
-    "allow-voice-set",
+    "allow-voice-send",
     "allow-system-stats",
     "allow-discord-presence"
   ]

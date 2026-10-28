@@ -23,6 +23,15 @@ pub struct Member {
     speaking: bool,
     mute: bool,
     deaf: bool,
+    /// Your own settings for this person: muted for you, and volume (0..200, 100 is normal).
+    local_mute: bool,
+    volume: f64,
+}
+
+#[derive(Clone, Default, Serialize)]
+pub struct Channel {
+    id: String,
+    name: String,
 }
 
 #[derive(Clone, Default, Serialize)]
@@ -35,10 +44,20 @@ pub struct State {
     members: Vec<Member>,
     mute: bool,
     deaf: bool,
+    channel_id: String,
+    /// Voice channels of the server you're in.
+    channels: Vec<Channel>,
+    /// Mic volume (0..100), headphone volume (0..200), noise suppression.
+    input_volume: f64,
+    output_volume: f64,
+    noise: bool,
 }
 
+/// Commands the overlay may send to Discord, with their arguments.
+const ALLOWED: [&str; 4] = ["SET_VOICE_SETTINGS", "SET_USER_VOICE_SETTINGS", "SELECT_VOICE_CHANNEL", "GET_CHANNELS"];
+
 enum Cmd {
-    Set(Value),
+    Send(String, Value),
     Stop,
 }
 
@@ -49,7 +68,7 @@ pub struct Voice {
 }
 
 impl Voice {
-    pub fn start(&self) {
+    pub fn start(&self, app: tauri::AppHandle) {
         let mut tx = self.tx.lock().unwrap();
         if tx.is_some() {
             return;
@@ -57,7 +76,7 @@ impl Voice {
         let (t, rx) = mpsc::channel();
         *tx = Some(t);
         let state = self.state.clone();
-        std::thread::spawn(move || run(state, rx));
+        std::thread::spawn(move || run(app, state, rx));
     }
 
     pub fn stop(&self) {
@@ -72,17 +91,13 @@ impl Voice {
         if s.status.is_empty() { State { status: "off".into(), ..s } } else { s }
     }
 
-    /// Changes your mute or deafen in Discord.
-    pub fn set(&self, mute: Option<bool>, deaf: Option<bool>) -> Result<(), String> {
-        let mut args = json!({});
-        if let Some(m) = mute {
-            args["mute"] = json!(m);
-        }
-        if let Some(d) = deaf {
-            args["deaf"] = json!(d);
+    /// Sends one of the ALLOWED commands to Discord (mute, volumes, channels, ...).
+    pub fn send(&self, cmd: String, args: Value) -> Result<(), String> {
+        if !ALLOWED.contains(&cmd.as_str()) {
+            return Err(format!("{cmd} isn't allowed"));
         }
         let tx = self.tx.lock().unwrap();
-        tx.as_ref().ok_or("Discord voice isn't connected")?.send(Cmd::Set(args)).map_err(|_| "Discord voice stopped".to_string())
+        tx.as_ref().ok_or("Discord voice isn't connected")?.send(Cmd::Send(cmd, args)).map_err(|_| "Discord voice stopped".to_string())
     }
 }
 
@@ -111,11 +126,11 @@ fn set_status(state: &Mutex<State>, status: &str, message: &str) {
     s.message = message.into();
 }
 
-fn run(state: Arc<Mutex<State>>, rx: mpsc::Receiver<Cmd>) {
+fn run(app: tauri::AppHandle, state: Arc<Mutex<State>>, rx: mpsc::Receiver<Cmd>) {
     loop {
         set_status(&state, "connecting", "Looking for the Discord app…");
         if let Some(ws) = connect() {
-            let mut s = Session { ws, state: state.clone(), nonce: 0, channel: None, pending: Default::default() };
+            let mut s = Session { ws, app: app.clone(), state: state.clone(), nonce: 0, channel: None, guild: None, pending: Default::default() };
             match s.serve(&rx) {
                 Ok(()) => return, // stopped
                 Err(e) => set_status(&state, "error", &e),
@@ -133,9 +148,11 @@ fn run(state: Arc<Mutex<State>>, rx: mpsc::Receiver<Cmd>) {
 
 struct Session {
     ws: Ws,
+    app: tauri::AppHandle,
     state: Arc<Mutex<State>>,
     nonce: u64,
     channel: Option<String>,
+    guild: Option<String>,
     /// Nonce -> what the reply is for.
     pending: std::collections::HashMap<String, &'static str>,
 }
@@ -163,7 +180,7 @@ impl Session {
                     let _ = self.ws.close(None);
                     return Ok(());
                 }
-                Ok(Cmd::Set(args)) => self.send("SET_VOICE_SETTINGS", args, None, "set")?,
+                Ok(Cmd::Send(cmd, args)) => self.send(&cmd, args, None, "")?,
                 Err(mpsc::TryRecvError::Empty) => {}
             }
             // A slow safety net in case an event was missed.
@@ -230,6 +247,7 @@ impl Session {
                 set_status(&self.state, "ready", "");
                 self.send("SUBSCRIBE", json!({}), Some("VOICE_CHANNEL_SELECT"), "")?;
                 self.send("SUBSCRIBE", json!({}), Some("VOICE_SETTINGS_UPDATE"), "")?;
+                self.send("SUBSCRIBE", json!({}), Some("NOTIFICATION_CREATE"), "")?;
                 self.send("GET_VOICE_SETTINGS", json!({}), None, "settings")?;
                 self.send("GET_SELECTED_VOICE_CHANNEL", json!({}), None, "channel")?;
             }
@@ -241,6 +259,44 @@ impl Session {
                 if let Some(d) = data["deaf"].as_bool() {
                     s.deaf = d;
                 }
+                if let Some(v) = data["input"]["volume"].as_f64() {
+                    s.input_volume = v;
+                }
+                if let Some(v) = data["output"]["volume"].as_f64() {
+                    s.output_volume = v;
+                }
+                if let Some(n) = data["noise_suppression"].as_bool() {
+                    s.noise = n;
+                }
+            }
+            ("SET_USER_VOICE_SETTINGS", _) => {
+                let id = data["user_id"].as_str().unwrap_or("");
+                let mut s = self.state.lock().unwrap();
+                if let Some(x) = s.members.iter_mut().find(|x| x.id == id) {
+                    if let Some(v) = data["volume"].as_f64() {
+                        x.volume = v;
+                    }
+                    if let Some(m) = data["mute"].as_bool() {
+                        x.local_mute = m;
+                    }
+                }
+            }
+            ("GET_CHANNELS", _) => {
+                let list = data["channels"].as_array().map(|a| {
+                    a.iter()
+                        .filter(|c| matches!(c["type"].as_i64(), Some(2 | 13)))
+                        .map(|c| Channel { id: c["id"].as_str().unwrap_or("").into(), name: c["name"].as_str().unwrap_or("").into() })
+                        .collect()
+                });
+                self.state.lock().unwrap().channels = list.unwrap_or_default();
+            }
+            ("DISPATCH", "NOTIFICATION_CREATE") => {
+                // A Discord notification, shown as an overlay toast.
+                let note = json!({ "kind": "discord", "title": data["title"], "body": data["body"], "icon": data["icon_url"] });
+                let app = self.app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = crate::overlay_notify(app, note).await;
+                });
             }
             ("GET_SELECTED_VOICE_CHANNEL", _) => self.channel(data)?,
             ("DISPATCH", "VOICE_CHANNEL_SELECT") => {
@@ -289,9 +345,19 @@ impl Session {
             }
             self.channel = id.clone();
         }
+        // The server's voice channels, for switching.
+        let guild = data["guild_id"].as_str().map(str::to_string);
+        if guild != self.guild {
+            self.guild = guild.clone();
+            match &guild {
+                Some(g) => self.send("GET_CHANNELS", json!({ "guild_id": g }), None, "")?,
+                None => self.state.lock().unwrap().channels.clear(),
+            }
+        }
         let mut s = self.state.lock().unwrap();
         let speaking: Vec<String> = s.members.iter().filter(|m| m.speaking).map(|m| m.id.clone()).collect();
         s.channel = data["name"].as_str().unwrap_or("").to_string();
+        s.channel_id = id.unwrap_or_default();
         s.members = data["voice_states"].as_array().map(|a| a.iter().map(member).collect()).unwrap_or_default();
         for m in s.members.iter_mut() {
             m.speaking = speaking.contains(&m.id);
@@ -310,5 +376,6 @@ fn member(v: &Value) -> Member {
     };
     let vs = &v["voice_state"];
     let flag = |k: &str| vs[k].as_bool().unwrap_or(false);
-    Member { id, name, avatar, speaking: false, mute: flag("mute") || flag("self_mute") || flag("suppress"), deaf: flag("deaf") || flag("self_deaf") }
+    let mute = flag("mute") || flag("self_mute") || flag("suppress");
+    Member { id, name, avatar, speaking: false, mute, deaf: flag("deaf") || flag("self_deaf"), local_mute: v["mute"].as_bool().unwrap_or(false), volume: v["volume"].as_f64().unwrap_or(100.0) }
 }

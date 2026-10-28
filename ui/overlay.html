@@ -90,6 +90,25 @@
   .dc-p b { flex: 1; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dc-p .ic { font-size: 11px; font-weight: 800; color: #f23f43; }
   .btn.red { background: #f23f43; color: #fff; }
+  .btn.sm { height: 26px; padding: 0 9px; border-radius: 8px; font-size: 11px; }
+  .dc-p { flex-wrap: wrap; }
+  .dc-p .vol { flex-basis: 100%; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); font-weight: 700; }
+  .dc-p .vol input { flex: 1; height: 18px; }
+  .dc-p.lm b { text-decoration: line-through; color: var(--muted); }
+  .dc-set { display: grid; grid-template-columns: auto 1fr 44px; align-items: center; gap: 6px 10px; padding: 10px 14px; border-radius: 14px; background: rgba(255, 255, 255, .05); font-size: 12px; font-weight: 800; color: var(--soft); }
+  .dc-set .val { text-align: right; color: var(--muted); }
+  .dc-chs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .dc-chs button { height: 28px; padding: 0 10px; border: 0; border-radius: 9px; background: rgba(255, 255, 255, .07); color: var(--soft); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .dc-chs button:hover { background: rgba(255, 255, 255, .14); }
+  .dc-chs button.on { background: #5865f2; color: #fff; }
+  .dc-h { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 4px 2px 0; }
+  /* Who's talking, under the HUD. */
+  #hud .talk { display: flex; flex-wrap: wrap; gap: 6px; }
+  #hud .talk span { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; padding: 2px 8px 2px 2px; border-radius: 12px; background: rgba(35, 165, 90, .18); }
+  #hud .talk img { width: 20px; height: 20px; border-radius: 50%; box-shadow: 0 0 0 2px #23a55a; }
+  .note .dci { width: 32px; height: 32px; border-radius: 50%; flex: none; background: #5865f2; display: grid; place-items: center; overflow: hidden; }
+  .note .dci img { width: 100%; height: 100%; object-fit: cover; }
+  .note .t span.body { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
   .m-bar { display: flex; align-items: center; gap: 8px; padding: 0 18px 12px; flex-wrap: wrap; }
   .tab { height: 30px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
   .tab:hover { color: var(--fg); background: rgba(255, 255, 255, .06); }
@@ -152,9 +171,12 @@
   const voiceOpt = on => { try { localStorage.setItem('hs.dc.voice', on ? '1' : '0'); } catch {} };
   if (voiceOn()) invoke('voice_start').catch(() => {});
   setInterval(async () => {
-    if (!menu || view !== 'discord' || !voiceOn()) return;
+    if (!voiceOn() || dragging) return;
     const v = await invoke('voice_state').catch(() => null);
-    if (JSON.stringify(v) !== JSON.stringify(voice)) { voice = v; renderMenu(); }
+    if (JSON.stringify(v) === JSON.stringify(voice)) return;
+    voice = v;
+    if (menu && view === 'discord') renderMenu();
+    if (hud) renderHud();
   }, 400);
   const BOLT = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>';
 
@@ -167,6 +189,7 @@
 
   /* ---------- Toasts ---------- */
   function toast(p) {
+    if (p.kind === 'discord') return dcToast(p);
     const n = document.createElement('div');
     n.className = 'note glass' + (p.on ? ' is-on' : '');
     n.innerHTML = `<span class="ic">${BOLT}</span><span class="t"><b>${esc(p.title)}</b><span>${esc(p.game)}</span></span><span class="v${p.on ? ' on' : ''}">${esc(p.value)}</span>`
@@ -174,6 +197,16 @@
     $('toasts').prepend(n);
     while ($('toasts').children.length > 4) $('toasts').lastChild.remove();
     setTimeout(() => { n.classList.add('out'); setTimeout(() => n.remove(), 320); }, 2400);
+  }
+
+  // A Discord notification (a message or ping), shown like a mod toast but a bit longer.
+  function dcToast(p) {
+    const n = document.createElement('div');
+    n.className = 'note glass';
+    n.innerHTML = `<span class="dci">${p.icon ? `<img src="${esc(p.icon)}" alt="">` : DISCORD}</span><span class="t"><b>${esc(p.title)}</b><span class="body">${esc(p.body)}</span></span>`;
+    $('toasts').prepend(n);
+    while ($('toasts').children.length > 4) $('toasts').lastChild.remove();
+    setTimeout(() => { n.classList.add('out'); setTimeout(() => n.remove(), 320); }, 5000);
   }
 
   /* ---------- Cheat sheet ---------- */
@@ -201,6 +234,7 @@
       `<span class="dim">${clock()}</span>`,
     ].filter(Boolean).join('');
     $('hud').innerHTML = `<div class="hd">${logo(24)}<span class="dot${hud.connected ? ' ok' : ''}"></span><div class="stats">${parts}</div></div>`
+      + (voice?.status === 'ready' && voice.members.some(m => m.speaking) ? `<div class="talk">${voice.members.filter(m => m.speaking).map(m => `<span><img src="${esc(m.avatar)}" alt="">${esc(m.name)}</span>`).join('')}</div>` : '')
       + (hud.mods?.length ? `<div class="chips">${hud.mods.slice(0, 8).map(m => `<span>${esc(m)}</span>`).join('')}${hud.mods.length > 8 ? `<span>+${hud.mods.length - 8}</span>` : ''}</div>` : '');
   }
   setInterval(() => { if (hud) renderHud(); if (menu) renderFoot(); }, 1000);
@@ -243,11 +277,24 @@
     if (!voiceOn()) return `<div class="dc-row"><div class="t"><b>See your call (beta)</b><span>Who’s in your voice channel, who’s talking, and real mute and deafen. Discord only lets its approved apps do this, so HotSwap connects as Discord’s own StreamKit overlay: Discord will ask once to authorize “StreamKit”. Unofficial, so it may stop working if Discord changes it.</span></div><button class="btn" data-voice="on">Connect</button></div>`;
     const v = voice || { status: 'connecting', message: 'Connecting…', members: [] };
     if (v.status !== 'ready') return `<div class="dc-row"><div class="t"><b>${v.status === 'error' ? 'Discord voice: not connected' : v.status === 'authorizing' ? 'Check Discord' : 'Connecting…'}</b><span>${esc(v.message)}</span></div><button class="btn" data-voice="off">Turn off</button></div>`;
-    const ppl = v.members.map(m => `<div class="dc-p${m.speaking ? ' talk' : ''}"><img src="${esc(m.avatar)}" alt=""><b>${esc(m.name)}</b>${m.deaf ? '<span class="ic">DEAF</span>' : m.mute ? '<span class="ic">MUTED</span>' : ''}</div>`).join('');
+    const pct = (x, max) => `--p:${(x / max * 100).toFixed(1)}%`;
+    const ppl = v.members.map(m => {
+      const me = m.id === v.me;
+      return `<div class="dc-p${m.speaking ? ' talk' : ''}${m.local_mute ? ' lm' : ''}"><img src="${esc(m.avatar)}" alt=""><b>${esc(m.name)}</b>${m.deaf ? '<span class="ic">DEAF</span>' : m.mute ? '<span class="ic">MUTED</span>' : ''}
+        ${me ? '' : `<button class="btn sm${m.local_mute ? ' red' : ''}" data-umute="${esc(m.id)}" title="Mute this person for you only">${m.local_mute ? 'Unmute' : 'Mute'}</button>
+        <div class="vol"><input type="range" min="0" max="200" step="5" value="${Math.round(m.volume)}" style="${pct(m.volume, 200)}" data-uvol="${esc(m.id)}"><span class="val">${Math.round(m.volume)}%</span></div>`}</div>`;
+    }).join('');
+    const chs = v.channels.map(c => `<button class="${c.id === v.channel_id ? 'on' : ''}" data-join="${esc(c.id)}">🔊 ${esc(c.name)}</button>`).join('');
     return `<div class="dc-call"><div class="hd2">${v.channel ? `🔊 ${esc(v.channel)}` : 'Not in a voice channel'}<span class="sp"></span>
         <button class="btn${v.mute ? ' red' : ''}" data-vset="mute">${v.mute ? 'Unmute' : 'Mute'}</button><button class="btn${v.deaf ? ' red' : ''}" data-vset="deaf">${v.deaf ? 'Undeafen' : 'Deafen'}</button>
-        <button class="btn" data-voice="off" title="Disconnect HotSwap from Discord voice">Turn off</button></div>
-        ${ppl ? `<div class="dc-ppl">${ppl}</div>` : ''}</div>`;
+        ${v.channel ? '<button class="btn red" data-leave="1" title="Leave the voice channel">Leave</button>' : ''}</div>
+        ${ppl ? `<div class="dc-ppl">${ppl}</div>` : ''}</div>
+      ${chs ? `<p class="dc-h">Switch channel</p><div class="dc-chs">${chs}</div>` : ''}
+      <p class="dc-h">Your audio</p>
+      <div class="dc-set"><span>Mic</span><input type="range" min="0" max="100" step="1" value="${Math.round(v.input_volume)}" style="${pct(v.input_volume, 100)}" data-gvol="input"><span class="val">${Math.round(v.input_volume)}%</span>
+        <span>Headphones</span><input type="range" min="0" max="200" step="1" value="${Math.round(v.output_volume)}" style="${pct(v.output_volume, 200)}" data-gvol="output"><span class="val">${Math.round(v.output_volume)}%</span>
+        <span>Noise suppression</span><span></span><button class="btn sm${v.noise ? ' on' : ''}" data-noise="1">${v.noise ? 'On' : 'Off'}</button></div>
+      <div class="dc-row"><div class="t"><b>Discord voice (beta)</b><span>Connected as Discord’s StreamKit overlay. Notifications show as toasts.</span></div><button class="btn" data-voice="off">Turn off</button></div>`;
   }
   function discordPanel() {
     const live = voiceOn() && voice?.status === 'ready';
@@ -291,10 +338,15 @@
     if (!menu) return;
     const t = e.target;
     if (t.matches('input[type=range]')) return;
-    const v = t.closest('[data-view],[data-rec],[data-dc],[data-voice],[data-vset]');
+    if (t.matches('input[type=range]')) return;
+    const v = t.closest('[data-view],[data-rec],[data-dc],[data-voice],[data-vset],[data-umute],[data-join],[data-leave],[data-noise]');
     if (v) {
       if (v.dataset.voice) { const on = v.dataset.voice === 'on'; voiceOpt(on); voice = null; invoke(on ? 'voice_start' : 'voice_stop').catch(() => {}); }
-      else if (v.dataset.vset) { const k = v.dataset.vset; if (voice) { voice[k] = !voice[k]; invoke('voice_set', { [k]: voice[k] }).catch(() => {}); } }
+      else if (v.dataset.vset) { const k = v.dataset.vset; if (voice) { voice[k] = !voice[k]; dcSend('SET_VOICE_SETTINGS', { [k]: voice[k] }); } }
+      else if (v.dataset.umute) { const m = voice?.members.find(x => x.id === v.dataset.umute); if (m) { m.local_mute = !m.local_mute; dcSend('SET_USER_VOICE_SETTINGS', { user_id: m.id, mute: m.local_mute }); } }
+      else if (v.dataset.join) dcSend('SELECT_VOICE_CHANNEL', { channel_id: v.dataset.join, force: true });
+      else if (v.dataset.leave) dcSend('SELECT_VOICE_CHANNEL', { channel_id: null });
+      else if (v.dataset.noise) { if (voice) { voice.noise = !voice.noise; dcSend('SET_VOICE_SETTINGS', { noise_suppression: voice.noise }); } }
       else if (v.dataset.view) { view = v.dataset.view; recording = null; }
       else if (v.dataset.rec) recording = recording === v.dataset.rec ? null : v.dataset.rec;
       else invoke('press_keys', { combo: dcCombo(v.dataset.dc) }).catch(() => {});
@@ -308,6 +360,23 @@
     else activate(+b.dataset.i);
   });
   $('shade').addEventListener('click', () => send({ type: 'close' }));
+  const dcSend = (cmd, args) => invoke('voice_send', { cmd, args }).catch(() => {});
+  // Discord volume sliders: a person's volume, or your mic and headphones.
+  document.addEventListener('input', e => {
+    const d = e.target.dataset;
+    if (!d.uvol && !d.gvol) return;
+    dragging = true;
+    e.target.style.setProperty('--p', (e.target.value / e.target.max * 100).toFixed(1) + '%');
+    if (e.target.nextElementSibling?.classList.contains('val')) e.target.nextElementSibling.textContent = e.target.value + '%';
+  });
+  document.addEventListener('change', e => {
+    const d = e.target.dataset;
+    if (!d.uvol && !d.gvol) return;
+    dragging = false;
+    const x = parseFloat(e.target.value);
+    if (d.uvol) { const m = voice?.members.find(m => m.id === d.uvol); if (m) m.volume = x; dcSend('SET_USER_VOICE_SETTINGS', { user_id: d.uvol, volume: x }); }
+    else { if (voice) voice[d.gvol + '_volume'] = x; dcSend('SET_VOICE_SETTINGS', { [d.gvol]: { volume: x } }); }
+  });
   document.addEventListener('input', e => {
     if (!e.target.dataset.range) return;
     dragging = true;
