@@ -1,0 +1,103 @@
+# Builds a release on GitHub, has SignPath sign the app and its installer, adds the updater
+# signature and publishes the release. Runs when a version tag (v1.2.3) is pushed.
+#
+# Needs, under the repo's Settings > Secrets and variables > Actions:
+#   secret   SIGNPATH_API_TOKEN          SignPath API token (CI user)
+#   variable SIGNPATH_ORGANIZATION_ID    SignPath organization ID
+#   secret   TAURI_SIGNING_PRIVATE_KEY   the updater key (contents of hotswap.key)
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      SIGNPATH_PROJECT: hotswap
+      SIGNPATH_POLICY: release-signing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install the Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build the app
+        working-directory: src-tauri
+        run: cargo tauri build --no-bundle
+
+      # 1. Sign hotswap.exe.
+      - uses: actions/upload-artifact@v4
+        id: exe
+        with:
+          name: unsigned-exe
+          path: src-tauri/target/release/hotswap.exe
+      - uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT }}
+          signing-policy-slug: ${{ env.SIGNPATH_POLICY }}
+          artifact-configuration-slug: exe
+          github-artifact-id: ${{ steps.exe.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-exe
+      - name: Use the signed app
+        run: Copy-Item signed-exe/hotswap.exe src-tauri/target/release/hotswap.exe -Force
+
+      # 2. Build the installer around the signed app, then sign the installer.
+      - name: Build the installer
+        working-directory: src-tauri
+        run: cargo tauri bundle --bundles nsis
+      - name: Find the installer
+        id: setup
+        shell: pwsh
+        run: |
+          $f = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          "path=$($f.FullName)" >> $env:GITHUB_OUTPUT
+          "name=$($f.Name)" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        id: setupart
+        with:
+          name: unsigned-setup
+          path: ${{ steps.setup.outputs.path }}
+      - uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT }}
+          signing-policy-slug: ${{ env.SIGNPATH_POLICY }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.setupart.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-setup
+
+      # 3. Updater signature of the signed installer, latest.json, and the release.
+      - name: Sign for the updater
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+        run: cargo tauri signer sign "signed-setup/${{ steps.setup.outputs.name }}"
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $ver = $tag.TrimStart('v')
+          $name = "${{ steps.setup.outputs.name }}"
+          $sig = Get-Content "signed-setup/$name.sig" -Raw
+          @{ version = $ver; notes = "See the release notes"; pub_date = (Get-Date).ToUniversalTime().ToString('o');
+             platforms = @{ 'windows-x86_64' = @{ signature = $sig.Trim(); url = "https://github.com/${{ github.repository }}/releases/download/$tag/$name" } } } |
+            ConvertTo-Json -Depth 5 | Set-Content latest.json -Encoding utf8
+          gh release create $tag "signed-setup/$name" "signed-setup/$name.sig" latest.json --title "HotSwap $tag" --notes "Signed build. Release notes follow." --draft

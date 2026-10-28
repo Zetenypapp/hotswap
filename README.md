@@ -155,6 +155,17 @@ Dev helpers: `hotswap.exe --scan` prints your detected library, `--home` prints 
 
 HotSwap is for **single-player and private games only**. It refuses to mod anything with anti-cheat, and you shouldn't use it to get an edge over other players.
 
+## 🔏 Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [Zetenypapp](https://github.com/Zetenypapp)
+- Approvers: [Zetenypapp](https://github.com/Zetenypapp)
+
+Release builds are made by GitHub Actions from this repository and signed only after a maintainer approves them.
+
+**Privacy:** HotSwap doesn't send anything about you anywhere. It only talks to the services you use through it (Steam, Thunderstore, SpaceDock, ficsit.app, Nexus Mods, GitHub for updates, and Discord on your own PC), and only to fetch what you ask for.
+
 ## 📜 Credits
 
 - Font: [Figtree](https://github.com/erikdkennedy/figtree), SIL Open Font License
