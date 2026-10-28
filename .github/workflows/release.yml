@@ -1,5 +1,5 @@
 # Builds a release on GitHub, has SignPath sign the app and its installer, adds the updater
-# signature and publishes the release. Runs when a version tag (v1.2.3) is pushed.
+# signature and publishes the release.
 #
 # Needs, under the repo's Settings > Secrets and variables > Actions:
 #   secret   SIGNPATH_API_TOKEN          SignPath API token (CI user)
@@ -7,9 +7,8 @@
 #   secret   TAURI_SIGNING_PRIVATE_KEY   the updater key (contents of hotswap.key)
 name: Release
 
+# Manual for now; switch back to version tags (push: tags: ['v*']) once SignPath is set up.
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -93,7 +92,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = "v" + (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
           $ver = $tag.TrimStart('v')
           $name = "${{ steps.setup.outputs.name }}"
           $sig = Get-Content "signed-setup/$name.sig" -Raw

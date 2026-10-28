@@ -99,7 +99,8 @@ Discord only gives voice access to apps it has approved, so Discord voice connec
 Browse, install, switch off and remove community mods from inside HotSwap:
 
 - 🏭 **Satisfactory:** ficsit.app, with dependencies and the mod loader
-- 👻 **R.E.P.O.**, 🐠 **Subnautica** and ❄️ **Below Zero:** one-click installs from Thunderstore, with BepInEx and dependencies set up automatically
+- 👻 **R.E.P.O.**, 🐠 **Subnautica** and ❄️ **Below Zero:** one-click installs from Thunderstore, with BepInEx and dependencies set up automatically, or switch to Nexus Mods
+- 🚗 **Mon Bazou:** Nexus Mods, with BepInEx set up automatically
 - 🚀 **Kerbal Space Program:** one-click installs from SpaceDock into GameData
 - 🌊 **Subnautica 2:** Nexus Mods (download on Nexus, HotSwap installs the file)
 
