@@ -102,7 +102,6 @@ const LIVE = {
   3241660: ['infinite-health', 'infinite-stamina', 'infinite-jumps', 'movement-speed', 'grab-strength', 'throw-strength', 'enemy-radar', 'infinite-battery', 'complete-extractions'],
   457140: ['instant-build', 'sandbox-tools', 'printing-pod-always-ready', 'max-game-speed', 'no-stress', 'no-hunger', 'infinite-breath', 'no-fatigue', 'no-bladder', 'full-health', 'instant-research', 'finish-research-queue'],
   1520370: ['no-hunger', 'no-thirst', 'no-sleep', 'no-anxiety', 'unlimited-money', 'add-10-000', 'walk-speed', 'jump-height', 'infinite-fuel', 'no-derby-damage', 'freeze-time', 'always-day'],
-  758690: ['immortality', 'no-hunger', 'no-thirst', 'infinite-stamina', 'movement-speed', 'infinite-oxygen', 'infinite-suit-energy', 'no-radiation', 'free-building', 'infinite-rover-battery'],
   848450: ['infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'no-freezing', 'swim-speed', 'walk-speed', 'free-crafting', 'unlock-all-blueprints',
     'fast-growing', 'infinite-energy', 'no-crush-depth', 'passive-creatures'],
   264710: [
