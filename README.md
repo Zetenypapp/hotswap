@@ -96,7 +96,12 @@ Discord only gives voice access to apps it has approved, so Discord voice connec
 
 ## 🧩 Mod loader
 
-Mods has a page per game. For Satisfactory, Browse searches every mod on [ficsit.app](https://ficsit.app) and installs it with one click, together with the Satisfactory Mod Loader and any other mods it needs. Downloads are checked against ficsit.app's SHA-256 hashes. Installed mods can be updated, turned off or removed. It uses the same folders as Satisfactory Mod Manager, so both work side by side. For Subnautica 2, HotSwap browses Nexus Mods and installs the .zip, .7z or .pak you download (UE4SS, Lua and pak mods).
+Browse, install, switch off and remove community mods from inside HotSwap:
+
+- 🏭 **Satisfactory:** ficsit.app, with dependencies and the mod loader
+- 👻 **R.E.P.O.**, 🐠 **Subnautica** and ❄️ **Below Zero:** one-click installs from Thunderstore, with BepInEx and dependencies set up automatically
+- 🚀 **Kerbal Space Program:** one-click installs from SpaceDock into GameData
+- 🌊 **Subnautica 2:** Nexus Mods (download on Nexus, HotSwap installs the file)
 
 ## ✨ App features
 
