@@ -45,10 +45,11 @@ const DEFAULTS = {
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
   showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, sounds: true, overlay: true, paused: {},
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
-  pinned: {}, sheetKey: 'Ctrl+F1', overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
+  pinned: {}, sheetKey: 'Ctrl+F1', menuKey: 'Insert', hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
 };
 const CORNERS = [['top-left', 'Top left'], ['top', 'Top'], ['top-right', 'Top right'], ['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right']];
 const SHEET = '__sheet'; // capture.mid while rebinding the cheat sheet key
+const MENU = '__menu'; // ... and the overlay menu key
 const REPO_URL = 'https://github.com/Zetenypapp/hotswap';
 let state = { ...DEFAULTS };
 let LIB = [];
@@ -178,12 +179,14 @@ function keysOf(g, m) {
 function clashes(g) {
   const seen = new Map([[state.panicKey, 1]]);
   if (state.sheetKey) seen.set(state.sheetKey, (seen.get(state.sheetKey) || 0) + 1);
+  if (state.menuKey) seen.set(state.menuKey, (seen.get(state.menuKey) || 0) + 1);
   for (const m of modsOf(g)) for (const k of Object.values(keysOf(g, m))) if (k) seen.set(k, (seen.get(k) || 0) + 1);
   return new Set([...seen].filter(([, n]) => n > 1).map(([k]) => k));
 }
 function whoUses(g, combo, except) {
   if (combo === state.panicKey && except !== 'panic') return 'the panic key';
   if (combo === state.sheetKey && except !== 'sheet') return 'the cheat sheet key';
+  if (combo === state.menuKey && except !== 'menu') return 'the overlay menu key';
   for (const m of modsOf(g)) {
     for (const [dir, k] of Object.entries(keysOf(g, m))) if (k === combo && `${m.id}/${dir}` !== except) return m.name;
   }
@@ -196,7 +199,7 @@ function syncHotkeys() {
   const g = findGame(RUNNING);
   const keys = !capture && state.hotkeys && g && modsOf(g).length
     ? state.paused[g.id] ? [state.panicKey]
-      : [...new Set([state.panicKey, state.overlay && state.sheetKey, ...modsOf(g).filter(m => m.live).flatMap(m => Object.values(keysOf(g, m)))].filter(Boolean))]
+      : [...new Set([state.panicKey, state.overlay && state.sheetKey, state.overlay && state.menuKey, ...modsOf(g).filter(m => m.live).flatMap(m => Object.values(keysOf(g, m)))].filter(Boolean))]
     : [];
   const sig = keys.join('|');
   if (sig === lastHotkeys) return;
@@ -517,12 +520,20 @@ function renderSettings() {
         <button class="key bindable${listeningPanic ? ' listening' : ''}" id="panicBind">${listeningPanic ? 'Press a key…' : esc(comboLabel(state.panicKey))}</button></div>
       ${invoke ? `<div class="set-row"><div class="txt"><b>Cheat sheet key</b><span>Hold it in game to see every mod and its hotkey on the overlay. Click to change.</span></div>
         <button class="key bindable${capture?.mid === SHEET ? ' listening' : ''}${state.sheetKey ? '' : ' unbound'}" id="sheetBind">${capture?.mid === SHEET ? 'Press a key…' : esc(comboLabel(state.sheetKey))}</button></div>` : ''}
+      ${invoke ? `<div class="set-row"><div class="txt"><b>Overlay menu key</b><span>Opens a menu over the game where you can flip mods with the mouse or arrow keys. Press it again or Esc to close.</span></div>
+        <button class="btn" id="testMenu">Try it</button><button class="key bindable${capture?.mid === MENU ? ' listening' : ''}${state.menuKey ? '' : ' unbound'}" id="menuBind">${capture?.mid === MENU ? 'Press a key…' : esc(comboLabel(state.menuKey))}</button></div>` : ''}
       <div class="set-row"><div class="txt"><b>Sounds</b><span>A short chime when a mod turns on or off.</span></div>${sw('setSounds', state.sounds)}</div>
       ${invoke ? `<div class="set-row"><div class="txt"><b>In-game overlay</b><span>Shows mod changes from hotkeys at the top of the screen, over the game. Works with borderless and windowed games, not exclusive fullscreen.</span></div><button class="btn" id="testOverlay">Test</button>${sw('setOverlay', state.overlay)}</div>` : ''}
       ${invoke ? `<div class="set-row"><div class="txt"><b>Overlay position</b><span>Where mod changes and the cheat sheet show up.</span></div>${cornerPicker('ocorner', state.overlayCorner)}</div>
+      <div class="set-row"><div class="txt"><b>HUD</b><span>A small bar over the game with your active mods, session time and clock. It keeps the overlay on screen, which can cost a little smoothness in some games.</span></div>${sw('setHud', state.hud)}</div>
+      ${state.hud ? `<div class="set-row"><div class="txt"><b>HUD position</b><span>Where the HUD sits.</span></div>${cornerPicker('hcorner', state.hudCorner)}</div>
+      <div class="set-row"><div class="txt"><b>CPU and RAM on the HUD</b><span>Your PC's total use, updated every second.</span></div>${sw('setHudStats', state.hudStats)}</div>` : ''}
       <div class="set-row"><div class="txt"><b>Radar position</b><span>Where the enemy radar sits, in games that have one.</span></div>${cornerPicker('rcorner', state.radarCorner)}</div>` : ''}
       <div class="set-row"><div class="txt"><b>Reset all key bindings</b><span>Puts every mod back on its default hotkey.</span></div><button class="btn" id="resetBinds">Reset</button></div>
     </div>
+    ${invoke ? `<div class="set-group"><h2>Discord</h2>
+      <div class="set-row"><div class="txt"><b>Show in Discord</b><span>Your Discord status shows the game you're playing with Hotswap and how many mods are on. Needs the Discord app running on this PC.${DISCORD_ERR ? ` <i>${esc(DISCORD_ERR)}.</i>` : ''}</span></div>${sw('setDiscord', state.discord)}</div>
+    </div>` : ''}
     ${invoke ? `<div class="set-group"><h2>Startup and tray</h2>
       <div class="set-row"><div class="txt"><b>Start with Windows</b><span>Hotswap opens quietly in the tray when you sign in, so hotkeys are ready when you start a game.</span></div>${sw('setAutostart', AUTOSTART)}</div>
       <div class="set-row"><div class="txt"><b>Close to tray</b><span>The close button hides Hotswap in the tray instead of quitting. Quit from the tray icon's menu.</span></div>${sw('setTray', state.closeToTray)}</div>
@@ -719,6 +730,8 @@ function render() {
   syncHotkeys();
   syncTrainer();
   syncMap();
+  pushMenu();
+  syncDiscord();
 }
 
 /* ---------- Actions ---------- */
@@ -753,7 +766,7 @@ function setMod(g, m, v, how) {
   save();
   syncTrainer();
   toast(m.name, shown);
-  feedback(g, m.name, shown, m.type === 'toggle' ? !!v : true, !!how);
+  feedback(g, m.name, shown, m.type === 'toggle' ? !!v : true, !!how, m.type === 'slider' ? (v - m.min) / (m.max - m.min) * 100 : null);
   renderSide();
   if (state.view === 'game' && state.game === g.id) renderGame();
   if (state.mini) renderMini();
@@ -769,6 +782,110 @@ function panic(how) {
   toast('All mods', 'off');
   feedback(g, 'All mods', 'Off', false, true);
   render();
+}
+
+/* ---------- The in-game overlay: notes, cheat sheet, menu and HUD ---------- */
+let menuOpen = false, hudOn = false, DISCORD_ERR = '';
+function overlaySend(note) {
+  if (!invoke) return;
+  const a = ACCENTS.find(x => x.c === state.accent) || ACCENTS[0];
+  invoke('overlay_notify', { note: { ...note, accent: a.c, ink: a.ink, corner: state.overlayCorner, hudCorner: state.hudCorner, keep: menuOpen || hudOn } }).catch(console.error);
+}
+
+// The menu: the running game's mods over the game, driven by mouse or keys (see overlay.html).
+function menuData(g) {
+  const pins = state.pinned[g.id] || {};
+  return {
+    game: g.name, connected: TRAINER.connected, message: TRAINER.message, paused: !!state.paused[g.id], count: activeCount(g),
+    profile: activeProf(g).name, profiles: profilesOf(g).map(p => p.name), start: sessionStart, menuKey: comboLabel(state.menuKey),
+    cats: g.cats.map(c => ({
+      name: c.name,
+      mods: c.mods.map(m => {
+        const v = valueOf(g, m), k = keysOf(g, m);
+        return {
+          id: m.id, name: m.name, type: m.type, info: m.info || '', live: m.live, pinned: !!pins[m.id], on: isActive(g, m),
+          value: m.type === 'slider' ? v : null, shown: m.type === 'slider' ? fmt(m, v) : '', min: m.min, max: m.max, step: m.step,
+          keys: [k.up && (m.type === 'slider' ? '↑ ' : '') + comboLabel(k.up), k.down && '↓ ' + comboLabel(k.down)].filter(Boolean),
+        };
+      }),
+    })),
+  };
+}
+let lastMenu = '';
+function pushMenu() {
+  if (!menuOpen) return;
+  const g = findGame(runningId());
+  if (!g) { toggleMenu(false); return; }
+  const data = menuData(g), sig = JSON.stringify(data);
+  if (sig === lastMenu) return;
+  lastMenu = sig;
+  overlaySend({ kind: 'menu', open: true, data });
+}
+// `test` opens it from Settings without a game running (with the game Hotswap shows).
+function toggleMenu(open = !menuOpen, test = false) {
+  if (!invoke || !state.overlay) return;
+  const g = test ? game() : findGame(runningId());
+  if (open && (!g || !modsOf(g).length)) { if (test) toast('Open a game with mods first', ''); return; }
+  menuOpen = open;
+  lastMenu = '';
+  invoke('overlay_menu', { open }).catch(console.error);
+  if (open) {
+    if (test) overlaySend({ kind: 'menu', open: true, data: menuData(g) }); else pushMenu();
+  } else overlaySend({ kind: 'menu', open: false });
+}
+function onOverlayInput(i) {
+  const g = findGame(runningId());
+  if (i.type === 'close' || !g) { toggleMenu(false); return; }
+  const m = modsOf(g).find(x => x.id === i.id);
+  if (i.type === 'set' && m) setMod(g, m, i.value, 'overlay menu');
+  else if (i.type === 'act' && m) setMod(g, m, null, 'overlay menu');
+  else if (i.type === 'profile') switchProfile(g, i.name);
+  else if (i.type === 'panic') panic('overlay menu');
+  else if (i.type === 'pause') {
+    state.paused[g.id] = !state.paused[g.id];
+    logLine(g, state.paused[g.id] ? 'Mods paused' : 'Mods resumed');
+    save(); render();
+  }
+  pushMenu();
+}
+
+// The HUD: once a second while it's on and a game runs.
+async function syncHud(force) {
+  const g = findGame(runningId());
+  const want = !!(invoke && state.overlay && state.hud && g);
+  if (!want) {
+    if (hudOn || force) { hudOn = false; overlaySend({ kind: 'hud', data: null }); }
+    return;
+  }
+  hudOn = true;
+  let cpu = null, ram = null;
+  if (state.hudStats) [cpu, ram] = await invoke('system_stats').catch(() => [null, null]);
+  overlaySend({
+    kind: 'hud',
+    data: { game: g.name, count: activeCount(g), mods: modsOf(g).filter(m => isActive(g, m)).map(m => m.type === 'slider' ? `${m.name} ${fmt(m, valueOf(g, m))}` : m.name),
+      start: sessionStart, connected: TRAINER.connected && !state.paused[g.id], cpu, ram },
+  });
+}
+setInterval(() => syncHud(false), 1000);
+
+// Discord: what you're playing with Hotswap, while a game runs.
+let lastDiscord = '';
+function syncDiscord() {
+  if (!invoke) return;
+  const g = findGame(runningId());
+  const on = state.discord && g;
+  const n = g ? activeCount(g) : 0;
+  const activity = on ? {
+    details: `Playing ${g.name}`,
+    state: modsOf(g).length ? (state.paused[g.id] ? 'Mods paused' : `${n} mod${n === 1 ? '' : 's'} on`) : 'With Hotswap',
+    timestamps: sessionStart ? { start: Math.floor(sessionStart / 1000) } : undefined,
+    assets: { large_image: 'logo', large_text: 'Hotswap: free, open-source game mods' },
+    buttons: [{ label: 'Get Hotswap', url: REPO_URL }],
+  } : null;
+  const sig = JSON.stringify(activity);
+  if (sig === lastDiscord) return;
+  lastDiscord = sig;
+  invoke('discord_presence', { activity }).then(() => { DISCORD_ERR = ''; }).catch(e => { DISCORD_ERR = String(e); });
 }
 
 /* ---------- Feedback: sound and the in-game overlay ---------- */
@@ -791,11 +908,9 @@ function chime(on) {
   } catch {}
 }
 // `hotkey` is true for changes made from the game (hotkeys, panic key): those show on the overlay.
-function feedback(g, title, value, on, hotkey) {
+function feedback(g, title, value, on, hotkey, pct) {
   if (state.sounds) chime(on);
-  if (state.overlay && hotkey && invoke && isLive(g)) {
-    invoke('overlay_notify', { note: { title, value, on, game: g.name, accent: state.accent, corner: state.overlayCorner } }).catch(console.error);
-  }
+  if (state.overlay && hotkey && invoke && isLive(g)) overlaySend({ title, value, on, game: g.name, pct });
 }
 
 function play(g) {
@@ -865,6 +980,7 @@ function onCombo(combo) {
   if (capture) return;
   if (combo === state.panicKey) { panic(comboLabel(combo)); return; }
   if (combo === state.sheetKey) { showSheet(true); return; }
+  if (combo === state.menuKey) { toggleMenu(); return; }
   const g = findGame(runningId());
   if (!g || !state.hotkeys) return;
   for (const m of modsOf(g)) {
@@ -888,7 +1004,13 @@ function finishCapture(combo) {
   const c = capture;
   capture = null;
   if (combo !== undefined) {
-    if (c.mid === SHEET) {
+    if (c.mid === MENU) {
+      const g = findGame(runningId()) || game();
+      const used = combo && g && whoUses(g, combo, 'menu');
+      state.menuKey = combo;
+      toast('Overlay menu key', combo ? comboLabel(combo) : 'unbound');
+      if (used) setTimeout(() => toast(`${comboLabel(combo)} is also used by`, used), 900);
+    } else if (c.mid === SHEET) {
       const g = findGame(runningId()) || game();
       const used = combo && g && whoUses(g, combo, 'sheet');
       state.sheetKey = combo;
@@ -966,7 +1088,7 @@ function showSheet(on) {
       keys: [k.up && (m.type === 'slider' ? '↑ ' : '') + comboLabel(k.up), k.down && '↓ ' + comboLabel(k.down)].filter(Boolean),
     };
   });
-  invoke('overlay_notify', { note: { kind: 'sheet', show: on, items, game: g.name, accent: state.accent, corner: state.overlayCorner } }).catch(console.error);
+  overlaySend({ kind: 'sheet', show: on, items, game: g.name });
 }
 
 /* ---------- Share codes: a profile as a short string ---------- */
@@ -1150,7 +1272,7 @@ document.addEventListener('click', e => {
   const t = e.target.closest('button');
   if (!t) return;
   const d = t.dataset;
-  if (capture && !d.bind && t.id !== 'panicBind' && t.id !== 'sheetBind') { capture = null; lastHotkeys = ''; render(); }
+  if (capture && !d.bind && t.id !== 'panicBind' && t.id !== 'sheetBind' && t.id !== 'menuBind') { capture = null; lastHotkeys = ''; render(); }
   if (d.game) go('game', d.game);
   else if (d.view) go(d.view);
   else if (d.flip) { const g = game(), m = findMod(d.flip); setMod(g, m, !valueOf(g, m)); }
@@ -1167,7 +1289,8 @@ document.addEventListener('click', e => {
     save(); renderMods(); if (state.mini) renderMini();
     toast(findMod(d.pin).name, p[d.pin] ? 'pinned' : 'unpinned');
   }
-  else if (d.ocorner) { state.overlayCorner = d.ocorner; save(); renderSettings(); invoke?.('overlay_notify', { note: { title: 'Overlay', value: 'Here', on: true, game: 'Mod changes show up here', accent: state.accent, corner: state.overlayCorner } }); }
+  else if (d.ocorner) { state.overlayCorner = d.ocorner; save(); renderSettings(); overlaySend({ title: 'Overlay', value: 'Here', on: true, game: 'Mod changes show up here' }); }
+  else if (d.hcorner) { state.hudCorner = d.hcorner; save(); renderSettings(); syncHud(true); }
   else if (d.rcorner) { state.radarCorner = d.rcorner; save(); renderSettings(); if (radarOpen) invoke?.('radar_show', { show: true, corner: state.radarCorner }); else toast('Radar position', CORNERS.find(c => c[0] === d.rcorner)[1]); }
   else if (d.delprofile) {
     const g = game(), list = profilesOf(g);
@@ -1212,6 +1335,11 @@ document.addEventListener('click', e => {
     case 'importProfile': importProfile = true; newProfile = false; renderGame(); $('pimportCode')?.focus(); break;
     case 'copyProfile': copyText(shareCode(game())).then(ok => toast(ok ? 'Share code copied' : "Couldn't copy", activeProf(game()).name)); profileMenu = false; renderGame(); break;
     case 'sheetBind': startCapture(null, SHEET, 'up'); break;
+    case 'menuBind': startCapture(null, MENU, 'up'); break;
+    case 'setHud': state.hud = !state.hud; save(); render(); syncHud(true); break;
+    case 'setHudStats': state.hudStats = !state.hudStats; save(); render(); syncHud(true); break;
+    case 'setDiscord': state.discord = !state.discord; save(); render(); break;
+    case 'testMenu': toggleMenu(true, true); break;
     case 'whatsNewBtn': showWhatsNew(true); break;
     case 'winMini': setMini(true); break;
     case 'miniExit': setMini(false); break;
@@ -1233,8 +1361,8 @@ document.addEventListener('click', e => {
     case 'homeRefresh': refreshHome(true); break;
     case 'setAutoUpdate': state.autoUpdate = !state.autoUpdate; save(); render(); break;
     case 'setSounds': state.sounds = !state.sounds; save(); render(); if (state.sounds) chime(true); break;
-    case 'setOverlay': state.overlay = !state.overlay; save(); render(); if (!state.overlay) invoke?.('overlay_close'); break;
-    case 'testOverlay': invoke?.('overlay_notify', { note: { title: 'Hotswap overlay', value: 'On', on: true, game: 'This is how mod changes look in game', accent: state.accent, corner: state.overlayCorner } }); chime(true); break;
+    case 'setOverlay': state.overlay = !state.overlay; if (!state.overlay) { if (menuOpen) toggleMenu(false); hudOn = false; invoke?.('overlay_close'); } save(); render(); break;
+    case 'testOverlay': overlaySend({ title: 'Hotswap overlay', value: 'On', on: true, game: 'This is how mod changes look in game' }); chime(true); break;
     case 'checkUpdateBtn': checkUpdate(true); break;
     case 'updateBtn': case 'updatePill': installUpdate(); break;
     case 'softToggle': state.softOpen = !state.softOpen; save(); renderSide(); break;
@@ -1356,8 +1484,9 @@ const icon = (k, s = 16) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"
     listen?.('game-running', e => onRunning(e.payload ?? null));
     listen?.('hotkey', e => onCombo(e.payload));
     listen?.('mod-progress', e => Mods.onProgress(e.payload));
-    listen?.('trainer-status', e => { TRAINER = e.payload; if (state.view === 'game') { renderMods(); renderPanel(); } if (state.mini) renderMini(); });
+    listen?.('trainer-status', e => { TRAINER = e.payload; if (state.view === 'game') { renderMods(); renderPanel(); } if (state.mini) renderMini(); pushMenu(); });
     listen?.('hotkey-up', e => { if (e.payload === state.sheetKey) showSheet(false); });
+    listen?.('overlay-input', e => onOverlayInput(e.payload || {}));
     onRunning(await invoke('running_game').catch(() => null));
   } else if (state.playing && !findGame(state.playing)) state.playing = null;
   nav.stack = [{ view: state.view, game: state.game }]; nav.i = 0;

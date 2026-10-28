@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod appinfo;
+mod discord;
 mod epic;
 mod gog;
 mod home;
@@ -498,53 +499,139 @@ fn corner_pos(app: &AppHandle, corner: &str, w: f64, h: f64, margin: f64) -> Res
     Ok((x, y))
 }
 
-/// Shows a mod change (or the hotkey cheat sheet) in the overlay over the game. Created on first
-/// use, then kept: a transparent, click-through, always-on-top window in the chosen corner.
+/// The overlay: one transparent, always-on-top window over the main monitor that ignores the mouse
+/// (except while its menu is open). Created on first use.
+async fn overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
+    if let Some(win) = app.get_webview_window("overlay") {
+        return Ok(win);
+    }
+    let m = app.primary_monitor().ok().flatten().ok_or("no monitor")?;
+    let s = m.scale_factor();
+    let (x, y) = (m.position().x as f64 / s, m.position().y as f64 / s);
+    // One pixel short of the full height, so Windows doesn't treat it as a fullscreen app.
+    let (w, h) = (m.size().width as f64 / s, m.size().height as f64 / s - 1.0);
+    let win = tauri::WebviewWindowBuilder::new(app, "overlay", tauri::WebviewUrl::App("overlay.html".into()))
+        .title("Hotswap overlay")
+        .inner_size(w, h)
+        .position(x, y)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false)
+        .visible(false)
+        .resizable(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let _ = win.set_ignore_cursor_events(true);
+    // Give the page a moment to start listening before the first note.
+    tokio_sleep(500).await;
+    Ok(win)
+}
+
+/// Shows the overlay without taking focus from the game.
+fn overlay_show(win: &tauri::WebviewWindow) {
+    #[cfg(windows)]
+    if let Ok(hwnd) = win.hwnd() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_SHOWNOACTIVATE};
+        unsafe { ShowWindow(hwnd.0 as _, SW_SHOWNOACTIVATE) };
+        return;
+    }
+    let _ = win.show();
+}
+
+/// Overlay state: kept visible (HUD on or menu open), menu open, and the window the menu took focus from.
+static OVERLAY_KEEP: AtomicBool = AtomicBool::new(false);
+static OVERLAY_MENU: AtomicBool = AtomicBool::new(false);
+static OVERLAY_PREV: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+/// Sends something to the overlay: a mod change (default), or `kind` "sheet", "hud" or "menu".
+/// `keep` says whether something stays on screen (HUD or menu); otherwise the window hides itself
+/// once notes are gone: a see-through window kept over a game can make Windows drop the game's
+/// fast fullscreen path, which shows up as stutter.
 #[tauri::command]
 async fn overlay_notify(app: AppHandle, note: serde_json::Value) -> Result<(), String> {
-    let corner = note.get("corner").and_then(|c| c.as_str()).unwrap_or("top").to_string();
-    // The cheat sheet stays while its key is held (up to 10 s); a closed sheet needs no window.
+    if let Some(k) = note.get("keep").and_then(|k| k.as_bool()) {
+        OVERLAY_KEEP.store(k, Ordering::Relaxed);
+    }
     let sheet_open = note.get("kind").and_then(|k| k.as_str()) == Some("sheet") && note.get("show").and_then(|v| v.as_bool()) == Some(true);
-    let (w, h) = (460.0, 600.0);
-    let (x, y) = corner_pos(&app, &corner, w, h, 0.0)?;
-    if let Some(win) = app.get_webview_window("overlay") {
-        let _ = win.set_position(tauri::LogicalPosition::new(x, y));
-    } else {
-        let win = tauri::WebviewWindowBuilder::new(&app, "overlay", tauri::WebviewUrl::App("overlay.html".into()))
-            .title("Hotswap overlay")
-            .inner_size(w, h)
-            .position(x, y)
-            .decorations(false)
-            .transparent(true)
-            .shadow(false)
-            .always_on_top(true)
-            .skip_taskbar(true)
-            .focused(false)
-            .resizable(false)
-            .build()
-            .map_err(|e| e.to_string())?;
-        let _ = win.set_ignore_cursor_events(true);
-        // Give the page a moment to start listening before the first note.
-        tokio_sleep(400).await;
-    }
-
-    if let Some(win) = app.get_webview_window("overlay") {
-        let _ = win.show();
-    }
+    let win = overlay_window(&app).await?;
+    overlay_show(&win);
     app.emit_to("overlay", "overlay", note).map_err(|e| e.to_string())?;
-    // Hidden again once the notes are gone: a see-through window kept over a game can make
-    // Windows drop the game's fast fullscreen path, which shows up as stutter.
     let id = OVERLAY_GEN.fetch_add(1, Ordering::Relaxed) + 1;
     let hold = if sheet_open { 10_500 } else { 3_000 };
     tauri::async_runtime::spawn(async move {
         tokio_sleep(hold).await;
-        if OVERLAY_GEN.load(Ordering::Relaxed) == id {
+        if OVERLAY_GEN.load(Ordering::Relaxed) == id && !OVERLAY_KEEP.load(Ordering::Relaxed) && !OVERLAY_MENU.load(Ordering::Relaxed) {
             if let Some(win) = app.get_webview_window("overlay") {
                 let _ = win.hide();
             }
         }
     });
     Ok(())
+}
+
+/// Opens or closes the overlay menu: it takes the mouse and keyboard while open, then gives focus
+/// back to the game.
+#[tauri::command]
+async fn overlay_menu(app: AppHandle, open: bool) -> Result<(), String> {
+    let win = overlay_window(&app).await?;
+    #[cfg(windows)]
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForegroundWindow};
+    if open {
+        #[cfg(windows)]
+        {
+            let fg = unsafe { GetForegroundWindow() } as isize;
+            if win.hwnd().map_or(true, |h| h.0 as isize != fg) {
+                OVERLAY_PREV.store(fg, Ordering::Relaxed);
+            }
+        }
+        OVERLAY_MENU.store(true, Ordering::Relaxed);
+        let _ = win.set_ignore_cursor_events(false);
+        let _ = win.show();
+        let _ = win.set_focus();
+    } else {
+        OVERLAY_MENU.store(false, Ordering::Relaxed);
+        let _ = win.set_ignore_cursor_events(true);
+        #[cfg(windows)]
+        {
+            let prev = OVERLAY_PREV.swap(0, Ordering::Relaxed);
+            if prev != 0 {
+                unsafe { SetForegroundWindow(prev as _) };
+            }
+        }
+        if !OVERLAY_KEEP.load(Ordering::Relaxed) {
+            let _ = win.hide();
+        }
+    }
+    Ok(())
+}
+
+/// Clicks and keys from the overlay menu, passed on to the main window, which owns the mods.
+#[tauri::command]
+fn overlay_input(app: AppHandle, input: serde_json::Value) -> Result<(), String> {
+    app.emit_to("main", "overlay-input", input).map_err(|e| e.to_string())
+}
+
+/// CPU and memory use in percent, for the overlay HUD.
+#[derive(Default)]
+struct Stats(Mutex<Option<sysinfo::System>>);
+
+#[tauri::command]
+fn system_stats(stats: State<Stats>) -> (f32, f32) {
+    let mut s = stats.0.lock().unwrap();
+    let sys = s.get_or_insert_with(sysinfo::System::new);
+    sys.refresh_cpu_usage();
+    sys.refresh_memory();
+    let ram = if sys.total_memory() > 0 { sys.used_memory() as f32 / sys.total_memory() as f32 * 100.0 } else { 0.0 };
+    (sys.global_cpu_usage(), ram)
+}
+
+/// Sets (or with None clears) what Discord shows you playing.
+#[tauri::command]
+fn discord_presence(discord: State<discord::Discord>, activity: Option<serde_json::Value>) -> Result<(), String> {
+    discord.set(activity)
 }
 
 /// Bumped on every overlay note; a pending hide only runs if no newer note came.
@@ -1207,6 +1294,8 @@ fn main() {
         .manage(trainer::Trainer::default())
         .manage(CloseToTray(AtomicBool::new(true)))
         .manage(Mini::default())
+        .manage(Stats::default())
+        .manage(discord::Discord::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -1246,7 +1335,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
             fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart,
-            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, radar_show, set_mini, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
+            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, overlay_menu, overlay_input, system_stats, discord_presence, radar_show, set_mini, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hotswap");

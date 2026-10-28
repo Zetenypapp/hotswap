@@ -56,6 +56,10 @@
     "allow-fmods-pick",
     "allow-nexus-search",
     "allow-radar-show",
-    "allow-set-mini"
+    "allow-set-mini",
+    "allow-overlay-menu",
+    "allow-overlay-input",
+    "allow-system-stats",
+    "allow-discord-presence"
   ]
 }
