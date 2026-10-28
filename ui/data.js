@@ -62,6 +62,7 @@ const CATALOG = {
   ]},
   758690: { genre: 'Survival', cats: [
     { name: 'Player', mods: [T('Immortality', 'The game’s own cheat: you can’t die.'), T('No Hunger', 'Hunger doesn’t go down.'), T('No Thirst', 'Thirst doesn’t go down.'), T('Infinite Stamina', 'Running and jumping cost no stamina.')] },
+    { name: 'Building', mods: [T('Free Building', 'Build without materials: the building system’s own free-build switch.')] },
   ]},
   848450: { genre: 'Underwater survival', cats: [
     { name: 'Player', mods: [T('Infinite Health', 'No damage, and health stays full.'), T('Infinite Oxygen'), T('No Hunger'), T('No Thirst'), T('No Freezing', 'Your body heat never drops, even outside in the cold.')] },
@@ -93,7 +94,7 @@ const LIVE = {
   3241660: ['infinite-health', 'infinite-stamina', 'infinite-jumps', 'movement-speed', 'grab-strength', 'throw-strength', 'enemy-radar', 'infinite-battery', 'complete-extractions'],
   457140: ['instant-build', 'sandbox-tools', 'printing-pod-always-ready', 'max-game-speed'],
   1520370: ['no-hunger', 'no-thirst', 'no-sleep', 'no-anxiety', 'unlimited-money', 'add-10-000', 'infinite-fuel'],
-  758690: ['immortality', 'no-hunger', 'no-thirst', 'infinite-stamina'],
+  758690: ['immortality', 'no-hunger', 'no-thirst', 'infinite-stamina', 'free-building'],
   848450: ['infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'no-freezing', 'swim-speed', 'walk-speed', 'free-crafting', 'unlock-all-blueprints',
     'fast-growing', 'infinite-energy', 'no-crush-depth', 'passive-creatures'],
   264710: [

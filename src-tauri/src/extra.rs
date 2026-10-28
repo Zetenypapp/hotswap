@@ -1,7 +1,8 @@
 //! Three smaller Unity games on Mono (see mono.rs), each a handful of mods:
 //! - Oxygen Not Included (457140): the game's own debug and sandbox switches.
 //! - Mon Bazou (1520370): needs, cash and fuel, on the game's manager objects.
-//! - Occupy Mars (758690): its immortality cheat, and the player's hunger, thirst and stamina drain.
+//! - Occupy Mars (758690): its immortality and free-build switches, and the player's hunger, thirst
+//!   and stamina drain.
 //! Objects without a static handle are found in the game's memory by their class (cached, and
 //! looked up again when they go away, e.g. after loading another save).
 
@@ -226,6 +227,15 @@ impl Session {
         for gc in self.objects("UltimateSurvivalMod", "GameControllerSecond", Duration::from_secs(5), 4) {
             if let Some(o) = self.f("UltimateSurvivalMod", "GameControllerSecond", "cheatImmortalityActive") {
                 self.hold_u8(gc + o, on("immortality"), 1);
+            }
+        }
+        // Free building: the building system's own switch (no materials needed).
+        const BUILD: &str = "UltimateSurvival.Building";
+        for class in ["PlayerBuilder", "BuildingHelpers"] {
+            for b in self.objects(BUILD, class, Duration::from_secs(5), 8) {
+                if let Some(o) = self.f(BUILD, class, "freeBuild") {
+                    self.hold_u8(b + o, on("free-building"), 1);
+                }
             }
         }
         for p in vitals {
