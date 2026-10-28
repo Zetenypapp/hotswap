@@ -67,6 +67,19 @@
   .btn.on { background: var(--c); color: var(--ink); }
   .btn.danger:hover { background: #e5484d; }
   .btn.round { width: 34px; padding: 0; justify-content: center; }
+  /* The two views: HotSwap's mods and Discord. The open one is outlined. */
+  .view { width: 34px; height: 34px; padding: 0; border: 0; border-radius: 11px; background: none; cursor: pointer; display: grid; place-items: center; flex: none; box-shadow: 0 0 0 2px transparent; transition: box-shadow .15s, opacity .15s; opacity: .55; }
+  .view:hover { opacity: .85; }
+  .view.on { box-shadow: 0 0 0 2px #fff; opacity: 1; }
+  .view.dc { background: #5865f2; }
+  .dc-panel { display: flex; flex-direction: column; gap: 10px; padding: 4px 18px 18px; }
+  .dc-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(255, 255, 255, .05); }
+  .dc-row .t { flex: 1; display: flex; flex-direction: column; line-height: 1.25; }
+  .dc-row .t b { font-size: 15px; }
+  .dc-row .t span { font-size: 12px; color: var(--muted); }
+  .dc-row kbd { font: inherit; font-size: 12px; font-weight: 800; padding: 6px 10px; border-radius: 9px; background: rgba(255, 255, 255, .1); cursor: pointer; }
+  .dc-row kbd.rec { background: #5865f2; }
+  .dc-note { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 4px 2px 0; }
   .m-bar { display: flex; align-items: center; gap: 8px; padding: 0 18px 12px; flex-wrap: wrap; }
   .tab { height: 30px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
   .tab:hover { color: var(--fg); background: rgba(255, 255, 255, .06); }
@@ -117,6 +130,12 @@
   const send = input => invoke('overlay_input', { input }).catch(() => {});
   const fmtTime = ms => { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60; return h ? `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${m}:${String(s % 60).padStart(2, '0')}`; };
   const clock = () => new Date().toTimeString().slice(0, 5);
+  const logo = size => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true" style="flex:none"><rect x="1" y="1" width="22" height="22" rx="7" fill="var(--c)"/><path d="M6.5 9.5h10l-3-3M17.5 14.5h-10l3 3" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const DISCORD = '<svg width="20" height="20" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.6 1.3a18.4 18.4 0 0 0-5.6 0L8.6 3a19.7 19.7 0 0 0-4.9 1.5C.6 9.1-.3 13.6.1 18.1a19.9 19.9 0 0 0 6 3l1.3-2.1a12.9 12.9 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12.2 0l.5.4c-.6.4-1.3.7-2 1l1.3 2.1a19.8 19.8 0 0 0 6-3c.5-5.2-.9-9.7-3.6-13.7ZM8 15.4c-1.2 0-2.2-1.1-2.2-2.4S6.8 10.6 8 10.6s2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg>';
+  // Discord keybinds HotSwap presses; the same keys are set in Discord under Settings > Keybinds.
+  const DC_KEYS = [['mute', 'Toggle Mute', 'Ctrl+Shift+F9'], ['deafen', 'Toggle Deafen', 'Ctrl+Shift+F10']];
+  const dcCombo = id => { try { const k = localStorage.getItem('hs.dc.' + id); if (k) return k; } catch {} return DC_KEYS.find(k => k[0] === id)[2]; };
+  let view = 'mods', recording = null;
   const BOLT = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>';
 
   function theme(p) {
@@ -143,7 +162,7 @@
     clearTimeout(sheetTimer);
     $('sheet').hidden = !p.show;
     if (!p.show) return;
-    $('sheet').innerHTML = `<div class="hd"><span class="logo">⇄</span><span class="t"><b>Hotkeys</b><span>${esc(p.game)}</span></span></div>`
+    $('sheet').innerHTML = `<div class="hd">${logo(28)}<span class="t"><b>Hotkeys</b><span>${esc(p.game)}</span></span></div>`
       + p.items.map(i => `<div class="r${i.on ? ' on' : ''}"><span class="n">${esc(i.name)}</span><span class="val">${esc(i.value)}</span>${i.keys.map(k => `<kbd>${esc(k)}</kbd>`).join('')}</div>`).join('');
     sheetTimer = setTimeout(() => { $('sheet').hidden = true; }, 10000); // in case the key release never arrives
   }
@@ -161,7 +180,7 @@
       hud.ram != null ? `<span class="dim">RAM ${Math.round(hud.ram)}%</span>` : '',
       `<span class="dim">${clock()}</span>`,
     ].filter(Boolean).join('');
-    $('hud').innerHTML = `<div class="hd"><span class="logo">⇄</span><span class="dot${hud.connected ? ' ok' : ''}"></span><div class="stats">${parts}</div></div>`
+    $('hud').innerHTML = `<div class="hd">${logo(24)}<span class="dot${hud.connected ? ' ok' : ''}"></span><div class="stats">${parts}</div></div>`
       + (hud.mods?.length ? `<div class="chips">${hud.mods.slice(0, 8).map(m => `<span>${esc(m)}</span>`).join('')}${hud.mods.length > 8 ? `<span>+${hud.mods.length - 8}</span>` : ''}</div>` : '');
   }
   setInterval(() => { if (hud) renderHud(); if (menu) renderFoot(); }, 1000);
@@ -184,21 +203,27 @@
     sel = Math.max(0, Math.min(sel, mods.length - 1));
     const status = menu.paused ? 'Mods paused' : menu.connected ? 'Live in the game' : (menu.message || 'Connecting…');
     $('menu').innerHTML = `
-      <div class="m-head"><span class="logo">⇄</span>
+      <div class="m-head"><button class="view${view === 'mods' ? ' on' : ''}" data-view="mods" title="Mods">${logo(34)}</button><button class="view dc${view === 'discord' ? ' on' : ''}" data-view="discord" title="Discord">${DISCORD}</button>
         <div class="m-title"><b>${esc(menu.game)}</b><span><span class="dot${menu.connected && !menu.paused ? ' ok' : ''}"></span>${esc(status)} · ${menu.count} on</span></div>
         <button class="btn${menu.paused ? ' on' : ''}" data-cmd="pause">${menu.paused ? 'Resume' : 'Pause'}</button>
         <button class="btn danger" data-cmd="panic">All off</button>
         <button class="btn round" data-cmd="close" title="Close (${esc(menu.menuKey)})">✕</button></div>
-      <div class="m-bar">
+      ${view === 'discord' ? discordPanel() : `<div class="m-bar">
         <button class="tab${tab === 'all' ? ' on' : ''}" data-tab="all">All</button>
         ${menu.cats.map(c => `<button class="tab${tab === c.name ? ' on' : ''}" data-tab="${esc(c.name)}">${esc(c.name)}<span class="n">${c.mods.length}</span></button>`).join('')}
         <span class="sp"></span>
         ${menu.profiles.length > 1 ? menu.profiles.map(p => `<button class="pf${p === menu.profile ? ' on' : ''}" data-profile="${esc(p)}">${esc(p)}</button>`).join('') : ''}
       </div>
-      <div class="m-grid">${mods.map((m, i) => card(m, i)).join('') || '<div class="empty">No mods here.</div>'}</div>
+      <div class="m-grid">${mods.map((m, i) => card(m, i)).join('') || '<div class="empty">No mods here.</div>'}</div>`}
       <div class="m-foot" id="mFoot"></div>`;
     renderFoot();
     $('menu').querySelector('.card.sel')?.scrollIntoView({ block: 'nearest' });
+  }
+  function discordPanel() {
+    return `<div class="dc-panel">${DC_KEYS.map(([id, name]) => `<div class="dc-row"><div class="t"><b>${name}</b><span>Presses your Discord keybind</span></div>
+        <kbd class="${recording === id ? 'rec' : ''}" data-rec="${id}" title="Click, then press new keys">${recording === id ? 'Press keys…' : esc(dcCombo(id))}</kbd>
+        <button class="btn" data-dc="${id}">${name.replace('Toggle ', '')}</button></div>`).join('')}
+      <p class="dc-note">In Discord, open Settings → Keybinds and add <b>Toggle Mute</b> and <b>Toggle Deafen</b> with the same keys shown here. Click a key to change it. HotSwap can’t see whether you’re muted, so the buttons only toggle.</p></div>`;
   }
   function card(m, i) {
     const locked = !m.live || menu.paused;
@@ -235,6 +260,13 @@
     if (!menu) return;
     const t = e.target;
     if (t.matches('input[type=range]')) return;
+    const v = t.closest('[data-view],[data-rec],[data-dc]');
+    if (v) {
+      if (v.dataset.view) { view = v.dataset.view; recording = null; }
+      else if (v.dataset.rec) recording = recording === v.dataset.rec ? null : v.dataset.rec;
+      else invoke('press_keys', { combo: dcCombo(v.dataset.dc) }).catch(() => {});
+      return renderMenu();
+    }
     const b = t.closest('[data-cmd],[data-tab],[data-profile],.card');
     if (!b) { if (t.id === 'shade') send({ type: 'close' }); return; }
     if (b.dataset.cmd) send({ type: b.dataset.cmd });
@@ -258,6 +290,18 @@
   });
   document.addEventListener('keydown', e => {
     if (!menu) return;
+    if (recording) {
+      e.preventDefault();
+      if (e.key === 'Escape') { recording = null; return renderMenu(); }
+      if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+      const key = /^F\d+$/.test(e.key) ? e.key : e.key.length === 1 && /[a-z0-9]/i.test(e.key) ? e.key.toUpperCase() : null;
+      if (!key) return;
+      const combo = [e.ctrlKey && 'Ctrl', e.shiftKey && 'Shift', e.altKey && 'Alt', key].filter(Boolean).join('+');
+      try { localStorage.setItem('hs.dc.' + recording, combo); } catch {}
+      recording = null;
+      return renderMenu();
+    }
+    if (view === 'discord') { if (e.key === 'Escape') send({ type: 'close' }); return; }
     const n = visibleMods().length;
     const k = e.key;
     if (k === 'Escape') send({ type: 'close' });
@@ -281,7 +325,7 @@
     if (p.kind === 'menu') {
       const was = !!menu;
       menu = p.open ? p.data : null;
-      if (menu && !was) { tab = 'all'; sel = 0; dragging = false; }
+      if (menu && !was) { tab = 'all'; sel = 0; dragging = false; view = 'mods'; recording = null; }
       return renderMenu();
     }
     if (p.kind === 'theme') return;
