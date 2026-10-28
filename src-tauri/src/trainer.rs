@@ -139,12 +139,12 @@ impl Trainer {
                             _ => Status { game: game.clone(), connected: false, message: "Waiting for the game to load".into() },
                         }
                     }
-                    Some(crate::sn1::SUBNAUTICA) => {
+                    Some(g @ (crate::sn1::SUBNAUTICA | crate::sn1::BELOW_ZERO)) => {
                         if sn1.is_none() && last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
                             last_attach = Some(Instant::now());
-                            sn1 = pid_of(crate::sn1::SUBNAUTICA)
+                            sn1 = pid_of(g)
                                 .and_then(|pid| crate::mono::Mono::attach(pid).map_err(|e| log(&format!("sn1 attach: {e}"))).ok())
-                                .map(crate::sn1::Session::new);
+                                .map(if g == crate::sn1::BELOW_ZERO { crate::sn1::Session::new_zero } else { crate::sn1::Session::new });
                         }
                         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                             sn1.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }))
