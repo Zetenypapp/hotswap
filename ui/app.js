@@ -622,8 +622,7 @@ function keyChip(g, m, dir, clash) {
 function modRow(g, m, clash, locked) {
   if (!m.live) locked = true;
   const v = valueOf(g, m), dis = locked ? ' disabled' : '';
-  const info = (m.info ? `<button class="info" data-tip="${esc(m.info)}" aria-label="${esc(m.info)}">i</button>` : '')
-    + (m.warn ? `<button class="info warn" data-tip="${esc(m.warn)}" aria-label="Warning: ${esc(m.warn)}">!</button>` : '');
+  const info = m.info ? `<button class="info" data-tip="${esc(m.info)}" aria-label="${esc(m.info)}">i</button>` : '';
   let ctl;
   if (m.type === 'toggle') {
     ctl = `<button class="seg" role="switch" aria-checked="${!!v}" aria-label="${esc(m.name)}" data-flip="${m.id}"${dis}>

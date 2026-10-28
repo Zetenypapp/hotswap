@@ -1,6 +1,6 @@
 // Mod catalog and Home feed. Mods are UI-only for now: nothing here touches a game.
 
-const T = (name, info, warn) => ({ type: 'toggle', name, info, warn });
+const T = (name, info) => ({ type: 'toggle', name, info });
 const S = (name, min, max, step, def, info) => ({ type: 'slider', name, min, max, step, def, info });
 const A = (name, info) => ({ type: 'action', name, info });
 
@@ -64,8 +64,6 @@ const CATALOG = {
     { name: 'Player', mods: [S('Walk Speed', 50, 400, 10, 100, 'Percent of normal walking speed.'), S('Jump Height', 50, 400, 10, 100, 'Percent of normal jump strength.')] },
     { name: 'Vehicles', mods: [T('Infinite Fuel', 'Every fuel tank stays full, the home generator’s too.'), T('No Derby Damage', 'Your car takes no damage in the demolition derby.')] },
     { name: 'World', mods: [T('Freeze Time', 'The clock stops.'), T('Always Day', 'Noon, all the time.')] },
-    { name: 'Game', mods: [T('Enable Cheat Menu', 'Turns on the game’s own cheat menu, which has a Save button for saving anywhere.',
-      'The game may mark your save as using cheats. That can’t be undone and may affect the save for good.')] },
   ]},
   758690: { genre: 'Survival', cats: [
     { name: 'Player', mods: [T('Immortality', 'The game’s own cheat: you can’t die.'), T('No Hunger', 'Hunger doesn’t go down.'), T('No Thirst', 'Thirst doesn’t go down.'), T('Infinite Stamina', 'Running and jumping cost no stamina.'),
@@ -103,7 +101,7 @@ const LIVE = {
     'add-100-000-funds', 'add-1-000-science', 'add-100-reputation', 'part-clipping', 'free-attachment', 'unlimited-inventory', 'gravity', 'show-biomes'],
   3241660: ['infinite-health', 'infinite-stamina', 'infinite-jumps', 'movement-speed', 'grab-strength', 'throw-strength', 'enemy-radar', 'infinite-battery', 'complete-extractions'],
   457140: ['instant-build', 'sandbox-tools', 'printing-pod-always-ready', 'max-game-speed', 'no-stress', 'no-hunger', 'infinite-breath', 'no-fatigue', 'no-bladder', 'full-health', 'instant-research'],
-  1520370: ['no-hunger', 'no-thirst', 'no-sleep', 'no-anxiety', 'unlimited-money', 'add-10-000', 'walk-speed', 'jump-height', 'infinite-fuel', 'no-derby-damage', 'freeze-time', 'always-day', 'enable-cheat-menu'],
+  1520370: ['no-hunger', 'no-thirst', 'no-sleep', 'no-anxiety', 'unlimited-money', 'add-10-000', 'walk-speed', 'jump-height', 'infinite-fuel', 'no-derby-damage', 'freeze-time', 'always-day'],
   758690: ['immortality', 'no-hunger', 'no-thirst', 'infinite-stamina', 'movement-speed', 'infinite-oxygen', 'infinite-suit-energy', 'no-radiation', 'free-building', 'infinite-rover-battery'],
   848450: ['infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'no-freezing', 'swim-speed', 'walk-speed', 'free-crafting', 'unlock-all-blueprints',
     'fast-growing', 'infinite-energy', 'no-crush-depth', 'passive-creatures'],

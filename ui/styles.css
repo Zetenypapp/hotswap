@@ -177,7 +177,6 @@ img { display: block; }
 .row.active .label { color: var(--fg); }
 .row.active .bolt { color: var(--accent); }
 .info { width: 18px; height: 18px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--glass-2); color: var(--muted); font-size: 11px; font-weight: 800; position: relative; }
-.info.warn { background: color-mix(in srgb, var(--danger) 28%, transparent); color: #ff8a8e; }
 .info:hover::after, .info:focus-visible::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); width: 230px; padding: 9px 11px; border-radius: 12px; background: #2a2e34; color: var(--fg); font-weight: 500; font-size: 12px; line-height: 1.45; text-align: left; z-index: 5; box-shadow: 0 8px 24px rgba(0, 0, 0, .4); }
 
 .seg { justify-self: end; display: inline-flex; padding: 3px; border: 0; border-radius: 12px; background: var(--well); cursor: pointer; }
