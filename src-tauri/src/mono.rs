@@ -188,6 +188,8 @@ impl Mono {
     pub fn instances_of(&self, classes: &[u64], limit: usize) -> Vec<Vec<u64>> {
         let vts: Vec<Option<u64>> = classes.iter().map(|&c| self.vtable(c)).collect();
         let mut out = vec![Vec::new(); classes.len()];
+        // Nearly every word is outside the range the vtables span: one compare skips it.
+        let (lo, hi) = vts.iter().flatten().fold((u64::MAX, 0), |(lo, hi), &v| (lo.min(v), hi.max(v)));
         for (base, size) in heap_regions(&self.p) {
             let mut buf = vec![0u8; size];
             if !self.p.read_into(base, &mut buf) {
@@ -195,6 +197,9 @@ impl Mono {
             }
             for (i, w) in buf.chunks_exact(8).enumerate() {
                 let w = u64::from_le_bytes(w.try_into().unwrap());
+                if w < lo || w > hi {
+                    continue;
+                }
                 for (k, vt) in vts.iter().enumerate() {
                     if *vt == Some(w) && out[k].len() < limit {
                         out[k].push(base + i as u64 * 8);

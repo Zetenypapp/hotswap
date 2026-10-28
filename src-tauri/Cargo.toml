@@ -37,6 +37,8 @@ windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_
 [profile.dev]
 # Address math on pointers read from another process must wrap, not panic, on junk values.
 overflow-checks = false
+# Searching a game's memory is far too slow unoptimized.
+opt-level = 2
 
 [profile.release]
 codegen-units = 1
