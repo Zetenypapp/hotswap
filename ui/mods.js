@@ -188,7 +188,7 @@ const Mods = (() => {
     const t = e.target.closest('[data-modgame],[data-modtab],[data-modsort],[data-modinstall],[data-modtoggle],[data-modremove],[data-modcheck],[data-modmore],[data-modupall]');
     if (!t) return;
     const d = t.dataset;
-    if ('modgame' in d) { GAME = d.modgame || null; render(); }
+    if ('modgame' in d) { if (GAME !== (d.modgame || null)) { T.results = []; T.count = 0; T.mods = []; N.results = []; N.count = 0; } GAME = d.modgame || null; render(); }
     else if (d.modtab) { S.tab = d.modtab; render(); }
     else if (d.modsort) { S.sort = d.modsort; document.querySelectorAll('[data-modsort]').forEach(b => b.classList.toggle('on', b === t)); findMore(false); }
     else if (d.modinstall) install(d.modinstall, d.name);
