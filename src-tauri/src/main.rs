@@ -412,7 +412,7 @@ async fn fmods_install(app: AppHandle, watch: State<'_, watch::Watch>, game: Str
 }
 
 /// Games whose mods come from Thunderstore: game ID -> Thunderstore community.
-const THUNDER_GAMES: [(&str, &str); 1] = [(repo::REPO, "repo")];
+const THUNDER_GAMES: [(&str, &str); 3] = [(repo::REPO, "repo"), (sn1::SUBNAUTICA, "subnautica"), (sn1::BELOW_ZERO, "subnautica-below-zero")];
 
 fn thunder_game(watch: &watch::Watch, game: &str, changing: bool) -> Result<(thunderstore::Game, &'static str), String> {
     let (_, community) = THUNDER_GAMES.iter().find(|g| g.0 == game).ok_or("No Thunderstore mods for this game")?;

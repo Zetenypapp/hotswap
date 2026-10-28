@@ -14,7 +14,19 @@ use std::{
     time::{Duration, Instant},
 };
 
-const LOADER: &str = "BepInEx-BepInExPack";
+/// The BepInEx package each community uses.
+fn loader(community: &str) -> &'static str {
+    match community {
+        "subnautica" => "Subnautica_Modding-BepInExPack_Subnautica",
+        "subnautica-below-zero" => "Subnautica_Modding-BepInExPack_BelowZero",
+        _ => "BepInEx-BepInExPack",
+    }
+}
+
+/// Every community's BepInEx package (to tell the loader apart from mods in a game folder).
+fn is_loader(id: &str) -> bool {
+    ["subnautica", "subnautica-below-zero", ""].iter().any(|c| loader(c) == id)
+}
 
 #[derive(Clone, Serialize)]
 pub struct Package {
@@ -93,7 +105,7 @@ pub fn search(community: &str, query: &str, sort: &str, offset: usize) -> Result
     let q = query.to_lowercase();
     let mut list: Vec<Package> = packages(community)?
         .into_iter()
-        .filter(|p| p.id != LOADER && (q.is_empty() || p.name.to_lowercase().contains(&q) || p.owner.to_lowercase().contains(&q) || p.description.to_lowercase().contains(&q)))
+        .filter(|p| !is_loader(&p.id) && (q.is_empty() || p.name.to_lowercase().contains(&q) || p.owner.to_lowercase().contains(&q) || p.description.to_lowercase().contains(&q)))
         .collect();
     match sort {
         "updated" | "new" => list.sort_by(|a, b| b.updated.cmp(&a.updated)),
@@ -138,8 +150,8 @@ impl Game {
                 id: id.clone(),
                 name: v["name"].as_str().unwrap_or(id).to_string(),
                 version: v["version"].as_str().unwrap_or("").to_string(),
-                enabled: id == LOADER || !self.off_dir(id).exists(),
-                loader: id == LOADER,
+                enabled: is_loader(id) || !self.off_dir(id).exists(),
+                loader: is_loader(id),
             })
             .collect();
         out.sort_by(|a, b| b.loader.cmp(&a.loader).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
@@ -156,7 +168,7 @@ impl Game {
     }
 
     pub fn remove(&self, id: &str) -> Result<(), String> {
-        if id == LOADER {
+        if is_loader(id) {
             return Err("BepInEx is the mod loader; remove the other mods instead".into());
         }
         for d in [self.on_dir(id), self.off_dir(id), self.bep().join("patchers").join(id)] {
@@ -188,8 +200,9 @@ impl Game {
             Ok(())
         }
         walk(id, &by_id, &mut order, 0)?;
-        if !order.iter().any(|p| p.id == LOADER) && !self.index().contains_key(LOADER) {
-            if let Some(l) = by_id.get(LOADER) {
+        let base = loader(community);
+        if !order.iter().any(|p| p.id == base) && !self.index().contains_key(base) {
+            if let Some(l) = by_id.get(base) {
                 order.insert(0, l);
             }
         }
@@ -218,7 +231,7 @@ impl Game {
             .read_to_end(&mut bytes)
             .map_err(|e| e.to_string())?;
         let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| format!("{} isn't a zip: {e}", p.name))?;
-        let loader = p.id == LOADER;
+        let loader = is_loader(&p.id);
         let target = if loader { self.root.clone() } else { self.on_dir(&p.id) };
         if !loader {
             let _ = std::fs::remove_dir_all(self.off_dir(&p.id));
@@ -232,10 +245,11 @@ impl Game {
             let Some(rel) = f.enclosed_name() else { continue };
             let rel: PathBuf = rel.components().collect();
             let out = if loader {
-                // BepInExPack/... goes into the game folder; the package's own files are skipped.
-                match rel.strip_prefix("BepInExPack") {
-                    Ok(r) => target.join(r),
-                    Err(_) => continue,
+                // BepInExPack*/... goes into the game folder; the package's own files are skipped.
+                let mut parts = rel.components();
+                match parts.next() {
+                    Some(c) if c.as_os_str().to_string_lossy().starts_with("BepInExPack") => target.join(parts.as_path()),
+                    _ => continue,
                 }
             } else {
                 place(&self.bep(), &target, &p.id, &rel)

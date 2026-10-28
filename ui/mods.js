@@ -7,6 +7,8 @@ const Mods = (() => {
     { id: '1962700', source: 'Nexus Mods', url: 'https://www.nexusmods.com/subnautica2', nexus: 'subnautica2' },
     { id: '3241660', source: 'Thunderstore', url: 'https://thunderstore.io/c/repo', thunder: 'repo' },
     { id: '220200', source: 'SpaceDock', url: 'https://spacedock.info', thunder: 'ksp' },
+    { id: '264710', source: 'Thunderstore', url: 'https://thunderstore.io/c/subnautica', thunder: 'subnautica' },
+    { id: '848450', source: 'Thunderstore', url: 'https://thunderstore.io/c/subnautica-below-zero', thunder: 'subnautica-below-zero' },
   ];
   let GAME = null; // the game whose mod page is open, or null for the game grid
   // Installed mods are only read for Satisfactory, the one game with a mod source so far.
