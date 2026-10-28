@@ -341,6 +341,10 @@ impl Session {
                 }
             }
         }
+        // The game's own cheat setting: shows its cheat menu (with a Save button).
+        if let Some(a) = self.static_addr("", "GameManager", "_SETTING_Cheats") {
+            self.hold_u8(a, on("enable-cheat-menu"), 1);
+        }
         // Demolition derby: your car takes no damage.
         for d in self.objects("", "Event_DerbyDemolition_Vehicle", Duration::from_secs(10), 32) {
             if let Some(o) = self.f("", "Event_DerbyDemolition_Vehicle", "canTakeDamage") {
