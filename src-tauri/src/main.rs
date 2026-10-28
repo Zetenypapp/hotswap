@@ -502,7 +502,7 @@ fn corner_pos(app: &AppHandle, corner: &str, w: f64, h: f64, margin: f64) -> Res
 }
 
 /// The overlay: one transparent, always-on-top window over the main monitor that ignores the mouse
-/// (except while its menu is open). Created on first use.
+/// (except while its menu is open). Created hidden at startup.
 async fn overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
     if let Some(win) = app.get_webview_window("overlay") {
         return Ok(win);
@@ -1379,6 +1379,12 @@ fn main() {
             app.state::<trainer::Trainer>().start(app.handle().clone(), move |id| watch.pid_of(id));
             build_tray(app)?;
             fit_window(app, !start_hidden);
+            // The overlay page is loaded (hidden) up front, so the first menu or note isn't sent
+            // before it listens.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let _ = overlay_window(&handle).await;
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
