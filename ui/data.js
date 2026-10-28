@@ -59,8 +59,8 @@ const CATALOG = {
     { name: 'Colony', mods: [T('Printing Pod Always Ready', 'New duplicants and care packages to pick from at any time.'), S('Max Game Speed', 100, 1000, 50, 100, 'Percent of the fastest speed setting. Click the speed 3 button again after changing it.')] },
   ]},
   1520370: { genre: 'Driving sim', cats: [
-    { name: 'Needs', mods: [T('No Hunger', 'Your poutine bar stays full.'), T('No Thirst', 'Your maple syrup bar stays full.'), T('No Sleep', 'Your energy bar stays full.'), T('No Anxiety', 'Your anxiety bar stays full.')] },
-    { name: 'Money', mods: [T('Unlimited Money', 'Keeps your cash topped up. Turning it off puts your balance back.'), A('Add $10,000')] },
+    { name: 'Needs', mods: [T('No Hunger', 'Your poutine need never builds up.'), T('No Thirst', 'Your maple syrup need never builds up.'), T('No Sleep', 'You never get tired.'), T('No Anxiety', 'Your anxiety never builds up.')] },
+    { name: 'Money', mods: [T('Unlimited Money', 'Keeps your cash topped up. The cash on screen catches up at your next buy or sale. Turning it off puts your balance back.'), A('Add $10,000')] },
     { name: 'Player', mods: [S('Walk Speed', 50, 400, 10, 100, 'Percent of normal walking speed.'), S('Jump Height', 50, 400, 10, 100, 'Percent of normal jump strength.')] },
     { name: 'Vehicles', mods: [T('Infinite Fuel', 'Every fuel tank stays full, the home generator’s too.'), T('No Derby Damage', 'Your car takes no damage in the demolition derby.')] },
     { name: 'World', mods: [T('Freeze Time', 'The clock stops.'), T('Always Day', 'Noon, all the time.')] },
@@ -101,6 +101,7 @@ const LIVE = {
     'add-100-000-funds', 'add-1-000-science', 'add-100-reputation', 'part-clipping', 'free-attachment', 'unlimited-inventory', 'gravity', 'show-biomes'],
   3241660: ['infinite-health', 'infinite-stamina', 'infinite-jumps', 'movement-speed', 'grab-strength', 'throw-strength', 'enemy-radar', 'infinite-battery', 'complete-extractions'],
   457140: ['instant-build', 'sandbox-tools', 'printing-pod-always-ready', 'max-game-speed', 'no-stress', 'no-hunger', 'infinite-breath', 'no-fatigue', 'no-bladder', 'full-health', 'instant-research', 'finish-research-queue'],
+  1520370: ['no-hunger', 'no-thirst', 'no-sleep', 'no-anxiety', 'unlimited-money', 'add-10-000', 'walk-speed', 'jump-height', 'infinite-fuel', 'no-derby-damage', 'freeze-time', 'always-day'],
   848450: ['infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'no-freezing', 'swim-speed', 'walk-speed', 'free-crafting', 'unlock-all-blueprints',
     'fast-growing', 'infinite-energy', 'no-crush-depth', 'passive-creatures'],
   264710: [

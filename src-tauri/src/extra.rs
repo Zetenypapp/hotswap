@@ -69,13 +69,17 @@ impl Session {
         let key = format!("{ns}.{class}");
         let Some(c) = self.m.class(ns, class) else { return vec![] };
         let vt = self.m.vtable(c);
+        // Unity objects: m_CachedPtr (the native object) is set while the object is alive. Checking
+        // it skips destroyed objects and stray copies of the class pointer that aren't objects.
+        let native = self.m.field(c, "m_CachedPtr").map(|o| o as u64);
+        let real = |m: &Mono, o: u64| native.is_none_or(|n| m.p.ptr(o + n).is_some_and(|p| p > 0x10000 && p % 8 == 0 && m.p.read::<u64>(p).is_some()));
         if let Some((objs, at)) = self.found.get(&key) {
-            let alive: Vec<u64> = objs.iter().copied().filter(|&o| vt.is_some() && self.m.p.read::<u64>(o) == vt).collect();
+            let alive: Vec<u64> = objs.iter().copied().filter(|&o| vt.is_some() && self.m.p.read::<u64>(o) == vt && real(&self.m, o)).collect();
             if (!alive.is_empty() && alive.len() == objs.len()) || at.elapsed() < every {
                 return alive;
             }
         }
-        let objs = self.m.instances(c, limit);
+        let objs: Vec<u64> = self.m.instances(c, limit * 8).into_iter().filter(|&o| real(&self.m, o)).take(limit).collect();
         log(&format!("{}: found {} {key}", self.game, objs.len()));
         self.found.insert(key, (objs.clone(), Instant::now()));
         objs
@@ -290,12 +294,14 @@ impl Session {
         if needs.is_empty() {
             return Ok(false); // main menu or loading
         }
-        // Needs bars run 0..100, full is good.
+        // Needs count up from 0 (fine) to 100 (dead), so they are kept at 0.
         for n in needs {
             for (k, field) in [("no-hunger", "Poutine"), ("no-thirst", "MappleSyrup"), ("no-sleep", "Energy"), ("no-anxiety", "Anxiety")] {
                 if on(k) {
                     if let Some(o) = self.f("", "BasicNeeds_Manager", field) {
-                        self.fill_f32(n + o, 100.0);
+                        if self.m.p.read::<f32>(n + o).is_some_and(|x| x > 0.0) {
+                            self.m.p.write(n + o, 0.0f32);
+                        }
                     }
                 }
             }
