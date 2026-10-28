@@ -65,6 +65,32 @@ impl Session {
 
     /// Live objects of a class. Searching memory is slow, so the result is kept while its objects
     /// are still alive, and searched again at most every `every`.
+    /// Searches memory once for every listed class whose cached objects are missing or stale,
+    /// so the objects() calls after it are served from the cache.
+    fn prefetch(&mut self, list: &[(&str, &str)], every: Duration) {
+        let mut want = Vec::new();
+        for &(ns, class) in list {
+            let key = format!("{ns}.{class}");
+            let Some(c) = self.m.class(ns, class) else { continue };
+            let vt = self.m.vtable(c);
+            let fresh = self.found.get(&key).is_some_and(|(objs, at)| at.elapsed() < every || (!objs.is_empty() && objs.iter().all(|&o| vt.is_some() && self.m.p.read::<u64>(o) == vt)));
+            if !fresh {
+                want.push((key, c));
+            }
+        }
+        if want.is_empty() {
+            return;
+        }
+        let classes: Vec<u64> = want.iter().map(|w| w.1).collect();
+        let found = self.m.instances_of(&classes, 256);
+        for ((key, c), objs) in want.into_iter().zip(found) {
+            let native = self.m.field(c, "m_CachedPtr").map(|o| o as u64);
+            let objs: Vec<u64> = objs.into_iter().filter(|&o| native.is_none_or(|n| self.m.p.ptr(o + n).is_some_and(|p| p > 0x10000 && p % 8 == 0 && self.m.p.read::<u64>(p).is_some()))).take(64).collect();
+            log(&format!("{}: found {} {key}", self.game, objs.len()));
+            self.found.insert(key, (objs, Instant::now()));
+        }
+    }
+
     fn objects(&mut self, ns: &str, class: &str, every: Duration, limit: usize) -> Vec<u64> {
         let key = format!("{ns}.{class}");
         let Some(c) = self.m.class(ns, class) else { return vec![] };
@@ -389,18 +415,21 @@ impl Session {
         if self.m.class(US, "PlayerVitals").is_none() {
             return Err("Game closed".into());
         }
-        let vitals = self.objects(US, "PlayerVitals", Duration::from_secs(5), 4);
+        const CAR: &str = "UnityStandardAssets.Vehicles.Car";
+        const BUILD: &str = "UltimateSurvival.Building";
+        self.prefetch(&[(US, "PlayerVitals"), (US, "PlayerEventHandler"), ("UltimateSurvivalMod", "GameControllerSecond"), ("", "PlayerOxygenUsage"), ("", "PlayerAndSuitParams"), ("", "PlayerAnimationController"), (BUILD, "PlayerBuilder"), (BUILD, "BuildingHelpers"), (CAR, "BatteryController")], Duration::from_secs(10));
+        let vitals = self.objects(US, "PlayerVitals", Duration::from_secs(10), 4);
         if vitals.is_empty() {
             return Ok(false); // main menu or loading
         }
-        for gc in self.objects("UltimateSurvivalMod", "GameControllerSecond", Duration::from_secs(5), 4) {
+        for gc in self.objects("UltimateSurvivalMod", "GameControllerSecond", Duration::from_secs(10), 4) {
             if let Some(o) = self.f("UltimateSurvivalMod", "GameControllerSecond", "cheatImmortalityActive") {
                 self.hold_u8(gc + o, on("immortality"), 1);
             }
         }
         // Oxygen: no suffocation damage, and lungs and bottles kept at the fullest they've been.
         let oxy_on = on("infinite-oxygen");
-        for u in self.objects("", "PlayerOxygenUsage", Duration::from_secs(5), 4) {
+        for u in self.objects("", "PlayerOxygenUsage", Duration::from_secs(10), 4) {
             for field in ["damageWithoutOxygen", "currentOxygenUsage"] {
                 if let Some(o) = self.f("", "PlayerOxygenUsage", field) {
                     self.hold_f32(u + o, oxy_on, 0.0);
@@ -418,7 +447,7 @@ impl Session {
             }
         }
         // Suit: its own "don't use energy" switch and a full battery; radiation kept at zero.
-        for sp in self.objects("", "PlayerAndSuitParams", Duration::from_secs(5), 4) {
+        for sp in self.objects("", "PlayerAndSuitParams", Duration::from_secs(10), 4) {
             if let Some(o) = self.f("", "PlayerAndSuitParams", "notUseEnergySuit") {
                 self.hold_u8(sp + o, on("infinite-suit-energy"), 1);
             }
@@ -439,7 +468,6 @@ impl Session {
         }
         // Rover batteries stay charged.
         if on("infinite-rover-battery") {
-            const CAR: &str = "UnityStandardAssets.Vehicles.Car";
             let (lo, mo) = (self.f(CAR, "BatteryController", "currentBatteryLevel"), self.f(CAR, "BatteryController", "maxBatteryWorkingTime"));
             for b in self.objects(CAR, "BatteryController", Duration::from_secs(10), 32) {
                 if let (Some(lo), Some(mo)) = (lo, mo) {
@@ -451,7 +479,7 @@ impl Session {
         }
         // Movement speed, as a percentage of the player's own.
         let speed = (v.get("movement-speed").copied().unwrap_or(100.0) / 100.0) as f32;
-        for a in self.objects("", "PlayerAnimationController", Duration::from_secs(5), 4) {
+        for a in self.objects("", "PlayerAnimationController", Duration::from_secs(10), 4) {
             let Some(o) = self.f("", "PlayerAnimationController", "playerSpeedModifier") else { break };
             let addr = a + o;
             if speed != 1.0 {
@@ -468,9 +496,8 @@ impl Session {
             }
         }
         // Free building: the building system's own switch (no materials needed).
-        const BUILD: &str = "UltimateSurvival.Building";
         for class in ["PlayerBuilder", "BuildingHelpers"] {
-            for b in self.objects(BUILD, class, Duration::from_secs(5), 8) {
+            for b in self.objects(BUILD, class, Duration::from_secs(10), 8) {
                 if let Some(o) = self.f(BUILD, class, "freeBuild") {
                     self.hold_u8(b + o, on("free-building"), 1);
                 }
@@ -480,7 +507,7 @@ impl Session {
         // player's event handler and drains them its own way, so they're refilled to their max.
         let max = |me: &mut Self, f: &str| me.f(US, "PlayerVitals", f).and_then(|o| me.m.p.read::<f32>(vitals[0] + o)).filter(|m| *m > 0.0 && *m < 1e6);
         let maxes = [("immortality", "Health", max(self, "m_MaxHealth")), ("no-hunger", "Hunger", max(self, "maxHungerLevel")), ("no-thirst", "Thirst", max(self, "maxThirstLevel")), ("infinite-stamina", "Stamina", max(self, "maximumStaminaLevel"))];
-        for h in self.objects(US, "PlayerEventHandler", Duration::from_secs(5), 4) {
+        for h in self.objects(US, "PlayerEventHandler", Duration::from_secs(10), 4) {
             for (k, field, m) in maxes {
                 if !on(k) {
                     continue;

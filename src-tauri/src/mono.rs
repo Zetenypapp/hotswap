@@ -184,6 +184,27 @@ impl Mono {
         out
     }
 
+    /// Instances of several classes in one pass over the heap (each class up to `limit`).
+    pub fn instances_of(&self, classes: &[u64], limit: usize) -> Vec<Vec<u64>> {
+        let vts: Vec<Option<u64>> = classes.iter().map(|&c| self.vtable(c)).collect();
+        let mut out = vec![Vec::new(); classes.len()];
+        for (base, size) in heap_regions(&self.p) {
+            let mut buf = vec![0u8; size];
+            if !self.p.read_into(base, &mut buf) {
+                continue;
+            }
+            for (i, w) in buf.chunks_exact(8).enumerate() {
+                let w = u64::from_le_bytes(w.try_into().unwrap());
+                for (k, vt) in vts.iter().enumerate() {
+                    if *vt == Some(w) && out[k].len() < limit {
+                        out[k].push(base + i as u64 * 8);
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// Dev aid: every field of a class as (name, offset, type name).
     pub fn fields_of(&self, class: u64) -> Vec<(String, u32, String)> {
         let h = self.p.raw_handle();
