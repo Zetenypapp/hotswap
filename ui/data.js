@@ -53,7 +53,7 @@ const CATALOG = {
   848450: { genre: 'Underwater survival', cats: [
     { name: 'Player', mods: [T('Infinite Health', 'No damage, and health stays full.'), T('Infinite Oxygen'), T('No Hunger'), T('No Thirst'), T('No Freezing', 'Your body heat never drops, even outside in the cold.')] },
     { name: 'Movement', mods: [S('Swim Speed', 10, 500, 10, 100, 'Percent of normal swim speed.'), S('Walk Speed', 10, 500, 10, 100, 'Percent of normal walking speed.')] },
-    { name: 'Crafting', mods: [T('Free Crafting', 'Crafting and building need no materials.'), T('Unlock All Blueprints'), T('Instant Building'), T('Instant Scanning'), T('Fast Growing', 'Plants grow and eggs hatch almost instantly.')] },
+    { name: 'Crafting', mods: [T('Free Crafting', 'Crafting and building need no materials.'), T('Unlock All Blueprints'), T('Fast Growing', 'Plants grow and eggs hatch almost instantly.')] },
     { name: 'World', mods: [T('Infinite Energy', 'Tools, vehicles and bases never run out of power.'), T('No Crush Depth', 'Vehicles and bases take no water pressure damage.'), T('Passive Creatures', "Creatures don't attack.")] },
   ]},
   1962700: { genre: 'Underwater survival', cats: [
@@ -79,7 +79,7 @@ const LIVE = {
     'add-100-000-funds', 'add-1-000-science', 'add-100-reputation', 'part-clipping', 'free-attachment', 'unlimited-inventory', 'gravity', 'show-biomes'],
   3241660: ['infinite-health', 'infinite-stamina', 'infinite-jumps', 'movement-speed', 'grab-strength', 'throw-strength', 'enemy-radar', 'infinite-battery', 'complete-extractions'],
   848450: ['infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'no-freezing', 'swim-speed', 'walk-speed', 'free-crafting', 'unlock-all-blueprints',
-    'instant-building', 'instant-scanning', 'fast-growing', 'infinite-energy', 'no-crush-depth', 'passive-creatures'],
+    'fast-growing', 'infinite-energy', 'no-crush-depth', 'passive-creatures'],
   264710: [
     'infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'swim-speed', 'walk-speed',
     'free-crafting', 'unlock-all-blueprints', 'instant-building', 'instant-scanning', 'fast-growing',

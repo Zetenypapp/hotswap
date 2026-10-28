@@ -156,8 +156,12 @@ impl Session {
         self.t = t;
     }
 
+    /// A console cheat: off in a normal game, so off unless its mod is on (not "put back what was
+    /// there", which would keep a cheat stuck on after Hotswap restarts while the game runs).
     fn switch(&mut self, addr: u64, on: bool) {
-        self.hold(addr, on, 1);
+        if addr != 0 && self.m.p.read::<u8>(addr).is_some_and(|v| v != on as u8) {
+            self.m.p.write(addr, on as u8);
+        }
     }
 
     /// Keeps a game bool at `want` while `on`, and puts back its old value when turned off.
@@ -238,8 +242,19 @@ impl Session {
             if let Some(o) = self.f("GameOptions", "creatureAggressionModifier") {
                 self.hold_f32(t.options + o, on("passive-creatures"), 0.0);
             }
+            // No damage at all (on top of the console cheat and the refill below).
+            if let Some(o) = self.f("GameOptions", "playerDamageTakenModifier") {
+                self.hold_f32(t.options + o, on("infinite-health"), 0.0);
+            }
         }
-        // Console cheats.
+        // Console cheats. Their objects can appear after the player does: look again until found.
+        if self.t.no_damage == 0 {
+            self.t.no_damage = self.static_obj("NoDamageConsoleCommand", "main").unwrap_or(0);
+        }
+        if self.t.no_cost == 0 {
+            self.t.no_cost = self.static_obj("NoCostConsoleCommand", "main").unwrap_or(0);
+        }
+        let t = self.t;
         let god = on("infinite-health");
         if t.no_damage != 0 {
             let o = self.f("NoDamageConsoleCommand", "noDamageCheat").unwrap_or(0);
@@ -267,6 +282,17 @@ impl Session {
                         if self.m.p.read::<f32>(t.survival + o).is_some_and(|x| x < 99.0) {
                             self.m.p.write(t.survival + o, 100.0f32);
                         }
+                    }
+                }
+            }
+        }
+        // Body heat (Below Zero): the option alone isn't read live, so also empty the cold meter.
+        // It counts cold: 0 is fully warm, its maximum is frozen.
+        if on("no-freezing") && t.survival != 0 {
+            if let Some(bt) = self.ptr_at(t.survival, "Survival", "bodyTemperature").filter(|&b| b != 0) {
+                if let Some(co) = self.f("BodyTemperature", "currentColdMeterValue") {
+                    if self.m.p.read::<f32>(bt + co).is_some_and(|c| c > 0.0) {
+                        self.m.p.write(bt + co, 0.0f32);
                     }
                 }
             }

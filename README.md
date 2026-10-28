@@ -44,7 +44,7 @@ Infinite Health, Infinite Oxygen, No Hunger, No Thirst, Swim Speed, Walk Speed, 
 
 ## ❄️ Subnautica: Below Zero mods
 
-Infinite Health, Infinite Oxygen, No Hunger, No Thirst, No Freezing, Swim Speed, Walk Speed, Free Crafting, Unlock All Blueprints, Instant Building, Instant Scanning, Fast Growing, Infinite Energy, No Crush Depth and Passive Creatures. Most of them switch the game's own custom game mode options and console cheats.
+Infinite Health, Infinite Oxygen, No Hunger, No Thirst, No Freezing, Swim Speed, Walk Speed, Free Crafting, Unlock All Blueprints, Fast Growing, Infinite Energy, No Crush Depth and Passive Creatures. Most of them switch the game's own custom game mode options and console cheats.
 
 ## 🌊 Subnautica 2 mods
 
