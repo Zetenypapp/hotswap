@@ -59,7 +59,12 @@
     "allow-set-mini",
     "allow-overlay-menu",
     "allow-overlay-input",
+    "allow-press-keys",
+    "allow-voice-start",
+    "allow-voice-stop",
+    "allow-voice-state",
+    "allow-voice-set",
     "allow-system-stats",
     "allow-discord-presence"
   ]
-}
+}

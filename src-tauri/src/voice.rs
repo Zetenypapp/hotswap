@@ -105,6 +105,7 @@ fn connect() -> Option<Ws> {
 }
 
 fn set_status(state: &Mutex<State>, status: &str, message: &str) {
+    crate::trainer::log(&format!("voice: {status} {message}"));
     let mut s = state.lock().unwrap();
     s.status = status.into();
     s.message = message.into();
@@ -185,6 +186,7 @@ impl Session {
     }
 
     fn handle(&mut self, v: Value) -> Result<(), String> {
+        crate::trainer::log(&format!("voice: got {}", v.to_string().chars().take(160).collect::<String>()));
         let cmd = v["cmd"].as_str().unwrap_or("");
         let evt = v["evt"].as_str().unwrap_or("");
         let data = &v["data"];
