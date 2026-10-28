@@ -401,8 +401,10 @@ impl Session {
         // Oxygen: no suffocation damage, and lungs and bottles kept at the fullest they've been.
         let oxy_on = on("infinite-oxygen");
         for u in self.objects("", "PlayerOxygenUsage", Duration::from_secs(5), 4) {
-            if let Some(o) = self.f("", "PlayerOxygenUsage", "damageWithoutOxygen") {
-                self.hold_f32(u + o, oxy_on, 0.0);
+            for field in ["damageWithoutOxygen", "currentOxygenUsage"] {
+                if let Some(o) = self.f("", "PlayerOxygenUsage", field) {
+                    self.hold_f32(u + o, oxy_on, 0.0);
+                }
             }
             for field in ["playerOxygenLevel", "itemOxygenLevel"] {
                 let Some(o) = self.f("", "PlayerOxygenUsage", field) else { continue };
@@ -471,6 +473,22 @@ impl Session {
             for b in self.objects(BUILD, class, Duration::from_secs(5), 8) {
                 if let Some(o) = self.f(BUILD, class, "freeBuild") {
                     self.hold_u8(b + o, on("free-building"), 1);
+                }
+            }
+        }
+        // The live stats: Occupy Mars keeps health, hunger, thirst and stamina as values on the
+        // player's event handler and drains them its own way, so they're refilled to their max.
+        let max = |me: &mut Self, f: &str| me.f(US, "PlayerVitals", f).and_then(|o| me.m.p.read::<f32>(vitals[0] + o)).filter(|m| *m > 0.0 && *m < 1e6);
+        let maxes = [("immortality", "Health", max(self, "m_MaxHealth")), ("no-hunger", "Hunger", max(self, "maxHungerLevel")), ("no-thirst", "Thirst", max(self, "maxThirstLevel")), ("infinite-stamina", "Stamina", max(self, "maximumStaminaLevel"))];
+        for h in self.objects(US, "PlayerEventHandler", Duration::from_secs(5), 4) {
+            for (k, field, m) in maxes {
+                if !on(k) {
+                    continue;
+                }
+                let Some(m) = m else { continue };
+                let class = if field == "Health" { "EntityEventHandler" } else { "PlayerEventHandler" };
+                if let Some(val) = self.ptr(h, US, class, field) {
+                    self.fill_f32(val + VALUE_CURRENT, m);
                 }
             }
         }
