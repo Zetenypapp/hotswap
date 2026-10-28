@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ts-set-enabled"
+description = "Enables the ts_set_enabled command without any pre-configured scope."
+commands.allow = ["ts_set_enabled"]
+
+[[permission]]
+identifier = "deny-ts-set-enabled"
+description = "Denies the ts_set_enabled command without any pre-configured scope."
+commands.deny = ["ts_set_enabled"]

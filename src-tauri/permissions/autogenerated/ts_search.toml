@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ts-search"
+description = "Enables the ts_search command without any pre-configured scope."
+commands.allow = ["ts_search"]
+
+[[permission]]
+identifier = "deny-ts-search"
+description = "Denies the ts_search command without any pre-configured scope."
+commands.deny = ["ts_search"]

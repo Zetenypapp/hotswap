@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ts-install"
+description = "Enables the ts_install command without any pre-configured scope."
+commands.allow = ["ts_install"]
+
+[[permission]]
+identifier = "deny-ts-install"
+description = "Denies the ts_install command without any pre-configured scope."
+commands.deny = ["ts_install"]

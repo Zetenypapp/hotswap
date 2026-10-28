@@ -19,6 +19,7 @@ mod sn1map;
 mod sn2;
 mod steam;
 mod trainer;
+mod thunderstore;
 mod ue;
 mod voice;
 mod vdf;
@@ -407,6 +408,44 @@ async fn fmods_install(app: AppHandle, watch: State<'_, watch::Watch>, game: Str
     let g = file_game(&watch, &game, true)?;
     let scratch = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("modfiles");
     tauri::async_runtime::spawn_blocking(move || g.install(std::path::Path::new(&path), &scratch)).await.map_err(|e| e.to_string())?
+}
+
+/// Games whose mods come from Thunderstore: game ID -> Thunderstore community.
+const THUNDER_GAMES: [(&str, &str); 1] = [(repo::REPO, "repo")];
+
+fn thunder_game(watch: &watch::Watch, game: &str, changing: bool) -> Result<(thunderstore::Game, &'static str), String> {
+    let (_, community) = THUNDER_GAMES.iter().find(|g| g.0 == game).ok_or("No Thunderstore mods for this game")?;
+    if changing && watch.running().as_deref() == Some(game) {
+        return Err("Close the game first, then change mods".into());
+    }
+    Ok((thunderstore::Game { root: watch.install_of(game).ok_or("Game isn't installed")? }, community))
+}
+
+#[tauri::command]
+async fn ts_search(game: String, query: String, sort: String, offset: usize) -> Result<serde_json::Value, String> {
+    let (_, community) = THUNDER_GAMES.iter().find(|g| g.0 == game).ok_or("No Thunderstore mods for this game")?;
+    tauri::async_runtime::spawn_blocking(move || thunderstore::search(community, &query, &sort, offset)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn ts_list(watch: State<watch::Watch>, game: String) -> Result<Vec<thunderstore::Installed>, String> {
+    Ok(thunder_game(&watch, &game, false)?.0.list())
+}
+
+#[tauri::command]
+async fn ts_install(watch: State<'_, watch::Watch>, game: String, id: String) -> Result<Vec<String>, String> {
+    let (g, community) = thunder_game(&watch, &game, true)?;
+    tauri::async_runtime::spawn_blocking(move || g.install(community, &id)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn ts_set_enabled(watch: State<watch::Watch>, game: String, id: String, enabled: bool) -> Result<(), String> {
+    thunder_game(&watch, &game, true)?.0.set_enabled(&id, enabled)
+}
+
+#[tauri::command]
+fn ts_remove(watch: State<watch::Watch>, game: String, id: String) -> Result<(), String> {
+    thunder_game(&watch, &game, true)?.0.remove(&id)
 }
 
 #[derive(serde::Serialize)]
@@ -1368,7 +1407,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
             fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart,
-            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, overlay_menu, overlay_input, overlay_ready, voice_start, voice_stop, voice_state, voice_send, system_stats, discord_presence, radar_show, set_mini, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
+            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, overlay_menu, overlay_input, overlay_ready, ts_search, ts_list, ts_install, ts_set_enabled, ts_remove, voice_start, voice_stop, voice_state, voice_send, system_stats, discord_presence, radar_show, set_mini, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running HotSwap");
