@@ -77,6 +77,7 @@ impl Trainer {
             let mut sn1: Option<crate::sn1::Session> = None;
             let mut repo: Option<crate::repo::Session> = None;
             let mut ksp: Option<crate::ksp::Session> = None;
+            let mut extra: Option<crate::extra::Session> = None;
             let mut scrap: Option<crate::scrap::Session> = None;
             let mut last_attach: Option<Instant> = None;
             let mut last = Status { game: None, connected: false, message: String::new() };
@@ -139,12 +140,12 @@ impl Trainer {
                             _ => Status { game: game.clone(), connected: false, message: "Waiting for the game to load".into() },
                         }
                     }
-                    Some(crate::sn1::SUBNAUTICA) => {
+                    Some(g @ (crate::sn1::SUBNAUTICA | crate::sn1::BELOW_ZERO)) => {
                         if sn1.is_none() && last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
                             last_attach = Some(Instant::now());
-                            sn1 = pid_of(crate::sn1::SUBNAUTICA)
+                            sn1 = pid_of(g)
                                 .and_then(|pid| crate::mono::Mono::attach(pid).map_err(|e| log(&format!("sn1 attach: {e}"))).ok())
-                                .map(crate::sn1::Session::new);
+                                .map(if g == crate::sn1::BELOW_ZERO { crate::sn1::Session::new_zero } else { crate::sn1::Session::new });
                         }
                         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                             sn1.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }))
@@ -204,6 +205,27 @@ impl Trainer {
                             None => Status { game: game.clone(), connected: false, message: "Waiting for the game to start".into() },
                         }
                     }
+                    Some(g @ (crate::extra::ONI | crate::extra::MON_BAZOU | crate::extra::OCCUPY_MARS)) => {
+                        if extra.is_none() && last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
+                            last_attach = Some(Instant::now());
+                            let kind = [crate::extra::ONI, crate::extra::MON_BAZOU, crate::extra::OCCUPY_MARS].into_iter().find(|k| *k == g).unwrap();
+                            extra = pid_of(g)
+                                .and_then(|pid| crate::mono::Mono::attach(pid).map_err(|e| log(&format!("{g} attach: {e}"))).ok())
+                                .map(|m| crate::extra::Session::new(kind, m));
+                        }
+                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            extra.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions))
+                        }))
+                        .unwrap_or_else(|_| Some(Err("Lost track of the game, reconnecting".into())));
+                        match result {
+                            Some(Ok(true)) => Status { game: game.clone(), connected: true, message: "Connected".into() },
+                            Some(Err(e)) => {
+                                extra = None;
+                                Status { game: game.clone(), connected: false, message: e }
+                            }
+                            _ => Status { game: game.clone(), connected: false, message: "Waiting for the game to load".into() },
+                        }
+                    }
                     Some(crate::ksp::KSP) => {
                         if ksp.is_none() && last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
                             last_attach = Some(Instant::now());
@@ -231,6 +253,7 @@ impl Trainer {
                         repo = None;
                         ksp = None;
                         scrap = None;
+                        extra = None;
                         me.0.lock().unwrap().pos = None;
                         Status { game: game.clone(), connected: false, message: String::new() }
                     }

@@ -3,6 +3,7 @@
 mod appinfo;
 mod discord;
 mod epic;
+mod extra;
 mod gog;
 mod home;
 mod iostore;

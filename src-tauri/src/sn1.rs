@@ -1,12 +1,28 @@
-//! Subnautica (Steam app 264710), a Unity game on Mono. Classes and fields are looked up by name
-//! through Mono (see mono.rs). Most mods switch the game's own cheats: the GameModeUtils cheat
-//! flags and the console cheat objects (NoDamageConsoleCommand, NoCostConsoleCommand), so the game
-//! handles them exactly as it does for its console commands.
+//! Subnautica (Steam app 264710) and Subnautica: Below Zero (848450), Unity games on Mono. Classes
+//! and fields are looked up by name through Mono (see mono.rs). Most mods switch the game's own
+//! cheats, so the game handles them exactly as it does for its console commands and game modes:
+//! - Subnautica: the GameModeUtils cheat flags.
+//! - Below Zero: the custom game mode options (GameModeManager's GameOptions: oxygen, hunger, ...).
+//! - Both: the console cheat objects (NoDamageConsoleCommand, NoCostConsoleCommand).
 
 use crate::{mono::Mono, trainer::log};
 use std::collections::HashMap;
 
 pub const SUBNAUTICA: &str = "264710";
+pub const BELOW_ZERO: &str = "848450";
+
+/// Below Zero game options switched off while their mod is on: mod ID -> GameOptions bool.
+const OPTIONS: [(&str, &str); 9] = [
+    ("infinite-oxygen", "oxygenDepletes"),
+    ("no-hunger", "hunger"),
+    ("no-thirst", "thirst"),
+    ("no-freezing", "bodyTemperatureDecreases"),
+    ("free-crafting", "craftingRequiresResources"),
+    ("unlock-all-blueprints", "techRequiresUnlocking"),
+    ("infinite-energy", "technologyRequiresPower"),
+    ("no-crush-depth", "vehicleWaterPressureDamage"),
+    ("no-crush-depth", "baseWaterPressureDamage"),
+];
 
 /// Cheat flag mods: mod ID -> GameModeOption bit.
 const FLAGS: [(&str, u32); 6] = [
@@ -34,6 +50,8 @@ struct Targets {
     walk_motor: u64,
     controller: u64,
     oxygen_mgr: u64,
+    /// Below Zero: the current game's GameOptions.
+    options: u64,
 }
 
 /// Player speed limits: (PlayerController default, motor field it's copied into, which slider).
@@ -55,10 +73,14 @@ const SPEEDS: [(&str, &str, &str); 13] = [
 
 pub struct Session {
     m: Mono,
+    /// Below Zero (game options) rather than Subnautica (cheat flags).
+    zero: bool,
     t: Targets,
-    off: HashMap<&'static str, u64>,
-    /// Console cheat switches we turned on: address -> the value before.
+    off: HashMap<(String, &'static str), u64>,
+    /// Game switches we changed: address -> the value before.
     switched: HashMap<u64, u8>,
+    /// Game numbers we changed: address -> the value before.
+    held: HashMap<u64, f32>,
     /// The game's own speed limits (PlayerController field -> value), read once per player.
     speed_orig: HashMap<&'static str, f32>,
     /// Speed factors last applied: (swim, walk).
@@ -70,17 +92,24 @@ pub struct Session {
 
 impl Session {
     pub fn new(m: Mono) -> Session {
-        Session { m, t: Targets::default(), off: HashMap::new(), switched: HashMap::new(), speed_orig: HashMap::new(), speed_last: (1.0, 1.0), pos: None, camera: 0 }
+        Session::with(m, false)
+    }
+    pub fn new_zero(m: Mono) -> Session {
+        Session::with(m, true)
+    }
+    fn with(m: Mono, zero: bool) -> Session {
+        Session { m, zero, t: Targets::default(), off: HashMap::new(), switched: HashMap::new(), held: HashMap::new(), speed_orig: HashMap::new(), speed_last: (1.0, 1.0), pos: None, camera: 0 }
     }
 
     /// Offset of `class.field`, cached.
     fn f(&mut self, class: &str, field: &'static str) -> Option<u64> {
-        if let Some(&o) = self.off.get(field) {
+        let key = (class.to_string(), field);
+        if let Some(&o) = self.off.get(&key) {
             return Some(o);
         }
         let c = self.m.class("", class)?;
         let o = self.m.field(c, field)? as u64;
-        self.off.insert(field, o);
+        self.off.insert(key, o);
         Some(o)
     }
     fn ptr_at(&mut self, obj: u64, class: &str, field: &'static str) -> Option<u64> {
@@ -95,7 +124,10 @@ impl Session {
 
     fn resolve(&mut self, player: u64) {
         let mut t = Targets { player, ..Default::default() };
-        if let Some(c) = self.m.class("", "GameModeUtils") {
+        if self.zero {
+            let mgr = self.static_obj("GameModeManager", "gameOptionsManager").unwrap_or(0);
+            t.options = if mgr != 0 { self.ptr_at(mgr, "GameOptionsManager", "options").unwrap_or(0) } else { 0 };
+        } else if let Some(c) = self.m.class("", "GameModeUtils") {
             t.cheats = self.m.static_addr(c, "currentCheats").unwrap_or(0);
             t.mode = self.m.static_addr(c, "currentGameMode").unwrap_or(0);
         }
@@ -120,11 +152,20 @@ impl Session {
                 t.survival = self.m.instances(c, 64).into_iter().find(|&s| self.m.p.ptr(s + po) == Some(player)).unwrap_or(0);
             }
         }
-        log(&format!("sn1: player 0x{player:X} cheats 0x{:X} survival 0x{:X}", t.cheats, t.survival));
+        log(&format!("sn1: zero={} player 0x{player:X} cheats 0x{:X} options 0x{:X} survival 0x{:X}", self.zero, t.cheats, t.options, t.survival));
         self.t = t;
     }
 
+    /// A console cheat: off in a normal game, so off unless its mod is on (not "put back what was
+    /// there", which would keep a cheat stuck on after Hotswap restarts while the game runs).
     fn switch(&mut self, addr: u64, on: bool) {
+        if addr != 0 && self.m.p.read::<u8>(addr).is_some_and(|v| v != on as u8) {
+            self.m.p.write(addr, on as u8);
+        }
+    }
+
+    /// Keeps a game bool at `want` while `on`, and puts back its old value when turned off.
+    fn hold(&mut self, addr: u64, on: bool, want: u8) {
         if addr == 0 {
             return;
         }
@@ -133,8 +174,28 @@ impl Session {
                 let Some(v) = self.m.p.read::<u8>(addr) else { return };
                 self.switched.insert(addr, v);
             }
-            self.m.p.write(addr, 1u8);
+            if self.m.p.read::<u8>(addr) != Some(want) {
+                self.m.p.write(addr, want);
+            }
         } else if let Some(v) = self.switched.remove(&addr) {
+            self.m.p.write(addr, v);
+        }
+    }
+
+    /// The same for a game number.
+    fn hold_f32(&mut self, addr: u64, on: bool, want: f32) {
+        if addr == 0 {
+            return;
+        }
+        if on {
+            if !self.held.contains_key(&addr) {
+                let Some(v) = self.m.p.read::<f32>(addr) else { return };
+                self.held.insert(addr, v);
+            }
+            if self.m.p.read::<f32>(addr).is_some_and(|v| v != want) {
+                self.m.p.write(addr, want);
+            }
+        } else if let Some(v) = self.held.remove(&addr) {
             self.m.p.write(addr, v);
         }
     }
@@ -148,6 +209,7 @@ impl Session {
         }
         if player != self.t.player {
             self.switched.clear();
+            self.held.clear();
             self.speed_orig.clear();
             self.speed_last = (1.0, 1.0);
             self.resolve(player);
@@ -170,7 +232,29 @@ impl Session {
                 self.m.p.write(t.cheats, want);
             }
         }
-        // Console cheats.
+        // Below Zero: the game mode options (the same switches as a custom game).
+        if t.options != 0 {
+            for (k, field) in OPTIONS {
+                if let Some(o) = self.f("GameOptions", field) {
+                    self.hold(t.options + o, on(k), 0);
+                }
+            }
+            if let Some(o) = self.f("GameOptions", "creatureAggressionModifier") {
+                self.hold_f32(t.options + o, on("passive-creatures"), 0.0);
+            }
+            // No damage at all (on top of the console cheat and the refill below).
+            if let Some(o) = self.f("GameOptions", "playerDamageTakenModifier") {
+                self.hold_f32(t.options + o, on("infinite-health"), 0.0);
+            }
+        }
+        // Console cheats. Their objects can appear after the player does: look again until found.
+        if self.t.no_damage == 0 {
+            self.t.no_damage = self.static_obj("NoDamageConsoleCommand", "main").unwrap_or(0);
+        }
+        if self.t.no_cost == 0 {
+            self.t.no_cost = self.static_obj("NoCostConsoleCommand", "main").unwrap_or(0);
+        }
+        let t = self.t;
         let god = on("infinite-health");
         if t.no_damage != 0 {
             let o = self.f("NoDamageConsoleCommand", "noDamageCheat").unwrap_or(0);
@@ -198,6 +282,17 @@ impl Session {
                         if self.m.p.read::<f32>(t.survival + o).is_some_and(|x| x < 99.0) {
                             self.m.p.write(t.survival + o, 100.0f32);
                         }
+                    }
+                }
+            }
+        }
+        // Body heat (Below Zero): the option alone isn't read live, so also empty the cold meter.
+        // It counts cold: 0 is fully warm, its maximum is frozen.
+        if on("no-freezing") && t.survival != 0 {
+            if let Some(bt) = self.ptr_at(t.survival, "Survival", "bodyTemperature").filter(|&b| b != 0) {
+                if let Some(co) = self.f("BodyTemperature", "currentColdMeterValue") {
+                    if self.m.p.read::<f32>(bt + co).is_some_and(|c| c > 0.0) {
+                        self.m.p.write(bt + co, 0.0f32);
                     }
                 }
             }

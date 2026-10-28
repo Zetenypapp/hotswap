@@ -1,6 +1,6 @@
 [package]
 name = "hotswap"
-version = "0.2.6"
+version = "0.2.9"
 description = "Hotswap desktop app"
 edition = "2021"
 
