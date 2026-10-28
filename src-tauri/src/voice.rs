@@ -244,6 +244,10 @@ impl Session {
                 self.send("AUTHENTICATE", json!({ "access_token": token }), None, "auth")?;
             }
             ("AUTHENTICATE", _) => {
+                // You (this connection's READY carries no user).
+                if let Some(id) = data["user"]["id"].as_str() {
+                    self.state.lock().unwrap().me = id.to_string();
+                }
                 set_status(&self.state, "ready", "");
                 self.send("SUBSCRIBE", json!({}), Some("VOICE_CHANNEL_SELECT"), "")?;
                 self.send("SUBSCRIBE", json!({}), Some("VOICE_SETTINGS_UPDATE"), "")?;
