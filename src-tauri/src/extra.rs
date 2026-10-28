@@ -26,11 +26,16 @@ pub struct Session {
     ints: HashMap<u64, i32>,
     /// Objects found by class: class -> (objects, when last searched).
     found: HashMap<String, (Vec<u64>, Instant)>,
+    /// The highest a game value has been this session (refills go back up to it).
+    best: HashMap<u64, f32>,
 }
+
+/// Where a survival kit Value<float> keeps its number (after two delegate fields).
+const VALUE_CURRENT: u64 = 0x20;
 
 impl Session {
     pub fn new(game: &'static str, m: Mono) -> Session {
-        Session { game, m, off: HashMap::new(), bools: HashMap::new(), floats: HashMap::new(), ints: HashMap::new(), found: HashMap::new() }
+        Session { game, m, off: HashMap::new(), bools: HashMap::new(), floats: HashMap::new(), ints: HashMap::new(), found: HashMap::new(), best: HashMap::new() }
     }
 
     fn f(&mut self, ns: &str, class: &str, field: &str) -> Option<u64> {
@@ -227,6 +232,73 @@ impl Session {
         for gc in self.objects("UltimateSurvivalMod", "GameControllerSecond", Duration::from_secs(5), 4) {
             if let Some(o) = self.f("UltimateSurvivalMod", "GameControllerSecond", "cheatImmortalityActive") {
                 self.hold_u8(gc + o, on("immortality"), 1);
+            }
+        }
+        // Oxygen: no suffocation damage, and lungs and bottles kept at the fullest they've been.
+        let oxy_on = on("infinite-oxygen");
+        for u in self.objects("", "PlayerOxygenUsage", Duration::from_secs(5), 4) {
+            if let Some(o) = self.f("", "PlayerOxygenUsage", "damageWithoutOxygen") {
+                self.hold_f32(u + o, oxy_on, 0.0);
+            }
+            for field in ["playerOxygenLevel", "itemOxygenLevel"] {
+                let Some(o) = self.f("", "PlayerOxygenUsage", field) else { continue };
+                let Some(cur) = self.m.p.read::<f32>(u + o).filter(|v| v.is_finite()) else { continue };
+                let best = self.best.entry(u + o).or_insert(cur);
+                *best = best.max(cur);
+                if oxy_on && cur < *best {
+                    let b = *best;
+                    self.m.p.write(u + o, b);
+                }
+            }
+        }
+        // Suit: its own "don't use energy" switch and a full battery; radiation kept at zero.
+        for sp in self.objects("", "PlayerAndSuitParams", Duration::from_secs(5), 4) {
+            if let Some(o) = self.f("", "PlayerAndSuitParams", "notUseEnergySuit") {
+                self.hold_u8(sp + o, on("infinite-suit-energy"), 1);
+            }
+            if on("infinite-suit-energy") {
+                if let (Some(e), Some(mo)) = (self.ptr(sp, "", "PlayerAndSuitParams", "energy"), self.f("", "PlayerAndSuitParams", "maxEnergy")) {
+                    if let Some(max) = self.m.p.read::<f32>(sp + mo).filter(|m| *m > 0.0 && *m < 1e6) {
+                        self.fill_f32(e + VALUE_CURRENT, max);
+                    }
+                }
+            }
+            if on("no-radiation") {
+                if let Some(r) = self.ptr(sp, "", "PlayerAndSuitParams", "radiation") {
+                    if self.m.p.read::<f32>(r + VALUE_CURRENT).is_some_and(|x| x > 0.0) {
+                        self.m.p.write(r + VALUE_CURRENT, 0.0f32);
+                    }
+                }
+            }
+        }
+        // Rover batteries stay charged.
+        if on("infinite-rover-battery") {
+            const CAR: &str = "UnityStandardAssets.Vehicles.Car";
+            let (lo, mo) = (self.f(CAR, "BatteryController", "currentBatteryLevel"), self.f(CAR, "BatteryController", "maxBatteryWorkingTime"));
+            for b in self.objects(CAR, "BatteryController", Duration::from_secs(10), 32) {
+                if let (Some(lo), Some(mo)) = (lo, mo) {
+                    if let Some(max) = self.m.p.read::<f32>(b + mo).filter(|m| *m > 0.0 && *m < 1e7) {
+                        self.fill_f32(b + lo, max);
+                    }
+                }
+            }
+        }
+        // Movement speed, as a percentage of the player's own.
+        let speed = (v.get("movement-speed").copied().unwrap_or(100.0) / 100.0) as f32;
+        for a in self.objects("", "PlayerAnimationController", Duration::from_secs(5), 4) {
+            let Some(o) = self.f("", "PlayerAnimationController", "playerSpeedModifier") else { break };
+            let addr = a + o;
+            if speed != 1.0 {
+                if !self.floats.contains_key(&addr) {
+                    if let Some(base) = self.m.p.read::<f32>(addr) {
+                        self.floats.insert(addr, base);
+                    }
+                }
+                if let Some(&base) = self.floats.get(&addr) {
+                    self.hold_f32(addr, true, base * speed);
+                }
+            } else {
+                self.hold_f32(addr, false, 0.0);
             }
         }
         // Free building: the building system's own switch (no materials needed).
