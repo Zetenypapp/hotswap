@@ -885,7 +885,7 @@ function syncDiscord() {
     details: `Playing ${g.name}`,
     state: modsOf(g).length ? (state.paused[g.id] ? 'Mods paused' : `${n} mod${n === 1 ? '' : 's'} on`) : 'With HotSwap',
     timestamps: sessionStart ? { start: Math.floor(sessionStart / 1000) } : undefined,
-    assets: { large_image: 'logo', large_text: 'HotSwap: free, open-source game mods' },
+    assets: { large_image: 'hotswap_avatar', large_text: 'HotSwap: free, open-source game mods' },
     buttons: [{ label: 'Get HotSwap', url: REPO_URL }],
   } : null;
   const sig = JSON.stringify(activity);
