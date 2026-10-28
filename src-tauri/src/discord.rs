@@ -11,7 +11,7 @@ use std::{
 };
 
 /// HotSwap's application ID from discord.com/developers (empty: presence is off).
-pub const APP_ID: &str = "";
+pub const APP_ID: &str = "1565072216591171785";
 
 /// Sends wanted activities to the presence thread (None clears it).
 pub struct Discord(Mutex<Option<mpsc::Sender<Option<Value>>>>);
