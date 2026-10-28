@@ -7,7 +7,7 @@ Hotswap is a free, open-source, ad-free mod app for **single-player** PC games o
 > 💡 **Inspired by ArtCraft.**
 > 🤖 **Made by AI.** Hotswap was designed and written by Claude (Anthropic's AI) in Claude Code, directed by [@Zetenypapp](https://github.com/Zetenypapp).
 
-> 🎮 **Game support right now: Satisfactory, Subnautica, Subnautica 2, R.E.P.O., Kerbal Space Program and Subnautica: Below Zero.** These are the games with working mod settings so far. Every other game shows up in your library with art, playtime and launching, but its mod list is either empty or marked **Soon**.
+> 🎮 **Game support right now: Satisfactory, Subnautica, Subnautica 2, R.E.P.O., Kerbal Space Program, Subnautica: Below Zero and Oxygen Not Included.** These are the games with working mod settings so far. Every other game shows up in your library with art, playtime and launching, but its mod list is either empty or marked **Soon**.
 
 ![Satisfactory mod page](docs/game.png)
 
@@ -45,6 +45,10 @@ Infinite Health, Infinite Oxygen, No Hunger, No Thirst, Swim Speed, Walk Speed, 
 ## ❄️ Subnautica: Below Zero mods
 
 Infinite Health, Infinite Oxygen, No Hunger, No Thirst, No Freezing, Swim Speed, Walk Speed, Free Crafting, Unlock All Blueprints, Fast Growing, Infinite Energy, No Crush Depth and Passive Creatures. Most of them switch the game's own custom game mode options and console cheats.
+
+## 🧪 Oxygen Not Included mods
+
+Instant Build, Sandbox Tools, Printing Pod Always Ready, Max Game Speed, No Stress, No Hunger, Infinite Breath, No Fatigue, No Bladder, Full Health, Instant Research and Finish Research Queue. Instant Build and Sandbox Tools switch the game's own debug and sandbox modes.
 
 ## 🌊 Subnautica 2 mods
 

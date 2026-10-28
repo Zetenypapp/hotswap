@@ -135,13 +135,13 @@ impl Session {
         let none = HashMap::new();
         let v = values.unwrap_or(&none);
         match self.game {
-            ONI => self.oni(v),
+            ONI => self.oni(v, actions),
             MON_BAZOU => self.mon_bazou(v, actions),
             _ => self.mars(v),
         }
     }
 
-    fn oni(&mut self, v: &HashMap<String, f64>) -> Result<bool, String> {
+    fn oni(&mut self, v: &HashMap<String, f64>, actions: &[String]) -> Result<bool, String> {
         let on = |k: &str| v.get(k).is_some_and(|x| *x != 0.0);
         if self.m.class("", "DebugHandler").is_none() {
             return Err("Game closed".into());
@@ -170,6 +170,23 @@ impl Session {
                     if let Some(dict) = self.ptr(inv, "", "ResearchPointInventory", "PointsByTypeID") {
                         self.fill_dict_floats(dict, 1_000_000.0);
                     }
+                }
+            }
+        }
+        // Finish Research Queue: marks the queued techs (and the current one) as researched, which is
+        // what the game checks when it decides whether a building or tech is unlocked.
+        if actions.iter().any(|a| a == "finish-research-queue") {
+            if let (Some(r), Some(oc)) = (self.static_obj("", "Research", "Instance"), self.f("", "TechInstance", "complete")) {
+                let mut techs: Vec<u64> = self.ptr(r, "", "Research", "activeResearch").into_iter().collect();
+                if let Some(list) = self.ptr(r, "", "Research", "queuedTech") {
+                    let items = self.m.p.ptr(list + 0x10).unwrap_or(0);
+                    let n = self.m.p.read::<i32>(list + 0x18).unwrap_or(0).clamp(0, 500) as u64;
+                    if items != 0 {
+                        techs.extend((0..n).filter_map(|i| self.m.p.ptr(items + 0x20 + i * 8)).filter(|&t| t != 0));
+                    }
+                }
+                for t in techs {
+                    self.m.p.write(t + oc, 1u8);
                 }
             }
         }
