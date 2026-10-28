@@ -1,10 +1,11 @@
 /* Mod loader page: browse ficsit.app, install mods with their dependencies, and manage installed
-   ones. Satisfactory only for now. The backend refuses changes while the game is running. */
+   ones. ficsit.app (Satisfactory), Nexus Mods (Subnautica 2) and Thunderstore (R.E.P.O.). The backend refuses changes while the game is running. */
 const Mods = (() => {
   // Games with a mod loader page. `source` is where their mods come from; others show as coming soon.
   const GAMES = [
     { id: '526870', source: 'ficsit.app', url: 'https://ficsit.app' },
     { id: '1962700', source: 'Nexus Mods', url: 'https://www.nexusmods.com/subnautica2', nexus: 'subnautica2' },
+    { id: '3241660', source: 'Thunderstore', url: 'https://thunderstore.io/c/repo', thunder: 'repo' },
   ];
   let GAME = null; // the game whose mod page is open, or null for the game grid
   // Installed mods are only read for Satisfactory, the one game with a mod source so far.
@@ -15,6 +16,10 @@ const Mods = (() => {
   // Nexus Mods games (mods are files: UE4SS, Lua and pak mods).
   const N = { mods: [], downloads: [], results: [], count: 0, loading: false, error: '', builtIn: false, busy: '', clicked: null };
   const isNexus = () => !!GAMES.find(x => x.id === GAME)?.nexus;
+  // Thunderstore games (BepInEx mods, installed straight from Thunderstore with their dependencies).
+  const T = { mods: [], results: [], count: 0, loading: false, error: '', busy: '' };
+  const isThunder = () => !!GAMES.find(x => x.id === GAME)?.thunder;
+  const findMore = more => isThunder() ? tSearch(more) : isNexus() ? nSearch(more) : search(more);
 
   const running = () => RUNNING === gid();
   const fmtN = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n);
@@ -101,7 +106,7 @@ const Mods = (() => {
     if (body.dataset.view !== GAME + S.tab) {
       body.dataset.view = GAME + S.tab;
       body.innerHTML = `
-        <div class="lib-head"><button class="chip" data-modgame="">‹ All games</button><h1>${esc(gameOf(GAME).name)}</h1><span class="meta">${S.build && !isNexus() ? `Game build ${S.build} · ` : ''}mods from <a href="${info.url}" ${ext}>${esc(info.source)}</a></span>
+        <div class="lib-head"><button class="chip" data-modgame="">‹ All games</button><h1>${esc(gameOf(GAME).name)}</h1><span class="meta">${S.build && !isNexus() && !isThunder() ? `Game build ${S.build} · ` : ''}mods from <a href="${info.url}" ${ext}>${esc(info.source)}</a></span>
           <div class="chips"><button class="chip${S.tab === 'installed' ? ' on' : ''}" data-modtab="installed">Installed</button><button class="chip${S.tab === 'browse' ? ' on' : ''}" data-modtab="browse">Browse</button></div></div>
         <div id="modsWarn"></div>
         ${S.tab === 'browse' ? `<div class="mods-bar"><label class="search mods-search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
@@ -109,8 +114,9 @@ const Mods = (() => {
             <div class="chips">${[['popular', 'Popular'], ['updated', 'Updated'], ['new', 'New']].map(([k, l]) => `<button class="chip${S.sort === k ? ' on' : ''}" data-modsort="${k}">${l}</button>`).join('')}</div></div>` : ''}
         <div id="modsList"></div>`;
       const input = $('modSearch');
-      if (input) input.addEventListener('input', () => { S.query = input.value; clearTimeout(searchTimer); searchTimer = setTimeout(() => isNexus() ? nSearch(false) : search(false), 350); });
-      if (isNexus()) { nRefresh(); if (S.tab === 'browse' && !N.results.length) nSearch(false); }
+      if (input) input.addEventListener('input', () => { S.query = input.value; clearTimeout(searchTimer); searchTimer = setTimeout(() => findMore(false), 350); });
+      if (isThunder()) { tRefresh(); if (S.tab === 'browse' && !T.results.length) tSearch(false); }
+      else if (isNexus()) { nRefresh(); if (S.tab === 'browse' && !N.results.length) nSearch(false); }
       else {
         if (!S.loaded) refreshInstalled();
         if (S.tab === 'browse' && !S.results.length && !S.loading) search(false);
@@ -122,6 +128,7 @@ const Mods = (() => {
   function list() {
     const el = $('modsList');
     if (!el || state.view !== 'mods' || !GAME) return;
+    if (isThunder()) return thunderList(el);
     if (isNexus()) return nexusList(el);
     $('modsWarn').innerHTML = running() ? '<div class="mods-warn">Satisfactory is running. Close it to install, update or remove mods.</div>' : '';
     if (S.error && S.tab === 'installed') { el.innerHTML = `<p class="empty">${esc(S.error)}</p>`; return; }
@@ -180,12 +187,12 @@ const Mods = (() => {
     const d = t.dataset;
     if ('modgame' in d) { GAME = d.modgame || null; render(); }
     else if (d.modtab) { S.tab = d.modtab; render(); }
-    else if (d.modsort) { S.sort = d.modsort; document.querySelectorAll('[data-modsort]').forEach(b => b.classList.toggle('on', b === t)); isNexus() ? nSearch(false) : search(false); }
+    else if (d.modsort) { S.sort = d.modsort; document.querySelectorAll('[data-modsort]').forEach(b => b.classList.toggle('on', b === t)); findMore(false); }
     else if (d.modinstall) install(d.modinstall, d.name);
     else if (d.modtoggle) { const on = t.getAttribute('aria-checked') !== 'true'; act('mods_set_enabled', { reference: d.modtoggle, enabled: on }, [d.modtoggle, on ? 'on' : 'off']); }
     else if (d.modremove) { if (confirm(`Uninstall ${d.name}?`)) act('mods_uninstall', { reference: d.modremove }, [d.name, 'removed']); }
     else if ('modcheck' in d) checkUpdates();
-    else if ('modmore' in d) isNexus() ? nSearch(true) : search(true);
+    else if ('modmore' in d) findMore(true);
     else if ('modupall' in d) Object.keys(S.updates).reduce((p, r) => p.then(() => install(r)), Promise.resolve());
   });
 
@@ -269,6 +276,74 @@ const Mods = (() => {
     else if ('nbuiltin' in d) { N.builtIn = !N.builtIn; list(); }
     // The link itself opens the browser; keep the downloads box in view and look for the file shortly.
     else if (d.ndownload) { N.clicked = d.ndownload; setTimeout(nRefresh, 15000); setTimeout(() => list(), 50); }
+  });
+
+  /* ---------- Thunderstore games ---------- */
+  async function tRefresh() {
+    try { T.mods = await invoke('ts_list', { game: GAME }); T.error = ''; } catch (e) { T.error = String(e); }
+    list();
+  }
+  async function tSearch(more) {
+    T.loading = true; list();
+    try {
+      const r = await invoke('ts_search', { game: GAME, query: S.query, sort: S.sort, offset: more ? T.results.length : 0 });
+      T.results = more ? [...T.results, ...r.nodes] : r.nodes; T.count = r.totalCount; T.error = '';
+    } catch (e) { T.error = String(e); }
+    T.loading = false; list();
+  }
+  async function tInstall(id, name) {
+    if (running()) return toast('Close the game first', 'then change mods');
+    T.busy = id; list();
+    try {
+      const done = await invoke('ts_install', { game: GAME, id });
+      toast(done.length ? done.join(', ') : name, done.length ? 'installed' : 'already installed');
+    } catch (e) { toast(`Couldn't install ${name}`, String(e)); }
+    T.busy = ''; tRefresh();
+  }
+  async function tAct(cmd, args, msg) {
+    if (running()) return toast('Close the game first', 'then change mods');
+    try { await invoke(cmd, { game: GAME, ...args }); if (msg) toast(...msg); } catch (e) { toast("Couldn't change the mod", String(e)); }
+    tRefresh();
+  }
+  function thunderList(el) {
+    $('modsWarn').innerHTML = running() ? '<div class="mods-warn">The game is running. Close it to install, change or remove mods.</div>' : '';
+    if (S.tab === 'installed') {
+      const n = T.mods.filter(m => !m.loader).length;
+      el.innerHTML = `<div class="mods-tools"><span class="meta">${n} installed</span></div>
+        ${T.error ? `<p class="empty">${esc(T.error)}</p>` : T.mods.length ? `<div class="mods-rows">${T.mods.map(m => `<div class="mod-row${m.enabled ? '' : ' off'}">
+          <span class="mod-ico">${esc(m.name[0])}</span>
+          <div class="mod-txt"><b>${esc(m.name)}</b><span>${esc(m.id)} · ${esc(m.version)}${m.loader ? ' · the mod loader itself, needed by other mods' : ''}</span></div>
+          ${m.loader ? '' : `<button class="switch" role="switch" aria-checked="${m.enabled}" data-ttoggle="${esc(m.id)}" title="${m.enabled ? 'Turn off (keeps it installed)' : 'Turn on'}"></button>
+          <button class="btn outline" data-tremove="${esc(m.id)}" data-name="${esc(m.name)}">Remove</button>`}</div>`).join('')}</div>`
+          : '<div class="empty-page small"><h1>No mods yet</h1><p>Find mods in Browse. HotSwap installs BepInEx and everything a mod needs automatically.</p></div>'}
+        <p class="meta mods-foot">Mods go in the game’s BepInEx\plugins folder, laid out like r2modman. Turned-off mods move to BepInEx\plugins_off. In co-op, everyone usually needs the same mods. Mods can break saves: keep backups.</p>`;
+      return;
+    }
+    const have = new Map(T.mods.map(m => [m.id, m]));
+    el.innerHTML = `${T.error ? `<p class="empty">${esc(T.error)}</p>` : ''}
+      <div class="mod-grid">${T.results.map(m => {
+        const h = have.get(m.id);
+        return `<div class="mod-card">
+        <div class="mod-top">${m.icon ? `<img src="${esc(m.icon)}" alt="" loading="lazy">` : `<span class="mod-ico big">${esc(m.name[0])}</span>`}
+          <div class="mod-txt"><b>${esc(m.name)}</b><span>by ${esc(m.owner)} · ${fmtN(m.downloads)} downloads</span></div></div>
+        <p>${esc(m.description)}</p>
+        <div class="mod-foot"><span class="meta">${esc(m.version)}</span>
+          <a class="btn outline" href="https://thunderstore.io/c/repo/p/${esc(m.owner)}/${esc(m.id.slice(m.owner.length + 1))}/" ${ext}>Details</a>
+          ${T.busy === m.id ? '<span class="mod-prog">Installing…</span>'
+            : h && h.version === m.version ? `<span class="mod-have">Installed ${esc(h.version)}</span>`
+            : `<button class="btn accent" data-tinstall="${esc(m.id)}" data-name="${esc(m.name)}">${h ? `Update to ${esc(m.version)}` : 'Install'}</button>`}</div>
+      </div>`;
+      }).join('')}</div>
+      ${T.loading ? '<p class="empty">Loading… (the first load fetches the whole Thunderstore list)</p>' : T.results.length < T.count ? '<div class="mods-more"><button class="btn" data-modmore>Load more</button></div>' : T.results.length ? '' : '<p class="empty">No mods found.</p>'}`;
+  }
+
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-tinstall],[data-ttoggle],[data-tremove]');
+    if (!t) return;
+    const d = t.dataset;
+    if (d.tinstall) tInstall(d.tinstall, d.name);
+    else if (d.ttoggle) { const on = t.getAttribute('aria-checked') !== 'true'; tAct('ts_set_enabled', { id: d.ttoggle, enabled: on }, [d.ttoggle, on ? 'on' : 'off']); }
+    else if (d.tremove) { if (confirm(`Remove ${d.name}?`)) tAct('ts_remove', { id: d.tremove }, [d.name, 'removed']); }
   });
 
   return { render, onProgress, list };
