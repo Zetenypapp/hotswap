@@ -163,10 +163,7 @@
   const clock = () => new Date().toTimeString().slice(0, 5);
   const logo = size => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true" style="flex:none"><rect x="1" y="1" width="22" height="22" rx="7" fill="var(--c)"/><path d="M6.5 9.5h10l-3-3M17.5 14.5h-10l3 3" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const DISCORD = '<svg width="20" height="20" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.6 1.3a18.4 18.4 0 0 0-5.6 0L8.6 3a19.7 19.7 0 0 0-4.9 1.5C.6 9.1-.3 13.6.1 18.1a19.9 19.9 0 0 0 6 3l1.3-2.1a12.9 12.9 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12.2 0l.5.4c-.6.4-1.3.7-2 1l1.3 2.1a19.8 19.8 0 0 0 6-3c.5-5.2-.9-9.7-3.6-13.7ZM8 15.4c-1.2 0-2.2-1.1-2.2-2.4S6.8 10.6 8 10.6s2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg>';
-  // Discord keybinds HotSwap presses; the same keys are set in Discord under Settings > Keybinds.
-  const DC_KEYS = [['mute', 'Toggle Mute', 'Ctrl+Shift+F9'], ['deafen', 'Toggle Deafen', 'Ctrl+Shift+F10']];
-  const dcCombo = id => { try { const k = localStorage.getItem('hs.dc.' + id); if (k) return k; } catch {} return DC_KEYS.find(k => k[0] === id)[2]; };
-  let view = 'mods', recording = null;
+  let view = 'mods';
   // Discord voice (beta): connects as Discord's StreamKit overlay; on once the user opts in.
   let voice = null;
   const voiceOn = () => { try { return localStorage.getItem('hs.dc.voice') === '1'; } catch { return false; } };
@@ -351,11 +348,7 @@
       <div class="dc-row"><div class="t"><b>Discord voice (beta)</b><span>Connected as Discord’s StreamKit overlay. Notifications show as toasts.</span></div><button class="btn" data-voice="off">Turn off</button></div>`;
   }
   function discordPanel() {
-    const live = voiceOn() && voice?.status === 'ready';
-    return `<div class="dc-panel">${voicePanel()}${live ? '' : DC_KEYS.map(([id, name]) => `<div class="dc-row"><div class="t"><b>${name}</b><span>Presses your Discord keybind</span></div>
-        <kbd class="${recording === id ? 'rec' : ''}" data-rec="${id}" title="Click, then press new keys">${recording === id ? 'Press keys…' : esc(dcCombo(id))}</kbd>
-        <button class="btn" data-dc="${id}">${name.replace('Toggle ', '')}</button></div>`).join('')}
-      ${live ? '' : `<p class="dc-note">In Discord, open Settings → Keybinds and add <b>Toggle Mute</b> and <b>Toggle Deafen</b> with the same keys shown here. Click a key to change it. HotSwap can’t see whether you’re muted, so the buttons only toggle.</p>`}</div>`;
+    return `<div class="dc-panel">${voicePanel()}</div>`;
   }
   function card(m, i) {
     const locked = !m.live || menu.paused;
@@ -392,7 +385,6 @@
     if (!menu) return;
     const t = e.target;
     if (t.matches('input[type=range]')) return;
-    if (t.matches('input[type=range]')) return;
     const v = t.closest('[data-view],[data-rec],[data-dc],[data-voice],[data-vset],[data-umute],[data-join],[data-leave],[data-noise]');
     if (v) {
       if (v.dataset.voice) { const on = v.dataset.voice === 'on'; voiceOpt(on); voice = null; invoke(on ? 'voice_start' : 'voice_stop').catch(() => {}); }
@@ -401,9 +393,7 @@
       else if (v.dataset.join) dcSend('SELECT_VOICE_CHANNEL', { channel_id: v.dataset.join, force: true });
       else if (v.dataset.leave) dcSend('SELECT_VOICE_CHANNEL', { channel_id: null });
       else if (v.dataset.noise) { if (voice) { voice.noise = !voice.noise; dcSend('SET_VOICE_SETTINGS', { noise_suppression: voice.noise }); } }
-      else if (v.dataset.view) { view = v.dataset.view; recording = null; }
-      else if (v.dataset.rec) recording = recording === v.dataset.rec ? null : v.dataset.rec;
-      else invoke('press_keys', { combo: dcCombo(v.dataset.dc) }).catch(() => {});
+      else if (v.dataset.view) view = v.dataset.view;
       return renderMenu();
     }
     const b = t.closest('[data-cmd],[data-tab],[data-profile],.card');
@@ -446,17 +436,6 @@
   });
   document.addEventListener('keydown', e => {
     if (!menu) return;
-    if (recording) {
-      e.preventDefault();
-      if (e.key === 'Escape') { recording = null; return renderMenu(); }
-      if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
-      const key = /^F\d+$/.test(e.key) ? e.key : e.key.length === 1 && /[a-z0-9]/i.test(e.key) ? e.key.toUpperCase() : null;
-      if (!key) return;
-      const combo = [e.ctrlKey && 'Ctrl', e.shiftKey && 'Shift', e.altKey && 'Alt', key].filter(Boolean).join('+');
-      try { localStorage.setItem('hs.dc.' + recording, combo); } catch {}
-      recording = null;
-      return renderMenu();
-    }
     if (view === 'discord') { if (e.key === 'Escape') send({ type: 'close' }); return; }
     const n = visibleMods().length;
     const k = e.key;
@@ -481,10 +460,10 @@
     if (p.kind === 'menu') {
       const was = !!menu;
       menu = p.open ? p.data : null;
-      if (menu && !was) { tab = 'all'; sel = 0; dragging = false; view = 'mods'; recording = null; }
+      if (menu && !was) { tab = 'all'; sel = 0; dragging = false; view = 'mods'; }
       return renderMenu();
     }
     if (p.kind === 'theme') return;
     toast(p);
-  });
+  }).then(() => invoke('overlay_ready')).catch(() => {});
 </script></body></html>

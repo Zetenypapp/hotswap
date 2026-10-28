@@ -90,7 +90,6 @@ The overlay is its own see-through window on top of the game, so nothing is inje
 ## 💬 Discord
 
 - 🟢 **Status on your profile:** "Playing HotSwap" with the game and how many mods are on (turn it off in Settings)
-- 🎙️ **Mute and deafen keybinds:** buttons in the overlay that press your Discord keybinds
 - 🔊 **Discord voice (beta, opt-in):** who's in your call, who's talking (also on the HUD), real mute, deafen and leave, per-person volume, mic and headphone volume, noise suppression, switching voice channels, and Discord notifications as overlay toasts
 
 Discord only gives voice access to apps it has approved, so Discord voice connects as **Discord's own StreamKit overlay**, the same way open-source overlays like [Discover](https://github.com/trigg/Discover) do. Discord asks you once to authorize "StreamKit", and the token stays on your PC. It's unofficial and may stop working if Discord changes it; everything else keeps working.

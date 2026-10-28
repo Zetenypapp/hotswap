@@ -502,7 +502,7 @@ fn corner_pos(app: &AppHandle, corner: &str, w: f64, h: f64, margin: f64) -> Res
 }
 
 /// The overlay: one transparent, always-on-top window over the main monitor that ignores the mouse
-/// (except while its menu is open). Created hidden at startup.
+/// (except while its menu is open). Created on first use.
 async fn overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
     if let Some(win) = app.get_webview_window("overlay") {
         return Ok(win);
@@ -527,9 +527,21 @@ async fn overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String>
         .build()
         .map_err(|e| e.to_string())?;
     let _ = win.set_ignore_cursor_events(true);
-    // Give the page a moment to start listening before the first note.
-    tokio_sleep(500).await;
+    // Wait until the page listens (it calls overlay_ready), so the first note or menu isn't lost.
+    for _ in 0..100 {
+        if OVERLAY_READY.load(Ordering::Relaxed) {
+            break;
+        }
+        tokio_sleep(50).await;
+    }
     Ok(win)
+}
+
+static OVERLAY_READY: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+fn overlay_ready() {
+    OVERLAY_READY.store(true, Ordering::Relaxed);
 }
 
 /// Shows the overlay without taking focus from the game.
@@ -614,34 +626,6 @@ async fn overlay_menu(app: AppHandle, open: bool) -> Result<(), String> {
 #[tauri::command]
 fn overlay_input(app: AppHandle, input: serde_json::Value) -> Result<(), String> {
     app.emit_to("main", "overlay-input", input).map_err(|e| e.to_string())
-}
-
-/// Presses a key combination like "Ctrl+Shift+F9" (for Discord's own mute and deafen keybinds,
-/// which Discord listens for everywhere).
-#[tauri::command]
-fn press_keys(combo: String) -> Result<(), String> {
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP};
-    let vk = |k: &str| -> Option<u16> {
-        let k = k.trim().to_ascii_uppercase();
-        Some(match k.as_str() {
-            "CTRL" | "CONTROL" => 0x11,
-            "SHIFT" => 0x10,
-            "ALT" => 0x12,
-            "WIN" | "META" => 0x5B,
-            _ if k.len() == 1 && k.as_bytes()[0].is_ascii_alphanumeric() => k.as_bytes()[0] as u16,
-            _ if k.starts_with('F') => match k[1..].parse::<u16>() {
-                Ok(n @ 1..=24) => 0x6F + n,
-                _ => return None,
-            },
-            _ => return None,
-        })
-    };
-    let keys = combo.split('+').map(|k| vk(k).ok_or(format!("Unknown key: {k}"))).collect::<Result<Vec<u16>, String>>()?;
-    let ev = |k: u16, flags| INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: k, wScan: 0, dwFlags: flags, time: 0, dwExtraInfo: 0 } } };
-    let mut inputs: Vec<INPUT> = keys.iter().map(|&k| ev(k, 0)).collect();
-    inputs.extend(keys.iter().rev().map(|&k| ev(k, KEYEVENTF_KEYUP)));
-    let sent = unsafe { SendInput(inputs.len() as u32, inputs.as_ptr(), std::mem::size_of::<INPUT>() as i32) };
-    if sent as usize == inputs.len() { Ok(()) } else { Err("Windows blocked the key press".into()) }
 }
 
 /// Discord voice (beta, see voice.rs): connect, disconnect, the current call, and mute or deafen.
@@ -1379,18 +1363,12 @@ fn main() {
             app.state::<trainer::Trainer>().start(app.handle().clone(), move |id| watch.pid_of(id));
             build_tray(app)?;
             fit_window(app, !start_hidden);
-            // The overlay page is loaded (hidden) up front, so the first menu or note isn't sent
-            // before it listens.
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let _ = overlay_window(&handle).await;
-            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             load_data, save_data, scan_library, running_game, launch_game, set_hotkeys,
             fetch_home, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart,
-            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, overlay_menu, overlay_input, press_keys, voice_start, voice_stop, voice_state, voice_send, system_stats, discord_presence, radar_show, set_mini, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
+            map_show, map_hide, map_world, map_background, check_update, install_update, app_version, overlay_notify, overlay_close, overlay_menu, overlay_input, overlay_ready, voice_start, voice_stop, voice_state, voice_send, system_stats, discord_presence, radar_show, set_mini, fmods_list, fmods_set_enabled, fmods_remove, fmods_install, fmods_downloads, fmods_pick, nexus_search, mods_state, mods_search, mods_install, mods_uninstall, mods_set_enabled, mods_updates, map_player, map_teleport, map_pins_load, map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running HotSwap");

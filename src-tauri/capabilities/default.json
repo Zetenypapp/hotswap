@@ -59,7 +59,7 @@
     "allow-set-mini",
     "allow-overlay-menu",
     "allow-overlay-input",
-    "allow-press-keys",
+    "allow-overlay-ready",
     "allow-voice-start",
     "allow-voice-stop",
     "allow-voice-state",
