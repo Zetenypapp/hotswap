@@ -667,7 +667,7 @@ async fn overlay_notify(app: AppHandle, note: serde_json::Value) -> Result<(), S
 async fn overlay_menu(app: AppHandle, open: bool) -> Result<(), String> {
     let win = overlay_window(&app).await?;
     #[cfg(windows)]
-    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForegroundWindow};
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
     if open {
         #[cfg(windows)]
         {
@@ -683,18 +683,47 @@ async fn overlay_menu(app: AppHandle, open: bool) -> Result<(), String> {
     } else {
         OVERLAY_MENU.store(false, Ordering::Relaxed);
         let _ = win.set_ignore_cursor_events(true);
+        let keep = OVERLAY_KEEP.load(Ordering::Relaxed);
+        // Hide first, so the overlay can't keep the focus the game needs back.
+        if !keep {
+            let _ = win.hide();
+        }
         #[cfg(windows)]
         {
             let prev = OVERLAY_PREV.swap(0, Ordering::Relaxed);
             if prev != 0 {
-                unsafe { SetForegroundWindow(prev as _) };
+                give_focus(prev);
             }
-        }
-        if !OVERLAY_KEEP.load(Ordering::Relaxed) {
-            let _ = win.hide();
         }
     }
     Ok(())
+}
+
+/// Gives keyboard and mouse focus back to a window (the game). Windows can refuse a plain
+/// SetForegroundWindow, so this joins the game's input thread for the switch, as tools that
+/// return focus to games do.
+#[cfg(windows)]
+fn give_focus(hwnd: isize) {
+    use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow, ShowWindow, SW_SHOW};
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::SetFocus;
+    unsafe {
+        let target = hwnd as _;
+        let fg_thread = GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
+        let game_thread = GetWindowThreadProcessId(target, std::ptr::null_mut());
+        let me = GetCurrentThreadId();
+        let joined: Vec<u32> = [fg_thread, game_thread].into_iter().filter(|&t| t != 0 && t != me).collect();
+        for &t in &joined {
+            AttachThreadInput(me, t, 1);
+        }
+        ShowWindow(target, SW_SHOW);
+        BringWindowToTop(target);
+        SetForegroundWindow(target);
+        SetFocus(target);
+        for &t in &joined {
+            AttachThreadInput(me, t, 0);
+        }
+    }
 }
 
 /// Clicks and keys from the overlay menu, passed on to the main window, which owns the mods.
