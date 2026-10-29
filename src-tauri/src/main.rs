@@ -897,6 +897,15 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 }
 
 fn main() {
+    // Low memory mode (a setting): the interface is drawn without graphics acceleration, which
+    // drops WebView2's GPU process from about 250 MB to about 20 MB. Read before any webview starts.
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let state = fs::read_to_string(std::path::Path::new(&appdata).join("app.hotswap.desktop").join("state.json")).unwrap_or_default();
+        if serde_json::from_str::<serde_json::Value>(state.trim_start_matches('\u{feff}')).ok().and_then(|v| v["lowMemory"].as_bool()) == Some(true) {
+            let args = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
+            std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", format!("{args} --disable-gpu --disable-gpu-compositing").trim());
+        }
+    }
     // Dev aid: `tinker --scan` prints what the library scanner finds and exits.
     if std::env::args().any(|a| a == "--scan") {
         println!("{}", serde_json::to_string_pretty(&steam::scan()).unwrap_or_default());
