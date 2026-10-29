@@ -334,8 +334,9 @@ async fn map_background(app: AppHandle, watch: State<'_, watch::Watch>, game: St
 
 #[tauri::command]
 fn map_hide(app: AppHandle) {
+    // Closed, not hidden: the web map is a whole website and keeps its memory while hidden.
     if let Some(v) = app.get_webview("map") {
-        let _ = v.hide();
+        let _ = v.close();
     }
 }
 
@@ -614,6 +615,22 @@ async fn overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String>
 
 static OVERLAY_READY: AtomicBool = AtomicBool::new(false);
 
+/// Closes the overlay window after two minutes without notes, menu or HUD, freeing its memory;
+/// the next note or menu opens it again.
+fn overlay_idle_close(app: &AppHandle) {
+    let id = OVERLAY_GEN.fetch_add(1, Ordering::Relaxed) + 1;
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio_sleep(120_000).await;
+        if OVERLAY_GEN.load(Ordering::Relaxed) == id && !OVERLAY_KEEP.load(Ordering::Relaxed) && !OVERLAY_MENU.load(Ordering::Relaxed) {
+            if let Some(win) = app.get_webview_window("overlay") {
+                OVERLAY_READY.store(false, Ordering::Relaxed);
+                let _ = win.destroy();
+            }
+        }
+    });
+}
+
 #[tauri::command]
 fn overlay_ready() {
     OVERLAY_READY.store(true, Ordering::Relaxed);
@@ -656,6 +673,7 @@ async fn overlay_notify(app: AppHandle, note: serde_json::Value) -> Result<(), S
             if let Some(win) = app.get_webview_window("overlay") {
                 let _ = win.hide();
             }
+            overlay_idle_close(&app);
         }
     });
     Ok(())
@@ -687,6 +705,7 @@ async fn overlay_menu(app: AppHandle, open: bool) -> Result<(), String> {
         // Hide first, so the overlay can't keep the focus the game needs back.
         if !keep {
             let _ = win.hide();
+            overlay_idle_close(&app);
         }
         #[cfg(windows)]
         {
@@ -861,8 +880,24 @@ fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
     if enabled { al.enable() } else { al.disable() }.map_err(|e| e.to_string())
 }
 
+/// Tells WebView2 how much memory a window may keep: low while it's hidden in the tray, so
+/// WebView2 frees what it can, and normal again once it's shown.
+fn webview_memory(win: &tauri::WebviewWindow, low: bool) {
+    #[cfg(windows)]
+    let _ = win.with_webview(move |wv| unsafe {
+        use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL};
+        use windows_core::Interface;
+        if let Ok(core) = wv.controller().CoreWebView2() {
+            if let Ok(c) = core.cast::<ICoreWebView2_19>() {
+                let _ = c.SetMemoryUsageTargetLevel(if low { COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW } else { COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL });
+            }
+        }
+    });
+}
+
 fn show_main(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
+        webview_memory(&win, false);
         let _ = win.show();
         let _ = win.unminimize();
         let _ = win.set_focus();
@@ -1466,6 +1501,9 @@ fn main() {
                 if window.label() == "main" && window.app_handle().state::<CloseToTray>().0.load(Ordering::Relaxed) {
                     api.prevent_close();
                     let _ = window.hide();
+                    if let Some(w) = window.app_handle().get_webview_window("main") {
+                        webview_memory(&w, true);
+                    }
                 }
             }
         })
