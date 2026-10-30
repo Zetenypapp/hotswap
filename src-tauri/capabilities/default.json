@@ -60,6 +60,7 @@
     "allow-overlay-menu",
     "allow-overlay-input",
     "allow-overlay-ready",
+    "allow-mods-release",
     "allow-ts-search",
     "allow-ts-list",
     "allow-ts-install",

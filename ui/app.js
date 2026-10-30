@@ -459,6 +459,7 @@ let mapOpen = null, mapShown = false; // app ID of the map being shown on the Ma
 let mapMode = 'local'; // 'local' = HotSwap's own map, 'web' = Satisfactory Calculator
 
 function renderMaps() {
+  if (typeof LocalMap === 'undefined') return lazyPage('mapsBody', 'map.js');
   setAmbient(null);
   const list = MAP_GAMES.map(id => LIB.find(g => String(g.appId) === id) || buildGame({ appId: +id, name: MAP_NAMES[id] }));
   const open = list.find(g => String(g.appId) === mapOpen);
@@ -488,7 +489,7 @@ function renderMaps() {
 // The map is a separate web view laid over #mapHost, so keep it matched to that box and hide it
 // whenever the page (or the palette, which it would cover) says so.
 function syncMap() {
-  if (state.view !== 'maps' && $('mapsBody').dataset.key) { LocalMap.unmount(); $('mapsBody').dataset.key = ''; }
+  if (state.view !== 'maps' && $('mapsBody').dataset.key && typeof LocalMap !== 'undefined') { LocalMap.unmount(); $('mapsBody').dataset.key = ''; }
   if (!invoke) return;
   const host = $('mapHost');
   if (state.view !== 'maps' || !mapOpen || mapMode !== 'web' || !host || pal) {
@@ -548,7 +549,7 @@ function renderSettings() {
       <div class="set-row"><div class="txt"><b>Show in Discord</b><span>Your Discord status shows the game you're playing with HotSwap and how many mods are on. Needs the Discord app running on this PC.${DISCORD_ERR ? ` <i>${esc(DISCORD_ERR)}.</i>` : ''}</span></div>${sw('setDiscord', state.discord)}</div>
     </div>` : ''}
     ${invoke ? `<div class="set-group"><h2>Startup and tray</h2>
-      ${invoke ? `<div class="set-row"><div class="txt"><b>Low memory mode</b><span>Runs HotSwap as lean as it can: no graphics acceleration, fewer background processes, no Maps or Mods pages, and the overlay closes soon after use. About 300 MB less memory. Animations cost a little more CPU. Takes effect after restarting HotSwap.</span></div>${sw('setLowMem', state.lowMemory)}</div>` : ''}
+      ${invoke ? `<div class="set-row"><div class="txt"><b>Low memory mode</b><span>Runs HotSwap as lean as it can: no graphics acceleration, fewer background processes, and the overlay closes soon after use. About 300 MB less memory. Animations cost a little more CPU. Takes effect after restarting HotSwap.</span></div>${sw('setLowMem', state.lowMemory)}</div>` : ''}
       <div class="set-row"><div class="txt"><b>Start with Windows</b><span>HotSwap opens quietly in the tray when you sign in, so hotkeys are ready when you start a game.</span></div>${sw('setAutostart', AUTOSTART)}</div>
       <div class="set-row"><div class="txt"><b>Close to tray</b><span>The close button hides HotSwap in the tray instead of quitting. Quit from the tray icon's menu.</span></div>${sw('setTray', state.closeToTray)}</div>
     </div>` : ''}
@@ -735,16 +736,33 @@ function applyAccent() {
   document.documentElement.style.setProperty('--accent-ink', a.ink);
 }
 
+// The Maps and Mods pages' code (map.js, mods.js) loads the first time the page opens, not at
+// startup, so it takes no memory until it's used.
+const lazyScripts = {};
+function needScript(src) {
+  return lazyScripts[src] ||= new Promise((ok, fail) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = ok; s.onerror = () => { delete lazyScripts[src]; fail(new Error(`Couldn't load ${src}`)); };
+    document.head.append(s);
+  });
+}
+function lazyPage(body, src) {
+  $(body).innerHTML = '<p class="empty">Loading…</p>';
+  $(body).dataset.view = $(body).dataset.key = '';
+  needScript(src).then(render).catch(e => toast(String(e), ''));
+}
+var lastView = null;
+
 function render() {
   applyAccent();
-  // Low memory mode: no Maps or Mods pages at all (they're the heaviest).
-  if (state.lowMemory && (state.view === 'maps' || state.view === 'mods')) state.view = 'library';
-  document.querySelectorAll('.mainnav [data-view="maps"], .mainnav [data-view="mods"]').forEach(b => b.hidden = !!state.lowMemory);
+  // Leaving the Mods page frees its mod lists, here and in the app (Thunderstore's is big).
+  if (lastView === 'mods' && state.view !== 'mods' && typeof Mods !== 'undefined') { Mods.release(); invoke?.('mods_release').catch(() => {}); }
+  lastView = state.view;
   const views = { home: 'homeView', library: 'libView', maps: 'mapsView', mods: 'modsView', overlay: 'ovView', settings: 'setView', game: 'gameView' };
   if (state.view === 'game' && !game()) state.view = 'home';
   Object.entries(views).forEach(([v, id]) => $(id).hidden = v !== state.view);
   renderSide();
-  ({ home: renderHome, library: renderLibrary, maps: renderMaps, mods: () => Mods.render(), overlay: renderOverlayPage, settings: renderSettings, game: renderGame })[state.view]();
+  ({ home: renderHome, library: renderLibrary, maps: renderMaps, mods: () => typeof Mods === 'undefined' ? lazyPage('modsBody', 'mods.js') : Mods.render(), overlay: renderOverlayPage, settings: renderSettings, game: renderGame })[state.view]();
   if (state.mini) renderMini();
   syncHotkeys();
   syncTrainer();
@@ -1601,7 +1619,7 @@ const icon = (k, s = 16) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"
     if (VERSION) { state.lastVersion = VERSION; save(); }
     listen?.('game-running', e => onRunning(e.payload ?? null));
     listen?.('hotkey', e => onCombo(e.payload));
-    listen?.('mod-progress', e => Mods.onProgress(e.payload));
+    listen?.('mod-progress', e => { if (typeof Mods !== 'undefined') Mods.onProgress(e.payload); });
     listen?.('trainer-status', e => { TRAINER = e.payload; if (state.view === 'game') { renderMods(); renderPanel(); } if (state.mini) renderMini(); pushMenu(); });
     listen?.('hotkey-up', e => { if (e.payload === state.sheetKey) showSheet(false); });
     listen?.('overlay-input', e => onOverlayInput(e.payload || {}));

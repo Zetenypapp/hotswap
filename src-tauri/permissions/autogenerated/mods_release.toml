@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mods-release"
+description = "Enables the mods_release command without any pre-configured scope."
+commands.allow = ["mods_release"]
+
+[[permission]]
+identifier = "deny-mods-release"
+description = "Denies the mods_release command without any pre-configured scope."
+commands.deny = ["mods_release"]

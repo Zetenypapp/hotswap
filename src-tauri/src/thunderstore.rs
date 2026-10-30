@@ -100,6 +100,11 @@ fn packages(community: &str) -> Result<Vec<Package>, String> {
     Ok(list)
 }
 
+/// Forgets the cached package lists (when the Mods page is closed).
+pub fn release() {
+    *CACHE.lock().unwrap() = None;
+}
+
 /// One page of mods matching `query`, sorted by popular, updated, new or rating.
 pub fn search(community: &str, query: &str, sort: &str, offset: usize) -> Result<Value, String> {
     let q = query.to_lowercase();

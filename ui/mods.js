@@ -366,5 +366,12 @@ const Mods = (() => {
     else if (d.tremove) { if (confirm(`Remove ${d.name}?`)) tAct('ts_remove', { id: d.tremove }, [d.name, 'removed']); }
   });
 
-  return { render, onProgress, list };
+  // Frees the mod lists when the page is left (the page loads them again when opened).
+  function release() {
+    S.results = []; S.count = 0; T.results = []; T.count = 0; N.results = []; N.count = 0;
+    const body = $('modsBody');
+    if (body) { body.innerHTML = ''; body.dataset.view = ''; }
+  }
+
+  return { render, onProgress, list, release };
 })();
