@@ -58,7 +58,7 @@ function renderOverlayPage() {
       <div class="set-row"><div class="txt"><b>Notification privacy</b><span>For streaming or screen sharing. <b>Kind only</b> shows “Private message”, “Group message” or “Server message”; <b>Hidden</b> only says a message came.</span></div>
         <div class="chips">${[['0', 'Off'], ['1', 'Kind only'], ['2', 'Hidden']].map(([k, l]) => `<button class="chip${String(state.dcPrivacy || 0) === k ? ' on' : ''}" data-dcprivacy="${k}">${l}</button>`).join('')}</div></div>
       <div class="set-row"><div class="txt"><b>Join and leave popups</b><span>A popup when someone joins or leaves your call.</span></div>${sw('setDcJoins', state.dcJoins)}</div>
-    </div>`;
+    </div>${statsSettings()}`;
   if ($('ovBody').innerHTML !== html) $('ovBody').innerHTML = html;
 }
 

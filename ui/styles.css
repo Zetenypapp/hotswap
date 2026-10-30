@@ -597,3 +597,18 @@ body.mini .minibox { display: flex; flex-direction: column; height: 100%; backgr
 .hp-web { width: 100%; height: 100%; border: 0; border-radius: 12px; background: #fff; }
 .tb-custom.on { color: var(--accent); }
 @media (max-width: 900px) { .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hp { grid-column: span 2 !important; } }
+
+/* ---------- System stats settings (stats.js) ---------- */
+.st-list { display: flex; flex-direction: column; gap: 2px; padding: 0 6px 6px; }
+.st-group { margin: 12px 8px 4px; color: var(--dim); font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.st-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 8px; border-radius: 10px; }
+.st-row:hover { background: rgba(255, 255, 255, .03); }
+.st-move { display: flex; gap: 2px; }
+.st-move .ghost { width: 24px; height: 24px; padding: 0; font-size: 13px; }
+.st-name { flex: 1; min-width: 130px; font-size: 13px; }
+.st-places { display: flex; gap: 4px; }
+.chip.sm { height: 26px; padding: 0 10px; font-size: 12px; }
+.st-row select { height: 28px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 8px; background: rgba(255, 255, 255, .05); color: var(--fg); font: inherit; font-size: 12px; padding: 0 6px; }
+.st-row select option { background: #16181d; }
+.st-color { display: flex; align-items: center; gap: 6px; }
+.st-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(255, 255, 255, .2); }

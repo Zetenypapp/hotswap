@@ -5,7 +5,7 @@ let menuOpen = false, hudOn = false, DISCORD_ERR = '';
 function overlaySend(note) {
   if (!invoke) return;
   const a = ACCENTS.find(x => x.c === state.accent) || ACCENTS[0];
-  invoke('overlay_notify', { note: { ...note, accent: a.c, ink: a.ink, corner: state.overlayCorner, hudCorner: state.hudCorner, keep: menuOpen || hudOn || talkOn } }).catch(console.error);
+  invoke('overlay_notify', { note: { ...note, accent: a.c, ink: a.ink, corner: state.overlayCorner, hudCorner: state.hudCorner, keep: menuOpen || hudOn || talkOn || statsKeep() } }).catch(console.error);
 }
 
 // The menu: the running game's mods over the game, driven by mouse or keys (see overlay.html).
@@ -52,6 +52,7 @@ function toggleMenu(open = !menuOpen, test = false) {
   menuOpen = open;
   lastMenu = '';
   invoke('overlay_menu', { open }).catch(console.error);
+  if (open) pushStatsCfg(true);
   if (open) {
     if (test) overlaySend({ kind: 'menu', open: true, data: g && modsOf(g).length ? menuData(g) : dcMenuData() }); else pushMenu();
   } else overlaySend({ kind: 'menu', open: false });

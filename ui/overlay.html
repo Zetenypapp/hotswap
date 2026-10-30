@@ -76,15 +76,30 @@
   .view.dc { background: #5865f2; }
   .view.sys { background: rgba(255, 255, 255, .1); color: var(--fg); }
   /* System tab: live line graphs. */
-  .sys-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; padding: 4px 18px 18px; }
-  .sys-card { padding: 12px 14px 10px; border-radius: 14px; background: rgba(255, 255, 255, .05); }
+  .sys-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 4px 18px 18px; }
+  .sys-card { padding: 11px 13px 9px; border-radius: 14px; background: rgba(255, 255, 255, .05); min-width: 0; }
+  .sys-card.s-s { grid-column: span 1; } .sys-card.s-m { grid-column: span 2; } .sys-card.s-l { grid-column: span 4; }
   .sys-card .top { display: flex; align-items: baseline; gap: 8px; }
-  .sys-card .top b { font-size: 13px; color: var(--soft); flex: 1; }
-  .sys-card .top span { font-size: 18px; font-weight: 800; }
-  .sys-card .top small { font-size: 11px; color: var(--muted); font-weight: 700; }
-  .sys-card svg { display: block; width: 100%; height: 56px; margin-top: 6px; }
-  .sys-card .na { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .sys-card .top b { font-size: 12px; color: var(--soft); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sys-card .top span { font-size: 18px; font-weight: 800; white-space: nowrap; }
+  .sys-card .sub { display: block; font-size: 11px; color: var(--muted); font-weight: 700; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sys-card svg { display: block; width: 100%; height: 48px; margin-top: 6px; }
+  .sys-card.s-l svg { height: 80px; } .sys-card.s-s svg { height: 34px; }
+  .sys-card .na { color: var(--muted); font-size: 11px; margin-top: 6px; line-height: 1.35; }
   .sys-note { padding: 0 18px 16px; font-size: 12px; color: var(--muted); }
+  /* The stats widget: chosen stats in a corner while you play. */
+  /* Layers: corner pieces, then the menu's shade, then the menu (opacity makes its own layer). */
+  .corner { z-index: 10; }
+  #shade { z-index: 20; }
+  #menu { z-index: 21; }
+  #stats { opacity: var(--wo, .9); }
+  #stats { display: grid; gap: 6px; padding: 8px; border-radius: 16px; width: 240px; }
+  #stats.w-s { width: 170px; } #stats.w-l { width: 330px; }
+  #stats .sys-card { padding: 7px 10px 6px; border-radius: 11px; }
+  #stats .sys-card .top span { font-size: 15px; }
+  #stats.w-s .sys-card svg { display: none; } #stats.w-s .sys-card .sub, #stats.w-s .na { display: none; }
+  #stats.w-m .sys-card svg { height: 26px; } #stats.w-l .sys-card svg { height: 40px; }
+  #stats .na { display: none; }
   .dc-panel { display: flex; flex-direction: column; gap: 10px; padding: 4px 18px 18px; }
   .dc-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(255, 255, 255, .05); }
   .dc-row .t { flex: 1; display: flex; flex-direction: column; line-height: 1.25; }
@@ -170,9 +185,11 @@
 <body>
 <div id="toasts" class="corner top"></div>
 <div id="sheetBox" class="corner top"><div id="sheet" class="glass" hidden></div></div>
+<div id="statsBox" class="corner top-right"><div id="stats" class="glass" hidden></div></div>
 <div id="hudBox" class="corner top-left"><div id="hud" class="glass" hidden></div><div id="talk" class="glass" hidden></div></div>
 <div id="shade" hidden></div>
 <div id="menu" class="glass" hidden></div>
+<script src="stats-shared.js"></script>
 <script>
   const { invoke } = window.__TAURI__.core;
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -303,6 +320,8 @@
       hud.start ? `<span class="dim">${fmtTime(Date.now() - hud.start)}</span>` : '',
       hud.cpu != null ? `<span class="dim">CPU ${Math.round(hud.cpu)}%</span>` : '',
       hud.ram != null ? `<span class="dim">RAM ${Math.round(hud.ram)}%</span>` : '',
+      // Stats chosen for the HUD on the Overlay page.
+      ...(statsLast ? statsCfg.order.filter(id => statsCfg.hud.includes(id)).map(id => { const m = STAT_BY_ID[id], v = statValue(m, statsLast); return v == null ? '' : `<span class="dim">${esc(m.name)} ${statText(m, v, statsCfg.units)}</span>`; }) : []),
       `<span class="dim">${clock()}</span>`,
     ].filter(Boolean).join('');
     $('hud').innerHTML = `<div class="hd">${logo(24)}<span class="dot${hud.connected ? ' ok' : ''}"></span><div class="stats">${parts}</div></div>`
@@ -371,46 +390,46 @@
         ${v.outputs?.length ? `<span>Output</span><select data-vdev="output">${v.outputs.map(d => `<option value="${esc(d.id)}"${d.id === v.output_device ? ' selected' : ''}>${esc(d.name)}</option>`).join('')}</select>` : ''}</div>
       <div class="dc-row"><div class="t"><b>Discord voice (beta)</b><span>Connected as Discord’s StreamKit overlay. Notifications show as toasts.</span></div><button class="btn" data-voice="off">Turn off</button></div>`;
   }
-  /* ---------- System tab: CPU, memory, GPU, video memory and network, last 60 seconds ---------- */
+  /* ---------- System stats: the System tab and the stats widget (see stats-shared.js) ---------- */
   const CHART = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>';
-  const SYS = { cpu: [], ram: [], gpu: [], vram: [], down: [], up: [] };
-  let sysLast = null;
-  const gb = b => (b / 1073741824).toFixed(1);
-  const rate = b => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB/s` : `${Math.round(b / 1024)} KB/s`;
-  // Read once a second, only while the System tab is open.
+  let statsCfg = statConfig(null), statsGame = null, statsLast = null, statsFedAt = 0;
+  // The main window sends the settings, and readings while the widget or HUD shows stats. While
+  // the System tab is open and nothing is being sent, the tab reads them itself.
   setInterval(async () => {
-    if (!menu || view !== 'system') return;
-    const s = await invoke('system_stats_full').catch(() => null);
-    if (!s) return;
-    sysLast = s;
-    const push = (k, v) => { SYS[k].push(v); if (SYS[k].length > 60) SYS[k].shift(); };
-    push('cpu', s.cpu); push('ram', s.ram_total ? s.ram_used / s.ram_total * 100 : 0);
-    push('gpu', s.gpu ?? null); push('vram', s.vram_used ?? null);
-    push('down', s.net_down); push('up', s.net_up);
-    if (!dragging) renderMenu();
-  }, 1000);
-  // A line graph of the last 60 readings; `max` fixes the top (percent) or follows the data.
-  function graph(vals, max) {
-    const pts = vals.filter(v => v != null);
-    if (pts.length < 2) return '<svg viewBox="0 0 120 40"></svg>';
-    const top = max || Math.max(...pts, 1) * 1.15;
-    const x = i => (120 * (i + 60 - vals.length) / 59).toFixed(1), y = v => (38 - 36 * Math.min(v, top) / top).toFixed(1);
-    const line = vals.map((v, i) => v == null ? null : `${x(i)},${y(v)}`).filter(Boolean).join(' ');
-    const first = vals.findIndex(v => v != null);
-    return `<svg viewBox="0 0 120 40" preserveAspectRatio="none"><polygon points="${x(first)},40 ${line} 120,40" fill="var(--c)" opacity=".16"/><polyline points="${line}" fill="none" stroke="var(--c)" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>`;
+    if (!menu || view !== 'system' || Date.now() - statsFedAt < statsCfg.rate * 2) return;
+    const s = await invoke('system_stats_full', { game: statsGame }).catch(() => null);
+    if (s) onStats(s, false);
+  }, 500);
+  let statsTick = 0;
+  function onStats(s, fed) {
+    // Our own reads tick every 500 ms; keep only those due at the chosen rate.
+    if (!fed && Date.now() - statsTick < statsCfg.rate - 50) return;
+    statsTick = Date.now();
+    if (fed) statsFedAt = Date.now();
+    statsLast = s;
+    statRecord(s);
+    if (menu && view === 'system' && !dragging) renderMenu();
+    renderStatsWidget();
+    if (hud) renderHud();
   }
   function systemPanel() {
-    const s = sysLast;
+    const s = statsLast;
     if (!s) return '<div class="sys-note">Reading your system…</div>';
-    const card = (name, big, small, body) => `<div class="sys-card"><div class="top"><b>${name}</b><span>${big}</span>${small ? `<small>${small}</small>` : ''}</div>${body}</div>`;
-    return `<div class="sys-grid">
-      ${card('CPU', `${Math.round(s.cpu)}%`, '', graph(SYS.cpu, 100))}
-      ${card('Memory', `${Math.round(SYS.ram.at(-1) || 0)}%`, `${gb(s.ram_used)} / ${gb(s.ram_total)} GB`, graph(SYS.ram, 100))}
-      ${card('GPU', s.gpu == null ? '–' : `${Math.round(s.gpu)}%`, '', s.gpu == null ? '<div class="na">Windows doesn’t report GPU use on this PC.</div>' : graph(SYS.gpu, 100))}
-      ${card('Video memory', s.vram_used == null ? '–' : `${gb(s.vram_used)} GB`, 'in use', s.vram_used == null ? '<div class="na">Not reported on this PC.</div>' : graph(SYS.vram))}
-      ${card('Download', rate(s.net_down), '', graph(SYS.down))}
-      ${card('Upload', rate(s.net_up), '', graph(SYS.up))}
-    </div><div class="sys-note">Live, last 60 seconds. Read only while this tab is open.</div>`;
+    const shown = statsCfg.order.filter(id => statsCfg.tab.includes(id)).map(id => STAT_BY_ID[id]);
+    if (!shown.length) return '<div class="sys-note">No stats chosen for this tab. Pick them on HotSwap’s Overlay page.</div>';
+    const secs = statsCfg.window >= 60 ? `${statsCfg.window / 60} minute${statsCfg.window > 60 ? 's' : ''}` : `${statsCfg.window} seconds`;
+    return `<div class="sys-grid">${shown.map(m => statCard(m, s, statsCfg, statsCfg.sizes[m.id] || 'm')).join('')}</div>
+      <div class="sys-note">Live, last ${secs}. Choose the stats, sizes, colours and graph styles on HotSwap’s Overlay page.</div>`;
+  }
+  let statsWidgetOn = false;
+  function renderStatsWidget() {
+    const box = $('statsBox'), el = $('stats');
+    el.hidden = !statsWidgetOn || !statsLast;
+    if (el.hidden) return;
+    box.className = 'corner ' + statsCfg.widgetCorner;
+    el.style.setProperty('--wo', statsCfg.widgetOpacity / 100);
+    el.className = 'glass w-' + statsCfg.widgetSize;
+    el.innerHTML = statsCfg.order.filter(id => statsCfg.widget.includes(id)).map(id => statCard(STAT_BY_ID[id], statsLast, statsCfg, 'm')).join('');
   }
 
   function discordPanel() {
@@ -531,6 +550,12 @@
     theme(p);
     if (p.kind === 'sheet') return sheet(p);
     if (p.kind === 'hud') { hud = p.data; return renderHud(); }
+    if (p.kind === 'statscfg') {
+      statsCfg = statConfig(p.cfg); statsGame = p.game || null; statsWidgetOn = !!p.widget;
+      if (!statsWidgetOn) $('stats').hidden = true;
+      return renderStatsWidget();
+    }
+    if (p.kind === 'stats') return onStats(p.snap, true);
     if (p.kind === 'talk') {
       $('talk').hidden = !p.members.length;
       $('talk').innerHTML = p.members.map(m => `<span><img src="${esc(m.avatar)}" alt="">${esc(m.name)}</span>`).join('');

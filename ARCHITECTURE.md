@@ -15,7 +15,7 @@ A map of every file and what it does. HotSwap has two halves:
 | `overlay.rs` | The in-game overlay window (notes, cheat sheet, HUD and menu) and the radar window; hands focus back to the game and closes itself when idle. |
 | `watch.rs` | Notices which installed game is running, and tells the interface when that changes. |
 | `trainer.rs` | Runs the mods: attaches to the running game and keeps applying the values you've set. |
-| `stats.rs` | System stats for the overlay's System tab and the HUD: CPU, memory, GPU, video memory and network. |
+| `stats.rs` | System stats: CPU, memory, disk, network, the running game's use, GPU temperature, power, clock and fan (NVIDIA or AMD driver), and CPU sensors via LibreHardwareMonitor. |
 | `logs.rs` | HotSwap's log file (rotates at 5 MB), crash logging, and Export logs (full, or under 5 MB for Discord). |
 
 ### Commands for the pages
@@ -98,6 +98,8 @@ A map of every file and what it does. HotSwap has two halves:
 | `pages.js` | The Maps, Settings and game pages, and the function that draws whichever page is open. |
 | `ingame.js` | Sends mod changes, the menu and the HUD to the overlay. |
 | `discord.js` | The Overlay page, Discord voice popups, who's talking, and your Discord status. |
+| `stats.js` | System stats settings on the Overlay page, and the readings for the stats widget and HUD. |
+| `stats-shared.js` | Shared by the window and the overlay: the list of stats, their formats, the default settings and the graph drawing. |
 | `session.js` | Sounds, the Play button, Inject and the running game's session. |
 | `hotkeys.js` | Reacts to hotkey presses and records new key bindings. |
 | `updates.js` | Checks for and installs HotSwap updates. |
