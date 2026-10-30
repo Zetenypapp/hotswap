@@ -45,7 +45,7 @@ const DEFAULTS = {
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
   showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, sounds: true, overlay: true, paused: {},
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
-  pinned: {}, sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
+  pinned: {}, sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, dcPopups: 'always', hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
 };
 const CORNERS = [['top-left', 'Top left'], ['top', 'Top'], ['top-right', 'Top right'], ['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right']];
 const SHEET = '__sheet'; // capture.mid while rebinding the cheat sheet key
@@ -55,7 +55,11 @@ let state = { ...DEFAULTS };
 let LIB = [];
 let STEAM = { root: null, libraries: [] };
 let RUNNING = null;          // game ID reported by the watcher (desktop app only)
-let sessionStart = null;     // when the current RUNNING session began
+let sessionStart = null;     // when HotSwap was injected into the running game (the session)
+// The running game HotSwap is injected into: right away when started with HotSwap's Play button,
+// otherwise once the user presses Inject on its page. Until then the game only shows on Discord,
+// with no mods and no timer.
+let INJECTED = null;
 let launching = null;        // { id, timer } while waiting for a launched game to appear
 let capture = null;          // { gid, mid, dir } while rebinding a key; mid is null for the panic key
 let stopArmed = false;       // stop button clicked once; a second click closes the game
@@ -144,7 +148,7 @@ const softwareOnly = () => LIB.filter(g => g.software);
 const findGame = id => LIB.find(g => g.id === String(id));
 const game = () => findGame(state.game) || LIB[0];
 // In the desktop app "running" comes from the watcher; in a browser preview Play simulates it.
-const runningId = () => invoke ? RUNNING : state.playing;
+const runningId = () => invoke ? (RUNNING && INJECTED === RUNNING ? RUNNING : null) : state.playing;
 const hours = min => min >= 60 ? `${Math.round(min / 60).toLocaleString()} h` : `${min} min`;
 const duration = ms => { const m = Math.max(1, Math.round(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; };
 const ago = sec => {
@@ -198,7 +202,7 @@ function whoUses(g, combo, except) {
 let lastHotkeys = '';
 function syncHotkeys() {
   if (!invoke) return;
-  const g = findGame(RUNNING);
+  const g = findGame(runningId());
   let keys = !capture && state.hotkeys && g && modsOf(g).length
     ? state.paused[g.id] ? [state.panicKey]
       : [...new Set([state.panicKey, state.overlay && state.sheetKey, state.overlay && state.menuKey, ...modsOf(g).filter(m => m.live).flatMap(m => Object.values(keysOf(g, m)))].filter(Boolean))]
@@ -219,7 +223,7 @@ let lastTrainer = '';
 let TRAINER = { connected: false, message: '' };
 function syncTrainer() {
   if (!invoke) return;
-  const g = findGame(RUNNING);
+  const g = findGame(runningId());
   const values = {};
   if (g) for (const m of modsOf(g)) if (m.live && m.type !== 'action') values[m.id] = m.type === 'toggle' ? (valueOf(g, m) ? 1 : 0) : valueOf(g, m);
   const args = { game: g?.id ?? null, paused: !!(g && state.paused[g.id]), values };
@@ -613,7 +617,9 @@ function renderGame() {
       ${total ? `${profileControl(g)}
       <button class="roundbtn" id="resetBtn" aria-label="Turn off all mods" title="Turn off all mods"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>` : ''}
       <button class="roundbtn${state.panel ? ' on' : ''}" id="panelBtn" aria-pressed="${state.panel}" aria-label="Side panel" title="Side panel"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button>
-      ${live
+      ${RUNNING === g.id && !live && invoke
+        ? `<button class="play" id="injectBtn" title="Start HotSwap in the running game: mods, hotkeys and the session timer"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Inject</button>`
+        : live
         ? `<button class="play live" id="playBtn" title="${total ? 'Turn off all mods' : 'Running'}">Playing ${total ? '<span class="x" aria-hidden="true">✕</span>' : ''}</button>`
         : busy
           ? `<button class="play busy" disabled><span class="spin"></span>Launching</button>`
@@ -742,6 +748,7 @@ function render() {
   syncMap();
   pushMenu();
   syncDiscord();
+  dcOptions();
 }
 
 /* ---------- Actions ---------- */
@@ -871,7 +878,16 @@ function onOverlayInput(i) {
 // is kept in localStorage (shared with the overlay page).
 const dcVoiceOn = () => { try { return localStorage.getItem('hs.dc.voice') === '1'; } catch { return false; } };
 if (invoke && dcVoiceOn()) invoke('voice_start').catch(() => {});
-const dcOptions = () => invoke?.('voice_options', { notes: state.dcNotes !== false, privacy: state.dcPrivacy || 0, joins: state.dcJoins !== false }).catch(() => {});
+// Whether Discord popups may show now: always, only while a game runs, or never.
+function dcPopupsNow() { return state.dcPopups === 'never' ? false : state.dcPopups === 'games' ? !!RUNNING : true; }
+var lastDcOptions = '';
+function dcOptions() {
+  const o = { notes: state.dcNotes !== false && dcPopupsNow(), privacy: state.dcPrivacy || 0, joins: state.dcJoins !== false && dcPopupsNow() };
+  const sig = JSON.stringify(o);
+  if (sig === lastDcOptions) return;
+  lastDcOptions = sig;
+  invoke?.('voice_options', o).catch(() => {});
+};
 dcOptions();
 // Who's talking, shown over any game (unless the HUD already shows it).
 var talkOn = false, lastTalk = '', VOICE = null;
@@ -879,7 +895,7 @@ setInterval(async () => {
   if (!invoke || !dcVoiceOn()) { VOICE = null; return; }
   VOICE = await invoke('voice_state').catch(() => null);
   if (state.view === 'overlay') renderOverlayPage();
-  const talking = state.overlay && state.dcTalk && !hudOn && VOICE?.status === 'ready' ? VOICE.members.filter(m => m.speaking).map(m => ({ name: m.name, avatar: m.avatar })) : [];
+  const talking = state.overlay && state.dcTalk && dcPopupsNow() && !hudOn && VOICE?.status === 'ready' ? VOICE.members.filter(m => m.speaking).map(m => ({ name: m.name, avatar: m.avatar })) : [];
   const sig = JSON.stringify(talking);
   if (sig === lastTalk) return;
   lastTalk = sig;
@@ -888,9 +904,11 @@ setInterval(async () => {
 }, 350);
 
 document.addEventListener('click', e => {
-  const c = e.target.closest('[data-dcprivacy]');
+  const c = e.target.closest('[data-dcprivacy],[data-dcpopups]');
   if (!c) return;
-  state.dcPrivacy = +c.dataset.dcprivacy; save(); dcOptions(); render();
+  if (c.dataset.dcpopups) state.dcPopups = c.dataset.dcpopups;
+  else state.dcPrivacy = +c.dataset.dcprivacy;
+  save(); dcOptions(); render();
 });
 function renderOverlayPage() {
   const sw = (id, on) => `<button class="switch" role="switch" id="${id}" aria-checked="${!!on}"></button>`;
@@ -907,6 +925,8 @@ function renderOverlayPage() {
       <div class="set-row"><div class="txt"><b>${esc(status)}</b><span>Who’s in your call, who’s talking, real mute and deafen, volumes and notifications. Connects as Discord’s own StreamKit overlay, so Discord asks once to authorize “StreamKit”. Unofficial: it may stop working if Discord changes it.</span></div>
         <button class="btn${on ? '' : ' accent'}" id="dcVoiceBtn">${on ? 'Turn off' : 'Connect'}</button></div>
       <div class="set-row"><div class="txt"><b>Show who’s talking</b><span>Avatars of the people speaking, in the HUD corner over any game.</span></div>${sw('setDcTalk', state.dcTalk)}</div>
+      <div class="set-row"><div class="txt"><b>Discord popups</b><span>When notifications, join and leave popups and who’s talking may show over your screen.</span></div>
+        <div class="chips">${[['always', 'Always'], ['games', 'Only in games'], ['never', 'Never']].map(([k, l]) => `<button class="chip${(state.dcPopups || 'always') === k ? ' on' : ''}" data-dcpopups="${k}">${l}</button>`).join('')}</div></div>
       <div class="set-row"><div class="txt"><b>Discord notifications</b><span>Messages and pings pop up over the game.</span></div>${sw('setDcNotes', state.dcNotes)}</div>
       <div class="set-row"><div class="txt"><b>Notification privacy</b><span>For streaming or screen sharing. <b>Kind only</b> shows “Private message”, “Group message” or “Server message”; <b>Hidden</b> only says a message came.</span></div>
         <div class="chips">${[['0', 'Off'], ['1', 'Kind only'], ['2', 'Hidden']].map(([k, l]) => `<button class="chip${String(state.dcPrivacy || 0) === k ? ' on' : ''}" data-dcprivacy="${k}">${l}</button>`).join('')}</div></div>
@@ -938,13 +958,14 @@ setInterval(() => syncHud(false), 1000);
 let lastDiscord = '';
 function syncDiscord() {
   if (!invoke) return;
-  const g = findGame(runningId());
+  const g = findGame(invoke ? RUNNING : state.playing);
   const on = state.discord && g;
+  const injected = g && runningId() === g.id;
   const n = g ? activeCount(g) : 0;
   const activity = on ? {
     details: `Playing ${g.name}`,
-    state: modsOf(g).length ? (state.paused[g.id] ? 'Mods paused' : `${n} mod${n === 1 ? '' : 's'} on`) : 'With HotSwap',
-    timestamps: sessionStart ? { start: Math.floor(sessionStart / 1000) } : undefined,
+    state: injected && modsOf(g).length ? (state.paused[g.id] ? 'Mods paused' : `${n} mod${n === 1 ? '' : 's'} on`) : 'With HotSwap',
+    timestamps: injected && sessionStart ? { start: Math.floor(sessionStart / 1000) } : undefined,
     assets: { large_image: 'hotswap_avatar', large_text: 'HotSwap: free, open-source game mods' },
     buttons: [{ label: 'Get HotSwap', url: REPO_URL }],
   } : null;
@@ -994,6 +1015,18 @@ function play(g) {
   render();
 }
 
+// Starts the session in the running game: mods, hotkeys, the overlay menu and the Discord timer.
+function inject(g, quiet) {
+  if (!g || RUNNING !== g.id) return;
+  INJECTED = g.id;
+  sessionStart = Date.now();
+  logLine(g, 'Session started');
+  if (!quiet) toast(g.name, 'injected');
+  else toast(g.name, 'is running');
+  save();
+  render();
+}
+
 function onRunning(id) {
   const prev = RUNNING;
   if (id === prev) return;
@@ -1005,11 +1038,13 @@ function onRunning(id) {
     if (g) logLine(g, `Session ended (${Math.max(1, Math.round((now - sessionStart) / 60000))} min)`);
   }
   RUNNING = id;
-  sessionStart = id ? now : null;
+  sessionStart = null;
+  INJECTED = null;
   if (id) {
     const g = findGame(id);
-    if (launching?.id === id) { clearTimeout(launching.timer); launching = null; }
-    if (g) { logLine(g, 'Session started'); toast(g.name, 'is running'); }
+    // Started with HotSwap's Play button: injected right away.
+    if (launching?.id === id) { clearTimeout(launching.timer); launching = null; if (g) { inject(g, true); return; } }
+    if (g) toast(g.name, 'is running · press Inject on its page to use HotSwap');
   }
   save();
   render();
@@ -1373,6 +1408,7 @@ document.addEventListener('click', e => {
   else switch (t.id) {
     case 'favBtn': state.fav[state.game] = !state.fav[state.game]; save(); renderGame(); break;
     case 'playBtn': isLive(game()) ? panic() : play(game()); break;
+    case 'injectBtn': inject(game()); break;
     case 'stopBtn':
       if (!stopArmed) { stopArmed = true; renderSide(); setTimeout(() => { stopArmed = false; renderSide(); }, 3000); }
       else {
