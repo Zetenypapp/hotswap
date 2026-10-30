@@ -426,6 +426,9 @@ const LocalMap = (() => {
   function unmount() {
     loop++;
     timers.forEach(clearInterval); timers = [];
+    // Leaving the map frees its picture and world data (the biggest things here); opening it
+    // again loads them back.
+    bg = null; world = null; worldAt = 0;
     if (ro) ro.disconnect();
     hideMenu();
     if (host) host.innerHTML = '';
