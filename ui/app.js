@@ -45,7 +45,7 @@ const DEFAULTS = {
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
   showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, sounds: true, overlay: true, paused: {},
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
-  pinned: {}, sheetKey: 'Ctrl+F1', menuKey: 'Insert', hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
+  pinned: {}, sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
 };
 const CORNERS = [['top-left', 'Top left'], ['top', 'Top'], ['top-right', 'Top right'], ['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right']];
 const SHEET = '__sheet'; // capture.mid while rebinding the cheat sheet key
@@ -199,10 +199,12 @@ let lastHotkeys = '';
 function syncHotkeys() {
   if (!invoke) return;
   const g = findGame(RUNNING);
-  const keys = !capture && state.hotkeys && g && modsOf(g).length
+  let keys = !capture && state.hotkeys && g && modsOf(g).length
     ? state.paused[g.id] ? [state.panicKey]
       : [...new Set([state.panicKey, state.overlay && state.sheetKey, state.overlay && state.menuKey, ...modsOf(g).filter(m => m.live).flatMap(m => Object.values(keysOf(g, m)))].filter(Boolean))]
     : [];
+  // The Discord overlay opens with the same key in any game (or none).
+  if (!capture && state.overlay && state.dcOverlay && state.menuKey && !keys.includes(state.menuKey)) keys = [...keys, state.menuKey];
   const sig = keys.join('|');
   if (sig === lastHotkeys) return;
   lastHotkeys = sig;
@@ -729,11 +731,11 @@ function applyAccent() {
 
 function render() {
   applyAccent();
-  const views = { home: 'homeView', library: 'libView', maps: 'mapsView', mods: 'modsView', settings: 'setView', game: 'gameView' };
+  const views = { home: 'homeView', library: 'libView', maps: 'mapsView', mods: 'modsView', overlay: 'ovView', settings: 'setView', game: 'gameView' };
   if (state.view === 'game' && !game()) state.view = 'home';
   Object.entries(views).forEach(([v, id]) => $(id).hidden = v !== state.view);
   renderSide();
-  ({ home: renderHome, library: renderLibrary, maps: renderMaps, mods: () => Mods.render(), settings: renderSettings, game: renderGame })[state.view]();
+  ({ home: renderHome, library: renderLibrary, maps: renderMaps, mods: () => Mods.render(), overlay: renderOverlayPage, settings: renderSettings, game: renderGame })[state.view]();
   if (state.mini) renderMini();
   syncHotkeys();
   syncTrainer();
@@ -797,7 +799,7 @@ let menuOpen = false, hudOn = false, DISCORD_ERR = '';
 function overlaySend(note) {
   if (!invoke) return;
   const a = ACCENTS.find(x => x.c === state.accent) || ACCENTS[0];
-  invoke('overlay_notify', { note: { ...note, accent: a.c, ink: a.ink, corner: state.overlayCorner, hudCorner: state.hudCorner, keep: menuOpen || hudOn } }).catch(console.error);
+  invoke('overlay_notify', { note: { ...note, accent: a.c, ink: a.ink, corner: state.overlayCorner, hudCorner: state.hudCorner, keep: menuOpen || hudOn || talkOn } }).catch(console.error);
 }
 
 // The menu: the running game's mods over the game, driven by mouse or keys (see overlay.html).
@@ -823,27 +825,34 @@ let lastMenu = '';
 function pushMenu() {
   if (!menuOpen) return;
   const g = findGame(runningId());
-  if (!g) { toggleMenu(false); return; }
-  const data = menuData(g), sig = JSON.stringify(data);
+  const mods = g && modsOf(g).length;
+  if (!mods && !state.dcOverlay) { toggleMenu(false); return; }
+  const data = mods ? menuData(g) : dcMenuData(), sig = JSON.stringify(data);
   if (sig === lastMenu) return;
   lastMenu = sig;
   overlaySend({ kind: 'menu', open: true, data });
+}
+// The Discord-only menu, for games without HotSwap mods (any game, even ones with anti-cheat:
+// the overlay is a separate window and never touches the game).
+function dcMenuData() {
+  const r = RUNNING && findGame(RUNNING);
+  return { discordOnly: true, game: r ? r.name : 'Discord', menuKey: comboLabel(state.menuKey), cats: [], profiles: [], count: 0 };
 }
 // `test` opens it from Settings without a game running (with the game HotSwap shows).
 function toggleMenu(open = !menuOpen, test = false) {
   if (!invoke || !state.overlay) return;
   const g = test ? game() : findGame(runningId());
-  if (open && (!g || !modsOf(g).length)) { if (test) toast('Open a game with mods first', ''); return; }
+  if (open && (!g || !modsOf(g).length) && !state.dcOverlay) { if (test) toast('Open a game with mods first', ''); return; }
   menuOpen = open;
   lastMenu = '';
   invoke('overlay_menu', { open }).catch(console.error);
   if (open) {
-    if (test) overlaySend({ kind: 'menu', open: true, data: menuData(g) }); else pushMenu();
+    if (test) overlaySend({ kind: 'menu', open: true, data: g && modsOf(g).length ? menuData(g) : dcMenuData() }); else pushMenu();
   } else overlaySend({ kind: 'menu', open: false });
 }
 function onOverlayInput(i) {
   const g = findGame(runningId());
-  if (i.type === 'close' || !g) { toggleMenu(false); return; }
+  if (i.type === 'close' || !g || !modsOf(g).length) { if (i.type === 'close') toggleMenu(false); return; }
   const m = modsOf(g).find(x => x.id === i.id);
   if (i.type === 'set' && m) setMod(g, m, i.value, 'overlay menu');
   else if (i.type === 'act' && m) setMod(g, m, null, 'overlay menu');
@@ -855,6 +864,46 @@ function onOverlayInput(i) {
     save(); render();
   }
   pushMenu();
+}
+
+/* ---------- Discord overlay ---------- */
+// Discord voice runs in the app (voice.rs) once the user connected it in the overlay; the choice
+// is kept in localStorage (shared with the overlay page).
+const dcVoiceOn = () => { try { return localStorage.getItem('hs.dc.voice') === '1'; } catch { return false; } };
+if (invoke && dcVoiceOn()) invoke('voice_start').catch(() => {});
+if (invoke) invoke('voice_options', { notes: state.dcNotes !== false }).catch(() => {});
+// Who's talking, shown over any game (unless the HUD already shows it).
+var talkOn = false, lastTalk = '', VOICE = null;
+setInterval(async () => {
+  if (!invoke || !dcVoiceOn()) { VOICE = null; return; }
+  VOICE = await invoke('voice_state').catch(() => null);
+  if (state.view === 'overlay') renderOverlayPage();
+  const talking = state.overlay && state.dcTalk && !hudOn && VOICE?.status === 'ready' ? VOICE.members.filter(m => m.speaking).map(m => ({ name: m.name, avatar: m.avatar })) : [];
+  const sig = JSON.stringify(talking);
+  if (sig === lastTalk) return;
+  lastTalk = sig;
+  talkOn = talking.length > 0;
+  overlaySend({ kind: 'talk', members: talking });
+}, 350);
+
+function renderOverlayPage() {
+  const sw = (id, on) => `<button class="switch" role="switch" id="${id}" aria-checked="${!!on}"></button>`;
+  const v = VOICE, on = dcVoiceOn();
+  const status = !on ? 'Not connected' : !v || v.status === 'connecting' ? 'Connecting…' : v.status === 'authorizing' ? 'Click Authorize in Discord' : v.status === 'error' ? (v.message || 'Not connected') : v.channel ? `In ${v.channel} · ${v.members.length} ${v.members.length === 1 ? 'person' : 'people'}` : 'Connected · not in a call';
+  const html = `<h1>Overlay</h1>
+    <div class="set-group"><h2>Discord overlay</h2>
+      <div class="set-tip">A Discord menu over any game, even ones HotSwap has no mods for, like CS2. It’s its own window on top of the game and never touches the game itself, so anti-cheat has nothing to see. Run games in <b>borderless or windowed</b> mode.</div>
+      <div class="set-row"><div class="txt"><b>Discord overlay in every game</b><span>The overlay key opens the Discord menu in games without HotSwap mods. Games with mods still get the full menu, with Discord as a tab.</span></div>${sw('setDcOverlay', state.dcOverlay)}</div>
+      ${invoke ? `<div class="set-row"><div class="txt"><b>Overlay key</b><span>Works everywhere while the Discord overlay is on, so pick a key you don’t need for anything else.</span></div>
+        <button class="btn" id="testMenu">Try it</button><button class="key bindable${capture?.mid === MENU ? ' listening' : ''}${state.menuKey ? '' : ' unbound'}" id="menuBind">${capture?.mid === MENU ? 'Press a key…' : esc(comboLabel(state.menuKey) || 'Not set')}</button></div>` : ''}
+    </div>
+    <div class="set-group"><h2>Discord voice (beta)</h2>
+      <div class="set-row"><div class="txt"><b>${esc(status)}</b><span>Who’s in your call, who’s talking, real mute and deafen, volumes and notifications. Connects as Discord’s own StreamKit overlay, so Discord asks once to authorize “StreamKit”. Unofficial: it may stop working if Discord changes it.</span></div>
+        <button class="btn${on ? '' : ' accent'}" id="dcVoiceBtn">${on ? 'Turn off' : 'Connect'}</button></div>
+      <div class="set-row"><div class="txt"><b>Show who’s talking</b><span>Avatars of the people speaking, in the HUD corner over any game.</span></div>${sw('setDcTalk', state.dcTalk)}</div>
+      <div class="set-row"><div class="txt"><b>Discord notifications</b><span>Messages and pings pop up over the game.</span></div>${sw('setDcNotes', state.dcNotes)}</div>
+    </div>`;
+  if ($('ovBody').innerHTML !== html) $('ovBody').innerHTML = html;
 }
 
 // The HUD: once a second while it's on and a game runs.
@@ -1347,6 +1396,14 @@ document.addEventListener('click', e => {
     case 'setHud': state.hud = !state.hud; save(); render(); syncHud(true); break;
     case 'setHudStats': state.hudStats = !state.hudStats; save(); render(); syncHud(true); break;
     case 'setDiscord': state.discord = !state.discord; save(); render(); break;
+    case 'setDcOverlay': state.dcOverlay = !state.dcOverlay; save(); render(); break;
+    case 'setDcTalk': state.dcTalk = !state.dcTalk; save(); render(); break;
+    case 'setDcNotes': state.dcNotes = !state.dcNotes; save(); invoke?.('voice_options', { notes: state.dcNotes }).catch(() => {}); render(); break;
+    case 'dcVoiceBtn': {
+      const on = !dcVoiceOn();
+      try { localStorage.setItem('hs.dc.voice', on ? '1' : '0'); } catch {}
+      VOICE = null; invoke?.(on ? 'voice_start' : 'voice_stop').catch(() => {}); render(); break;
+    }
     case 'setLowMem': state.lowMemory = !state.lowMemory; save(); render(); toast('Low memory mode ' + (state.lowMemory ? 'on' : 'off'), 'restart HotSwap to apply'); break;
     case 'testMenu': toggleMenu(true, true); break;
     case 'whatsNewBtn': showWhatsNew(true); break;

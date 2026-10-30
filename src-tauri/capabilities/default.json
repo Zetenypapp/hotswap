@@ -67,6 +67,7 @@
     "allow-ts-set-enabled",
     "allow-ts-remove",
     "allow-voice-start",
+    "allow-voice-options",
     "allow-voice-stop",
     "allow-voice-state",
     "allow-voice-send",

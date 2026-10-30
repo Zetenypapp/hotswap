@@ -105,6 +105,9 @@
   .dc-chs button.on { background: #5865f2; color: #fff; }
   .dc-h { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 4px 2px 0; }
   /* Who's talking, under the HUD. */
+  #talk { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 16px; }
+  #talk span { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; padding: 3px 10px 3px 3px; border-radius: 14px; background: rgba(35, 165, 90, .18); }
+  #talk img { width: 24px; height: 24px; border-radius: 50%; box-shadow: 0 0 0 2px #23a55a; }
   #hud .talk { display: flex; flex-wrap: wrap; gap: 6px; }
   #hud .talk span { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; padding: 2px 8px 2px 2px; border-radius: 12px; background: rgba(35, 165, 90, .18); }
   #hud .talk img { width: 20px; height: 20px; border-radius: 50%; box-shadow: 0 0 0 2px #23a55a; }
@@ -151,7 +154,7 @@
 <body>
 <div id="toasts" class="corner top"></div>
 <div id="sheetBox" class="corner top"><div id="sheet" class="glass" hidden></div></div>
-<div id="hudBox" class="corner top-left"><div id="hud" class="glass" hidden></div></div>
+<div id="hudBox" class="corner top-left"><div id="hud" class="glass" hidden></div><div id="talk" class="glass" hidden></div></div>
 <div id="shade" hidden></div>
 <div id="menu" class="glass" hidden></div>
 <script>
@@ -308,10 +311,10 @@
     sel = Math.max(0, Math.min(sel, mods.length - 1));
     const status = menu.paused ? 'Mods paused' : menu.connected ? 'Live in the game' : (menu.message || 'Connecting…');
     $('menu').innerHTML = `
-      <div class="m-head"><button class="view${view === 'mods' ? ' on' : ''}" data-view="mods" title="Mods">${logo(34)}</button><button class="view dc${view === 'discord' ? ' on' : ''}" data-view="discord" title="Discord">${DISCORD}</button>
-        <div class="m-title"><b>${esc(menu.game)}</b><span><span class="dot${menu.connected && !menu.paused ? ' ok' : ''}"></span>${esc(status)} · ${menu.count} on</span></div>
+      <div class="m-head">${menu.discordOnly ? logo(34) : `<button class="view${view === 'mods' ? ' on' : ''}" data-view="mods" title="Mods">${logo(34)}</button>`}<button class="view dc${view === 'discord' ? ' on' : ''}" data-view="discord" title="Discord">${DISCORD}</button>
+        ${menu.discordOnly ? `<div class="m-title"><b>Discord</b><span>${esc(menu.game)}</span></div>` : `<div class="m-title"><b>${esc(menu.game)}</b><span><span class="dot${menu.connected && !menu.paused ? ' ok' : ''}"></span>${esc(status)} · ${menu.count} on</span></div>
         <button class="btn${menu.paused ? ' on' : ''}" data-cmd="pause">${menu.paused ? 'Resume' : 'Pause'}</button>
-        <button class="btn danger" data-cmd="panic">All off</button>
+        <button class="btn danger" data-cmd="panic">All off</button>`}
         <button class="btn round" data-cmd="close" title="Close (${esc(menu.menuKey)})">✕</button></div>
       ${view === 'discord' ? discordPanel() : `<div class="m-bar">
         <button class="tab${tab === 'all' ? ' on' : ''}" data-tab="all">All</button>
@@ -457,10 +460,16 @@
     theme(p);
     if (p.kind === 'sheet') return sheet(p);
     if (p.kind === 'hud') { hud = p.data; return renderHud(); }
+    if (p.kind === 'talk') {
+      $('talk').hidden = !p.members.length;
+      $('talk').innerHTML = p.members.map(m => `<span><img src="${esc(m.avatar)}" alt="">${esc(m.name)}</span>`).join('');
+      return;
+    }
     if (p.kind === 'menu') {
       const was = !!menu;
       menu = p.open ? p.data : null;
       if (menu && !was) { tab = 'all'; sel = 0; dragging = false; view = 'mods'; }
+      if (menu?.discordOnly) view = 'discord';
       return renderMenu();
     }
     if (p.kind === 'theme') return;

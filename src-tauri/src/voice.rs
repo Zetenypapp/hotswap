@@ -15,6 +15,9 @@ use tungstenite::{client::IntoClientRequest, stream::MaybeTlsStream, Message, We
 
 const STREAMKIT: &str = "207646673902501888";
 
+/// Whether Discord notifications show as overlay toasts (a setting).
+pub static NOTES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
 #[derive(Clone, Default, Serialize)]
 pub struct Member {
     id: String,
@@ -296,6 +299,9 @@ impl Session {
             }
             ("DISPATCH", "NOTIFICATION_CREATE") => {
                 // A Discord notification, shown as an overlay toast.
+                if !NOTES.load(std::sync::atomic::Ordering::Relaxed) {
+                    return Ok(());
+                }
                 let note = json!({ "kind": "discord", "title": data["title"], "body": data["body"], "icon": data["icon_url"] });
                 let app = self.app.clone();
                 tauri::async_runtime::spawn(async move {
