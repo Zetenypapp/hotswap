@@ -302,8 +302,8 @@ fn system_stats(stats: State<stats::Stats>) -> (f32, f32) {
 
 /// Everything the overlay's System tab graphs (see stats.rs).
 #[tauri::command]
-fn system_stats_full(stats: State<stats::Stats>) -> stats::Snapshot {
-    stats.read()
+fn system_stats_full(stats: State<stats::Stats>, watch: State<watch::Watch>, game: Option<String>) -> stats::Snapshot {
+    stats.read(game.and_then(|g| watch.pid_of(&g)))
 }
 
 #[derive(serde::Serialize)]
@@ -466,12 +466,18 @@ fn main() {
             LOW_MEMORY.store(true, Ordering::Relaxed);
         }
     }
+    // Dev aid: `hotswap --gpu-sensors` lists the AMD driver's sensors.
+    #[cfg(windows)]
+    if std::env::args().any(|a| a == "--gpu-sensors") {
+        println!("{:?}", stats::gpu_sensors());
+        return;
+    }
     // Dev aid: `hotswap --stats` prints two readings of the System tab's stats, a second apart.
     if std::env::args().any(|a| a == "--stats") {
         let st = stats::Stats::default();
-        let _ = st.read();
+        let _ = st.read(None);
         std::thread::sleep(std::time::Duration::from_secs(1));
-        println!("{}", serde_json::to_string(&st.read()).unwrap_or_default());
+        println!("{}", serde_json::to_string(&st.read(None)).unwrap_or_default());
         return;
     }
     // Dev aid: `hotswap --export-logs [--discord]` writes the logs zip and prints where.
