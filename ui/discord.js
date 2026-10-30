@@ -22,7 +22,7 @@ setInterval(async () => {
   if (!invoke || !dcVoiceOn()) { VOICE = null; return; }
   VOICE = await invoke('voice_state').catch(() => null);
   if (state.view === 'overlay') renderOverlayPage();
-  const talking = state.overlay && state.dcTalk && dcPopupsNow() && !hudOn && VOICE?.status === 'ready' ? VOICE.members.filter(m => m.speaking).map(m => ({ name: m.name, avatar: m.avatar })) : [];
+  const talking = state.overlay && state.dcTalk && !state.fgFriendly && dcPopupsNow() && !hudOn && VOICE?.status === 'ready' ? VOICE.members.filter(m => m.speaking).map(m => ({ name: m.name, avatar: m.avatar })) : [];
   const sig = JSON.stringify(talking);
   if (sig === lastTalk) return;
   lastTalk = sig;
@@ -43,6 +43,9 @@ function renderOverlayPage() {
   const v = VOICE, on = dcVoiceOn();
   const status = !on ? 'Not connected' : !v || v.status === 'connecting' ? 'Connecting…' : v.status === 'authorizing' ? 'Click Authorize in Discord' : v.status === 'error' ? (v.message || 'Not connected') : v.channel ? `In ${v.channel} · ${v.members.length} ${v.members.length === 1 ? 'person' : 'people'}` : 'Connected · not in a call';
   const html = `<h1>Overlay</h1>
+    <div class="set-group"><h2>Overlay and frame generation</h2>
+      <div class="set-row"><div class="txt"><b>Frame generation friendly</b><span>For FSR, DLSS or AFMF frame generation. Turns off everything that stays on screen (the HUD, the stats widget, who’s talking) and keeps popups short, so the game keeps the screen to itself. The overlay menu still opens with your key.</span></div>${sw('setFgFriendly', state.fgFriendly)}</div>
+    </div>
     <div class="set-group"><h2>Discord overlay</h2>
       <div class="set-tip">A Discord menu over any game, even ones HotSwap has no mods for, like CS2. It’s its own window on top of the game and never touches the game itself, so anti-cheat has nothing to see. Run games in <b>borderless or windowed</b> mode.</div>
       <div class="set-row"><div class="txt"><b>Discord overlay in every game</b><span>The overlay key opens the Discord menu in games without HotSwap mods. Games with mods still get the full menu, with Discord as a tab.</span></div>${sw('setDcOverlay', state.dcOverlay)}</div>

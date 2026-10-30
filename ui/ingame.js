@@ -5,7 +5,7 @@ let menuOpen = false, hudOn = false, DISCORD_ERR = '';
 function overlaySend(note) {
   if (!invoke) return;
   const a = ACCENTS.find(x => x.c === state.accent) || ACCENTS[0];
-  invoke('overlay_notify', { note: { ...note, accent: a.c, ink: a.ink, corner: state.overlayCorner, hudCorner: state.hudCorner, keep: menuOpen || hudOn || talkOn || statsKeep() } }).catch(console.error);
+  invoke('overlay_notify', { note: { ...note, fast: !!state.fgFriendly, accent: a.c, ink: a.ink, corner: state.overlayCorner, hudCorner: state.hudCorner, keep: menuOpen || hudOn || talkOn || statsKeep() } }).catch(console.error);
 }
 
 // The menu: the running game's mods over the game, driven by mouse or keys (see overlay.html).
@@ -76,7 +76,7 @@ function onOverlayInput(i) {
 // The HUD: once a second while it's on and a game runs.
 async function syncHud(force) {
   const g = findGame(runningId());
-  const want = !!(invoke && state.overlay && state.hud && g);
+  const want = !!(invoke && state.overlay && state.hud && !state.fgFriendly && g);
   if (!want) {
     if (hudOn || force) { hudOn = false; overlaySend({ kind: 'hud', data: null }); }
     return;

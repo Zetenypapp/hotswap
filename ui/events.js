@@ -85,6 +85,7 @@ document.addEventListener('click', e => {
     case 'setHud': state.hud = !state.hud; save(); render(); syncHud(true); break;
     case 'setHudStats': state.hudStats = !state.hudStats; save(); render(); syncHud(true); break;
     case 'setDiscord': state.discord = !state.discord; save(); render(); break;
+    case 'setFgFriendly': state.fgFriendly = !state.fgFriendly; save(); syncHud(true); pushStatsCfg(true); render(); break;
     case 'setDcOverlay': state.dcOverlay = !state.dcOverlay; save(); render(); break;
     case 'setDcTalk': state.dcTalk = !state.dcTalk; save(); render(); break;
     case 'setDcNotes': state.dcNotes = !state.dcNotes; save(); dcOptions(); render(); break;

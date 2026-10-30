@@ -58,7 +58,7 @@ const DEFAULTS = {
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
   showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, sounds: true, overlay: true, paused: {},
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
-  pinned: {}, sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, dcPopups: 'always', hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
+  pinned: {}, sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, dcPopups: 'always', fgFriendly: false, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
 };
 const CORNERS = [['top-left', 'Top left'], ['top', 'Top'], ['top-right', 'Top right'], ['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right']];
 const SHEET = '__sheet'; // capture.mid while rebinding the cheat sheet key

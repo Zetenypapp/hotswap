@@ -82,6 +82,19 @@ pub(crate) fn overlay_ready() {
     OVERLAY_READY.store(true, Ordering::Relaxed);
 }
 
+/// The overlay window covers only the part of the screen with something on it (x, y, width and
+/// height in logical pixels from the main monitor's top-left), so the game keeps the screen to
+/// itself where nothing is drawn. The page works out the part (see overlay.html).
+#[tauri::command]
+pub(crate) fn overlay_fit(app: AppHandle, x: f64, y: f64, w: f64, h: f64) {
+    let Some(win) = app.get_webview_window("overlay") else { return };
+    let Some(m) = app.primary_monitor().ok().flatten() else { return };
+    let s = m.scale_factor();
+    let (mx, my) = (m.position().x as f64 / s, m.position().y as f64 / s);
+    let _ = win.set_position(tauri::LogicalPosition::new(mx + x, my + y));
+    let _ = win.set_size(tauri::LogicalSize::new(w.max(1.0), h.max(1.0)));
+}
+
 /// Shows the overlay without taking focus from the game.
 pub(crate) fn overlay_show(win: &tauri::WebviewWindow) {
     #[cfg(windows)]
@@ -141,6 +154,11 @@ pub(crate) async fn overlay_menu(app: AppHandle, open: bool) -> Result<(), Strin
             }
         }
         OVERLAY_MENU.store(true, Ordering::Relaxed);
+        // The menu needs the whole screen (it dims the game behind it).
+        if let Some(m) = app.primary_monitor().ok().flatten() {
+            let sc = m.scale_factor();
+            overlay_fit(app.clone(), 0.0, 0.0, m.size().width as f64 / sc, m.size().height as f64 / sc - 1.0);
+        }
         let _ = win.set_ignore_cursor_events(false);
         let _ = win.show();
         let _ = win.set_focus();

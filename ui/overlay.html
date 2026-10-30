@@ -7,7 +7,9 @@
   html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; font-family: Figtree, "Segoe UI", system-ui, sans-serif; color: var(--fg); user-select: none; }
   [hidden] { display: none !important; }
   .logo { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: var(--c); color: var(--ink); font-weight: 900; font-size: 16px; flex: none; }
-  .glass { background: var(--panel); box-shadow: 0 14px 40px rgba(0, 0, 0, .5), inset 0 0 0 1px var(--line); backdrop-filter: blur(16px); }
+  /* No backdrop blur: it re-renders whatever is behind every frame (costly over a game) and breaks
+     layering in WebView2. The panels are nearly opaque anyway. */
+  .glass { background: var(--panel); box-shadow: 0 14px 40px rgba(0, 0, 0, .5), inset 0 0 0 1px var(--line); }
 
   /* Corners: toasts, cheat sheet and HUD each sit in one. */
   .corner { position: fixed; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
@@ -90,6 +92,11 @@
   /* The stats widget: chosen stats in a corner while you play. */
   /* Layers: corner pieces, then the menu's shade, then the menu (opacity makes its own layer). */
   .corner { z-index: 10; }
+  /* Everything sits in one screen-sized layer. While only small pieces show (a toast, the HUD,
+     the stats widget), the window shrinks to just those and the layer shifts to match, so the
+     game keeps the screen to itself (frame generation and fullscreen optimisations need that).
+     The transform makes the layer the frame of reference for its fixed-position children. */
+  #root { position: fixed; left: 0; top: 0; width: var(--fw, 100vw); height: var(--fh, 100vh); transform: translate(var(--ox, 0px), var(--oy, 0px)); }
   #shade { z-index: 20; }
   #menu { z-index: 21; }
   #stats { opacity: var(--wo, .9); }
@@ -183,12 +190,14 @@
   @keyframes fade { from { opacity: 0; } }
 </style></head>
 <body>
+<div id="root">
 <div id="toasts" class="corner top"></div>
 <div id="sheetBox" class="corner top"><div id="sheet" class="glass" hidden></div></div>
 <div id="statsBox" class="corner top-right"><div id="stats" class="glass" hidden></div></div>
 <div id="hudBox" class="corner top-left"><div id="hud" class="glass" hidden></div><div id="talk" class="glass" hidden></div></div>
 <div id="shade" hidden></div>
 <div id="menu" class="glass" hidden></div>
+</div>
 <script src="stats-shared.js"></script>
 <script>
   const { invoke } = window.__TAURI__.core;
@@ -233,7 +242,7 @@
       + (p.pct != null ? `<span class="bar" style="width:${Math.max(2, Math.min(100, p.pct))}%"></span>` : '');
     $('toasts').prepend(n);
     while ($('toasts').children.length > 4) $('toasts').lastChild.remove();
-    setTimeout(() => { n.classList.add('out'); setTimeout(() => n.remove(), 320); }, 2400);
+    setTimeout(() => { n.classList.add('out'); setTimeout(() => n.remove(), 320); }, p.fast ? 1200 : 2400);
   }
 
   // A Discord notification (a message or ping), shown like a mod toast but a bit longer.
@@ -243,7 +252,7 @@
     n.innerHTML = `<span class="dci">${p.icon ? `<img src="${esc(p.icon)}" alt="">` : DISCORD}</span><span class="t"><b>${esc(p.title)}</b><span class="body">${esc(p.body)}</span></span>`;
     $('toasts').prepend(n);
     while ($('toasts').children.length > 4) $('toasts').lastChild.remove();
-    setTimeout(() => { n.classList.add('out'); setTimeout(() => n.remove(), 320); }, 5000);
+    setTimeout(() => { n.classList.add('out'); setTimeout(() => n.remove(), 320); }, p.fast ? 2000 : 5000);
   }
 
   // Mod icons, picked from the mod's name (first match wins; the bolt otherwise).
@@ -571,4 +580,41 @@
     if (p.kind === 'theme') return;
     toast(p);
   }).then(() => invoke('overlay_ready')).catch(() => {});
+
+  /* ---------- Window size: only as big as what's showing ---------- */
+  const root = $('root');
+  const FULL = { w: screen.width, h: screen.height - 1 };
+  root.style.setProperty('--fw', FULL.w + 'px');
+  root.style.setProperty('--fh', FULL.h + 'px');
+  let lastFit = '', fitQueued = false;
+  function fitWindow() {
+    fitQueued = false;
+    let box = null;
+    if (!$('menu').hidden) box = { x: 0, y: 0, w: FULL.w, h: FULL.h };
+    else {
+      const r0 = root.getBoundingClientRect();
+      for (const el of [...$('toasts').children, $('sheet'), $('hud'), $('talk'), $('stats')]) {
+        if (!el || el.hidden || !el.offsetWidth) continue;
+        const r = el.getBoundingClientRect();
+        const b = { x: r.left - r0.left, y: r.top - r0.top, r: r.right - r0.left, b: r.bottom - r0.top };
+        box = box ? { x: Math.min(box.x, b.x), y: Math.min(box.y, b.y), r: Math.max(box.r, b.r), b: Math.max(box.b, b.b) } : b;
+      }
+      if (!box) return; // nothing showing: the app hides the window
+      // Room for shadows and the slide-in animation, on whole 16 px steps so small changes don't resize.
+      const pad = 32, snap = v => Math.round(v / 16) * 16;
+      const x = Math.max(0, snap(box.x - pad)), y = Math.max(0, snap(box.y - pad));
+      box = { x, y, w: Math.min(FULL.w, snap(box.r + pad)) - x, h: Math.min(FULL.h, snap(box.b + pad)) - y };
+    }
+    const sig = `${box.x},${box.y},${box.w},${box.h}`;
+    if (sig === lastFit) return;
+    lastFit = sig;
+    root.style.setProperty('--ox', -box.x + 'px');
+    root.style.setProperty('--oy', -box.y + 'px');
+    invoke('overlay_fit', { x: box.x, y: box.y, w: box.w, h: box.h }).catch(() => {});
+  }
+  // A timer, not requestAnimationFrame: a hidden window gets no animation frames, and the fit must
+  // still happen before it's shown again.
+  const queueFit = () => { if (!fitQueued) { fitQueued = true; setTimeout(fitWindow, 16); } };
+  new MutationObserver(queueFit).observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+  addEventListener('resize', queueFit);
 </script></body></html>

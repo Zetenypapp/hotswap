@@ -11,7 +11,7 @@ function saveStats(change) {
 // Whether the stats widget shows now.
 function statsWidgetShown() {
   const c = statsCfg();
-  return !!(invoke && state.overlay && c.widgetOn && (c.widgetWhen === 'always' || RUNNING));
+  return !!(invoke && state.overlay && !state.fgFriendly && c.widgetOn && (c.widgetWhen === 'always' || RUNNING));
 }
 // The overlay window stays up while the widget is on (see overlaySend in ingame.js).
 function statsKeep() { return statsWidgetShown(); }
