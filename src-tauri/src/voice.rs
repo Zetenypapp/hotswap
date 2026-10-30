@@ -416,7 +416,7 @@ impl Session {
     fn toast(&self, note: Value) {
         let app = self.app.clone();
         tauri::async_runtime::spawn(async move {
-            let _ = crate::overlay_notify(app, note).await;
+            let _ = crate::overlay::overlay_notify(app, note).await;
         });
     }
 
