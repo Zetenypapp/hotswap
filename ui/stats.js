@@ -72,6 +72,11 @@ function statsSettings() {
     <div class="set-row"><div class="txt"><b>Widget size</b><span>Small shows numbers only.</span></div>${chips('stwsize', [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']], c.widgetSize)}</div>
     <div class="set-row"><div class="txt"><b>Widget opacity</b></div><input type="range" min="30" max="100" step="5" value="${c.widgetOpacity}" data-stopacity style="max-width:200px"><span class="meta">${c.widgetOpacity}%</span></div>` : ''}
     <div class="set-row st-head"><div class="txt"><b>Stats</b><span>Order, where each one shows, its card size in the System tab, graph style and colour.</span></div><button class="btn" data-streset>Reset</button></div>
+    <div class="st-help">
+      <div><b>TAB</b> The System tab in the overlay menu: press your overlay key, then the graph button next to Discord. Big graphs, while the menu is open.</div>
+      <div><b>WIDGET</b> A small box in a corner that stays on screen while you play, like an FPS counter. Turn it on with <b>Stats widget</b> above.</div>
+      <div><b>HUD</b> The slim info bar (game, mods, session time). Turn it on in Settings → HUD; ticked stats show there as short text.</div>
+    </div>
     <div class="st-list">${rows}</div>
   </div>`;
 }

@@ -37,6 +37,7 @@ document.addEventListener('click', e => {
   else state.dcPrivacy = +c.dataset.dcprivacy;
   save(); dcOptions(); render();
 });
+var lastOvHtml = '';
 function renderOverlayPage() {
   const sw = (id, on) => `<button class="switch" role="switch" id="${id}" aria-checked="${!!on}"></button>`;
   const v = VOICE, on = dcVoiceOn();
@@ -59,7 +60,11 @@ function renderOverlayPage() {
         <div class="chips">${[['0', 'Off'], ['1', 'Kind only'], ['2', 'Hidden']].map(([k, l]) => `<button class="chip${String(state.dcPrivacy || 0) === k ? ' on' : ''}" data-dcprivacy="${k}">${l}</button>`).join('')}</div></div>
       <div class="set-row"><div class="txt"><b>Join and leave popups</b><span>A popup when someone joins or leaves your call.</span></div>${sw('setDcJoins', state.dcJoins)}</div>
     </div>${statsSettings()}`;
-  if ($('ovBody').innerHTML !== html) $('ovBody').innerHTML = html;
+  // Redraw only when something changed, and never under an open dropdown (redrawing closes it).
+  // Compared with what was drawn last: the browser rewrites innerHTML, so it never matches.
+  if (html === lastOvHtml || document.activeElement?.closest?.('#ovBody select')) return;
+  lastOvHtml = html;
+  $('ovBody').innerHTML = html;
 }
 
 // Discord: what you're playing with HotSwap, while a game runs.
