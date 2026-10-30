@@ -25,7 +25,7 @@ function setHomeLayout(list) {
 // A panel's custom source, fetched once per URL (Refresh fetches again).
 function loadSource(p, force) {
   const s = HP_SOURCES[p.id];
-  if (!invoke || (!force && s && s.url === p.src && (s.loading || s.data || s.error))) return;
+  if (!invoke || !feat('feed') || (!force && s && s.url === p.src && (s.loading || s.data || s.error))) return;
   HP_SOURCES[p.id] = { url: p.src, loading: true };
   invoke('fetch_source', { url: p.src })
     .then(data => { HP_SOURCES[p.id] = { url: p.src, data }; })
@@ -103,7 +103,8 @@ function renderHome() {
       <span class="nm">${esc(x.t)}${x.note ? `<small>${x.note}</small>` : ''}</span>
       <span class="pr">${x.off ? `<em>−${x.off}%</em>` : ''}${x.price ? money(x.price) : 'Free'}</span></a></li>`).join('') || '<li class="empty" style="padding:10px">No matches.</li>'}</ol>`;
 
-  const layout = homeLayout();
+  // With the Home feed off, only Jump back in shows (nothing is downloaded).
+  const layout = homeLayout().filter(p => feat('feed') || p.id === 'jump');
   const panels = layout.filter(p => !p.hidden).map(p => {
     let title = HOME_NAMES[p.id] || 'Custom panel', sub = '', link = '', body;
     if (p.src) {

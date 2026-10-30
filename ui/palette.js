@@ -17,7 +17,7 @@ function paletteItems(q) {
   const items = [];
   const add = (kind, label, sub, run, ic) => items.push({ kind, label, sub, run, ic });
   [['home', 'Home'], ['library', 'Library'], ['maps', 'Maps'], ['mods', 'Mods'], ['settings', 'Settings']]
-    .forEach(([v, l]) => add('Page', l, '', () => go(v), palIcon(v)));
+    .filter(([v]) => feat(v)).forEach(([v, l]) => add('Page', l, '', () => go(v), palIcon(v)));
   const games = q ? LIB : gamesOnly().slice().sort((a, b) => b.lastPlayed - a.lastPlayed).slice(0, 6);
   games.forEach(g => add(g.software ? 'Software' : 'Game', g.name, [g.playtime ? hours(g.playtime) : '', modsOf(g).length ? `${modsOf(g).length} mods` : ''].filter(Boolean).join(' · '),
     () => go('game', g.id), tile(g, 'pal-tile', false)));

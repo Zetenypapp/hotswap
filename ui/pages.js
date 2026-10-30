@@ -75,6 +75,7 @@ function renderSettings() {
   const listeningPanic = capture && capture.mid === null;
   $('setBody').innerHTML = `
     <h1>Settings</h1>
+    ${featuresSettings()}
     <div class="set-group"><h2>Appearance</h2>
       <div class="set-row"><div class="txt"><b>Accent color</b><span>Used for active mods, buttons and highlights.</span></div>
         <div class="swatches">${ACCENTS.map(a => `<button class="swatch${state.accent === a.c ? ' on' : ''}" style="--c:${a.c}" data-accent="${a.c}" aria-label="${a.name}" title="${a.name}"></button>`).join('')}</div></div>
@@ -90,8 +91,7 @@ function renderSettings() {
         <button class="key bindable${capture?.mid === SHEET ? ' listening' : ''}${state.sheetKey ? '' : ' unbound'}" id="sheetBind">${capture?.mid === SHEET ? 'Press a key…' : esc(comboLabel(state.sheetKey))}</button></div>` : ''}
       ${invoke ? `<div class="set-row"><div class="txt"><b>Overlay menu key</b><span>Opens a menu over the game where you can flip mods with the mouse or arrow keys. Press it again or Esc to close.</span></div>
         <button class="btn" id="testMenu">Try it</button><button class="key bindable${capture?.mid === MENU ? ' listening' : ''}${state.menuKey ? '' : ' unbound'}" id="menuBind">${capture?.mid === MENU ? 'Press a key…' : esc(comboLabel(state.menuKey))}</button></div>` : ''}
-      <div class="set-row"><div class="txt"><b>Sounds</b><span>A short chime when a mod turns on or off.</span></div>${sw('setSounds', state.sounds)}</div>
-      ${invoke ? `<div class="set-row"><div class="txt"><b>In-game overlay</b><span>Shows mod changes from hotkeys at the top of the screen, over the game. Works with borderless and windowed games, not exclusive fullscreen.</span></div><button class="btn" id="testOverlay">Test</button>${sw('setOverlay', state.overlay)}</div>` : ''}
+      ${invoke ? `<div class="set-row"><div class="txt"><b>In-game overlay</b><span>Shows mod changes from hotkeys at the top of the screen, over the game. Works with borderless and windowed games, not exclusive fullscreen. Turn it on or off under Features.</span></div><button class="btn" id="testOverlay">Test</button></div>` : ''}
       ${invoke ? `<div class="set-row"><div class="txt"><b>Overlay position</b><span>Where mod changes and the cheat sheet show up.</span></div>${cornerPicker('ocorner', state.overlayCorner)}</div>
       <div class="set-row"><div class="txt"><b>HUD</b><span>A small bar over the game with your active mods, session time and clock. It keeps the overlay on screen, which can cost a little smoothness in some games.</span></div>${sw('setHud', state.hud)}</div>
       ${state.hud ? `<div class="set-row"><div class="txt"><b>HUD position</b><span>Where the HUD sits.</span></div>${cornerPicker('hcorner', state.hudCorner)}</div>
@@ -126,7 +126,6 @@ function renderSettings() {
       ${invoke ? `<div class="set-row"><div class="txt"><b>Export logs</b><span>Packs HotSwap’s log and a short system summary into a zip in your Downloads, for bug reports. <b>For Discord</b> keeps only the newest lines so it stays under 5 MB. Logs hold game names and folder paths, never your Discord login or messages.</span></div><button class="btn" data-exportlogs="small">For Discord</button><button class="btn" data-exportlogs="full">Full</button></div>` : ''}
       <div class="set-row"><div class="txt"><b>Found a bug or want a game added?</b><span>Opens a GitHub issue with your HotSwap version already filled in.</span></div>
         <div class="btnrow"><a class="btn" href="${esc(bugUrl())}" ${ext}>Report a bug</a><a class="btn" href="${esc(requestUrl())}" ${ext}>Request a game</a></div></div>
-      ${invoke ? `<div class="set-row"><div class="txt"><b>Check for updates automatically</b><span>Looks for a new release on GitHub when HotSwap starts. Updates are signed, and nothing installs without your click.</span></div>${sw('setAutoUpdate', state.autoUpdate)}</div>` : ''}
     </div>`;
 }
 
@@ -325,6 +324,7 @@ function render() {
   lastView = state.view;
   const views = { home: 'homeView', library: 'libView', maps: 'mapsView', mods: 'modsView', overlay: 'ovView', settings: 'setView', game: 'gameView' };
   if (state.view === 'game' && !game()) state.view = 'home';
+  if (!feat(state.view)) state.view = 'home';
   Object.entries(views).forEach(([v, id]) => $(id).hidden = v !== state.view);
   renderSide();
   ({ home: renderHome, library: renderLibrary, maps: renderMaps, mods: () => typeof Mods === 'undefined' ? lazyPage('modsBody', 'mods.js') : Mods.render(), overlay: renderOverlayPage, settings: renderSettings, game: renderGame })[state.view]();

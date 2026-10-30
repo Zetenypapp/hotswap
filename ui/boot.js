@@ -7,6 +7,8 @@
   await loadState();
   await scanLibrary();
   await loadHome();
+  // Discord voice reconnects if it was on (it needs the saved state first).
+  if (invoke && dcVoiceOn()) invoke('voice_start').catch(() => {});
   if (!findGame(state.game)) state.game = LIB[0]?.id ?? null;
   if (invoke) {
     state.playing = null;

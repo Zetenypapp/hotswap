@@ -7,7 +7,8 @@ let sideEdit = false;
 const NAV = [...document.querySelectorAll('.mainnav [data-view]')].map(b => ({ view: b.dataset.view, html: b.innerHTML }));
 const NAV_BY = Object.fromEntries(NAV.map(n => [n.view, n]));
 // The user's page order (new pages from an update go last).
-const navOrder = () => [...(state.navOrder || []).filter(v => NAV_BY[v]), ...NAV.map(n => n.view).filter(v => !(state.navOrder || []).includes(v))];
+// Pages for features switched off in Settings → Features don't show at all.
+const navOrder = () => [...(state.navOrder || []).filter(v => NAV_BY[v]), ...NAV.map(n => n.view).filter(v => !(state.navOrder || []).includes(v))].filter(v => feat(v));
 
 // What game rows show: active mods, mods available, playtime or nothing. Older settings only had
 // the active mods switch.

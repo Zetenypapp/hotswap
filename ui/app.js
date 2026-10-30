@@ -58,7 +58,7 @@ const DEFAULTS = {
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
   showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, sounds: true, overlay: true, paused: {},
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
-  pinned: {}, navOrder: null, navHidden: {}, sidePins: {}, sideInfo: null, catOrder: {}, hiddenMods: {}, modNames: {}, rowSize: 'comfortable', sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, dcPopups: 'always', fgFriendly: false, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
+  pinned: {}, off: {}, navOrder: null, navHidden: {}, sidePins: {}, sideInfo: null, catOrder: {}, hiddenMods: {}, modNames: {}, rowSize: 'comfortable', sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, dcPopups: 'always', fgFriendly: false, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
 };
 const CORNERS = [['top-left', 'Top left'], ['top', 'Top'], ['top-right', 'Top right'], ['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right']];
 const SHEET = '__sheet'; // capture.mid while rebinding the cheat sheet key
@@ -185,6 +185,8 @@ const fmt = (m, v) => Number.isInteger(m.step) ? String(v) : v.toFixed(1);
 const pct = (m, v) => ((v - m.min) / (m.max - m.min) * 100).toFixed(1) + '%';
 const activeCount = g => modsOf(g).filter(m => isActive(g, m)).length;
 const query = () => $('search').value.trim().toLowerCase();
+// Whether a feature is on (see features.js).
+const feat = k => !state.off?.[k];
 // A mod's short name if the user gave it one (see gamelook.js).
 const modName = (g, m) => state.modNames[g.id]?.[m.id] || m.name;
 // A game's categories in the user's order (new ones from an update go last).
@@ -359,7 +361,7 @@ async function loadHome() {
   if (invoke && Date.now() / 1000 - (HOME.fetchedAt || 0) > 3600) refreshHome(false);
 }
 async function refreshHome(manual) {
-  if (!invoke || homeLoading) return;
+  if (!invoke || homeLoading || !feat('feed')) return;
   homeLoading = true;
   if (state.view === 'home') renderHome();
   const appIds = gamesOnly().filter(g => g.appId).sort((a, b) => b.lastPlayed - a.lastPlayed).slice(0, 8).map(g => g.appId);

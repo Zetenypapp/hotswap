@@ -357,7 +357,7 @@
     sel = Math.max(0, Math.min(sel, mods.length - 1));
     const status = menu.paused ? 'Mods paused' : menu.connected ? 'Live in the game' : (menu.message || 'Connecting…');
     $('menu').innerHTML = `
-      <div class="m-head">${menu.discordOnly ? logo(34) : `<button class="view${view === 'mods' ? ' on' : ''}" data-view="mods" title="Mods">${logo(34)}</button>`}<button class="view dc${view === 'discord' ? ' on' : ''}" data-view="discord" title="Discord">${DISCORD}</button><button class="view sys${view === 'system' ? ' on' : ''}" data-view="system" title="System">${CHART}</button>
+      <div class="m-head">${menu.discordOnly ? logo(34) : `<button class="view${view === 'mods' ? ' on' : ''}" data-view="mods" title="Mods">${logo(34)}</button>`}${menu.noDc ? '' : `<button class="view dc${view === 'discord' ? ' on' : ''}" data-view="discord" title="Discord">${DISCORD}</button>`}${menu.noSys ? '' : `<button class="view sys${view === 'system' ? ' on' : ''}" data-view="system" title="System">${CHART}</button>`}
         ${menu.discordOnly ? `<div class="m-title"><b>${view === 'system' ? 'System' : 'Discord'}</b><span>${esc(menu.game)}</span></div>` : `<div class="m-title"><b>${esc(menu.game)}</b><span><span class="dot${menu.connected && !menu.paused ? ' ok' : ''}"></span>${esc(status)} · ${menu.count} on</span></div>
         <button class="btn${menu.paused ? ' on' : ''}" data-cmd="pause">${menu.paused ? 'Resume' : 'Pause'}</button>
         <button class="btn danger" data-cmd="panic">All off</button>`}
@@ -574,7 +574,10 @@
       const was = !!menu;
       menu = p.open ? p.data : null;
       if (menu && !was) { tab = 'all'; sel = 0; dragging = false; view = 'mods'; }
-      if (menu?.discordOnly && view === 'mods') view = 'discord';
+      if (menu?.discordOnly && view === 'mods') view = menu.noDc ? 'system' : 'discord';
+      // Tabs for features switched off in Settings → Features are gone.
+      if (menu?.noDc && view === 'discord') view = menu.discordOnly ? 'system' : 'mods';
+      if (menu?.noSys && view === 'system') view = menu.discordOnly ? 'discord' : 'mods';
       return renderMenu();
     }
     if (p.kind === 'theme') return;

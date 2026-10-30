@@ -11,7 +11,7 @@ function saveStats(change) {
 // Whether the stats widget shows now.
 function statsWidgetShown() {
   const c = statsCfg();
-  return !!(invoke && state.overlay && !state.fgFriendly && c.widgetOn && (c.widgetWhen === 'always' || RUNNING));
+  return !!(invoke && feat('stats') && state.overlay && !state.fgFriendly && c.widgetOn && (c.widgetWhen === 'always' || RUNNING));
 }
 // The overlay window stays up while the widget is on (see overlaySend in ingame.js).
 function statsKeep() { return statsWidgetShown(); }
@@ -30,7 +30,7 @@ function pushStatsCfg(force) {
 // Readings for the widget and the HUD, at the chosen rate, only while one of them shows stats.
 (function statsLoop() {
   const c = statsCfg();
-  const need = statsWidgetShown() || (hudOn && c.hud.length);
+  const need = feat('stats') && (statsWidgetShown() || (hudOn && c.hud.length));
   if (need) {
     pushStatsCfg(false);
     invoke('system_stats_full', { game: runningId() || RUNNING || null })

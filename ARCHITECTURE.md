@@ -100,6 +100,7 @@ A map of every file and what it does. HotSwap has two halves:
 | `discord.js` | The Overlay page, Discord voice popups, who's talking, and your Discord status. |
 | `gamelook.js` | Customising a game page: category order, hidden mods, short mod names and row size. |
 | `sidebar.js` | Customising the sidebar: page order and hidden pages, pinned games, what game rows show. |
+| `features.js` | Features on and off (Settings): parts of HotSwap that can be switched off so they don't load. |
 | `stats.js` | System stats settings on the Overlay page, and the readings for the stats widget and HUD. |
 | `stats-shared.js` | Shared by the window and the overlay: the list of stats, their formats, the default settings and the graph drawing. |
 | `session.js` | Sounds, the Play button, Inject and the running game's session. |

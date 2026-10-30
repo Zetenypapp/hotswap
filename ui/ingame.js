@@ -32,8 +32,8 @@ function pushMenu() {
   if (!menuOpen) return;
   const g = findGame(runningId());
   const mods = g && modsOf(g).length;
-  if (!mods && !state.dcOverlay) { toggleMenu(false); return; }
-  const data = mods ? menuData(g) : dcMenuData(), sig = JSON.stringify(data);
+  if (!mods && !dcMenuOk()) { toggleMenu(false); return; }
+  const data = { ...(mods ? menuData(g) : dcMenuData()), noDc: !feat('discord'), noSys: !feat('stats') }, sig = JSON.stringify(data);
   if (sig === lastMenu) return;
   lastMenu = sig;
   overlaySend({ kind: 'menu', open: true, data });
@@ -45,10 +45,12 @@ function dcMenuData() {
   return { discordOnly: true, game: r ? r.name : 'Discord', menuKey: comboLabel(state.menuKey), cats: [], profiles: [], count: 0 };
 }
 // `test` opens it from Settings without a game running (with the game HotSwap shows).
+// The menu for games without mods has Discord and System tabs, so it needs one of them on.
+const dcMenuOk = () => state.dcOverlay && (feat('discord') || feat('stats'));
 function toggleMenu(open = !menuOpen, test = false) {
   if (!invoke || !state.overlay) return;
   const g = test ? game() : findGame(runningId());
-  if (open && (!g || !modsOf(g).length) && !state.dcOverlay) { if (test) toast('Open a game with mods first', ''); return; }
+  if (open && (!g || !modsOf(g).length) && !dcMenuOk()) { if (test) toast('Open a game with mods first', ''); return; }
   menuOpen = open;
   lastMenu = '';
   invoke('overlay_menu', { open }).catch(console.error);
@@ -83,7 +85,7 @@ async function syncHud(force) {
   }
   hudOn = true;
   let cpu = null, ram = null;
-  if (state.hudStats) [cpu, ram] = await invoke('system_stats').catch(() => [null, null]);
+  if (state.hudStats && feat('stats')) [cpu, ram] = await invoke('system_stats').catch(() => [null, null]);
   overlaySend({
     kind: 'hud',
     data: { game: g.name, count: activeCount(g), mods: modsOf(g).filter(m => isActive(g, m)).map(m => m.type === 'slider' ? `${modName(g, m)} ${fmt(m, valueOf(g, m))}` : modName(g, m)),

@@ -3,8 +3,7 @@
 /* ---------- Discord overlay ---------- */
 // Discord voice runs in the app (voice.rs) once the user connected it in the overlay; the choice
 // is kept in localStorage (shared with the overlay page).
-const dcVoiceOn = () => { try { return localStorage.getItem('hs.dc.voice') === '1'; } catch { return false; } };
-if (invoke && dcVoiceOn()) invoke('voice_start').catch(() => {});
+const dcVoiceOn = () => { try { return feat('discord') && localStorage.getItem('hs.dc.voice') === '1'; } catch { return false; } };
 // Whether Discord popups may show now: always, only while a game runs, or never.
 function dcPopupsNow() { return state.dcPopups === 'never' ? false : state.dcPopups === 'games' ? !!RUNNING : true; }
 var lastDcOptions = '';
@@ -46,7 +45,7 @@ function renderOverlayPage() {
     <div class="set-group"><h2>Overlay and frame generation</h2>
       <div class="set-row"><div class="txt"><b>Frame generation friendly</b><span>For FSR, DLSS or AFMF frame generation. Turns off everything that stays on screen (the HUD, the stats widget, who’s talking) and keeps popups short, so the game keeps the screen to itself. The overlay menu still opens with your key.</span></div>${sw('setFgFriendly', state.fgFriendly)}</div>
     </div>
-    <div class="set-group"><h2>Discord overlay</h2>
+    ${feat('discord') ? `<div class="set-group"><h2>Discord overlay</h2>
       <div class="set-tip">A Discord menu over any game, even ones HotSwap has no mods for, like CS2. It’s its own window on top of the game and never touches the game itself, so anti-cheat has nothing to see. Run games in <b>borderless or windowed</b> mode.</div>
       <div class="set-row"><div class="txt"><b>Discord overlay in every game</b><span>The overlay key opens the Discord menu in games without HotSwap mods. Games with mods still get the full menu, with Discord as a tab.</span></div>${sw('setDcOverlay', state.dcOverlay)}</div>
       ${invoke ? `<div class="set-row"><div class="txt"><b>Overlay key</b><span>Works everywhere while the Discord overlay is on, so pick a key you don’t need for anything else.</span></div>
@@ -62,7 +61,7 @@ function renderOverlayPage() {
       <div class="set-row"><div class="txt"><b>Notification privacy</b><span>For streaming or screen sharing. <b>Kind only</b> shows “Private message”, “Group message” or “Server message”; <b>Hidden</b> only says a message came.</span></div>
         <div class="chips">${[['0', 'Off'], ['1', 'Kind only'], ['2', 'Hidden']].map(([k, l]) => `<button class="chip${String(state.dcPrivacy || 0) === k ? ' on' : ''}" data-dcprivacy="${k}">${l}</button>`).join('')}</div></div>
       <div class="set-row"><div class="txt"><b>Join and leave popups</b><span>A popup when someone joins or leaves your call.</span></div>${sw('setDcJoins', state.dcJoins)}</div>
-    </div>${statsSettings()}`;
+    </div>` : featOffNote('Discord')}${feat('stats') ? statsSettings() : featOffNote('System stats')}`;
   // Redraw only when something changed, and never under an open dropdown (redrawing closes it).
   // Compared with what was drawn last: the browser rewrites innerHTML, so it never matches.
   if (html === lastOvHtml || document.activeElement?.closest?.('#ovBody select')) return;
