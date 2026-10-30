@@ -583,7 +583,9 @@ body.mini .minibox { display: flex; flex-direction: column; height: 100%; backgr
 .hp-bar > span { flex: 1; min-width: 240px; }
 .hp-bar b { color: var(--fg); }
 .hp-srcform { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-.hp-srcform input { flex: 1; min-width: 140px; height: 34px; border: 0; border-radius: 10px; padding: 0 10px; background: var(--surface); color: var(--fg); font: inherit; font-size: 13px; }
+.hp-srcform input { flex: 1; min-width: 140px; height: 34px; border: 1px solid rgba(255, 255, 255, .16); border-radius: 10px; padding: 0 10px; background: rgba(255, 255, 255, .05); color: var(--fg); font: inherit; font-size: 13px; outline: none; }
+.hp-srcform input:hover { border-color: rgba(255, 255, 255, .28); }
+.hp-srcform input:focus { border-color: var(--accent); background: rgba(255, 255, 255, .07); }
 .hp-list { display: flex; flex-direction: column; gap: 6px; }
 .hp-item { display: flex; gap: 10px; padding: 8px; border-radius: 12px; background: var(--surface); color: var(--fg); text-decoration: none; }
 .hp-item:hover { background: color-mix(in srgb, var(--surface) 70%, var(--fg) 6%); }
