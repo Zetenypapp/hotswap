@@ -15,6 +15,7 @@ A map of every file and what it does. HotSwap has two halves:
 | `overlay.rs` | The in-game overlay window (notes, cheat sheet, HUD and menu) and the radar window; hands focus back to the game and closes itself when idle. |
 | `watch.rs` | Notices which installed game is running, and tells the interface when that changes. |
 | `trainer.rs` | Runs the mods: attaches to the running game and keeps applying the values you've set. |
+| `stats.rs` | System stats for the overlay's System tab and the HUD: CPU, memory, GPU, video memory and network. |
 | `logs.rs` | HotSwap's log file (rotates at 5 MB), crash logging, and Export logs (full, or under 5 MB for Discord). |
 
 ### Commands for the pages
@@ -108,7 +109,7 @@ A map of every file and what it does. HotSwap has two halves:
 | `map.js` | The HotSwap map for Satisfactory; only loaded when you open Maps. |
 | `mods.js` | The Mods page; only loaded when you open Mods. |
 | `map-overlay.js` | Adds your position and pins on top of the Satisfactory Calculator web map. |
-| `overlay.html` | The in-game overlay window: notes, cheat sheet, HUD, menu and the Discord panel. |
+| `overlay.html` | The in-game overlay window: notes, cheat sheet, HUD, menu, the Discord panel and the System tab's graphs. |
 | `radar.html` | The R.E.P.O. enemy radar window. |
 
 ## 📦 Other files
