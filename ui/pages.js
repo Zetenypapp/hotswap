@@ -78,7 +78,7 @@ function renderSettings() {
     <div class="set-group"><h2>Appearance</h2>
       <div class="set-row"><div class="txt"><b>Accent color</b><span>Used for active mods, buttons and highlights.</span></div>
         <div class="swatches">${ACCENTS.map(a => `<button class="swatch${state.accent === a.c ? ' on' : ''}" style="--c:${a.c}" data-accent="${a.c}" aria-label="${a.name}" title="${a.name}"></button>`).join('')}</div></div>
-      <div class="set-row"><div class="txt"><b>Show active mod counts</b><span>Badges next to games in the sidebar.</span></div>${sw('setCounts', state.showCounts)}</div>
+      <div class="set-row"><div class="txt"><b>Next to games in the sidebar</b><span>More sidebar options under the sliders button next to My games.</span></div><div class="chips">${SIDE_INFO.map(([k, l]) => `<button class="chip${sideInfo() === k ? ' on' : ''}" data-sideinfo="${k}">${l}</button>`).join('')}</div></div>
       <div class="set-row"><div class="txt"><b>Show software in the sidebar</b><span>Tools and apps like OBS or 3DMark go in their own Software section under your games. They're always in Library under Software.</span></div>${sw('setSoftware', state.showSoftware)}</div>
     </div>
     <div class="set-group"><h2>Hotkeys</h2>

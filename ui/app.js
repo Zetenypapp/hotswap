@@ -58,7 +58,7 @@ const DEFAULTS = {
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
   showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, sounds: true, overlay: true, paused: {},
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
-  pinned: {}, catOrder: {}, hiddenMods: {}, modNames: {}, rowSize: 'comfortable', sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, dcPopups: 'always', fgFriendly: false, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
+  pinned: {}, navOrder: null, navHidden: {}, sidePins: {}, sideInfo: null, catOrder: {}, hiddenMods: {}, modNames: {}, rowSize: 'comfortable', sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, dcPopups: 'always', fgFriendly: false, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
 };
 const CORNERS = [['top-left', 'Top left'], ['top', 'Top'], ['top-right', 'Top right'], ['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right']];
 const SHEET = '__sheet'; // capture.mid while rebinding the cheat sheet key
@@ -299,6 +299,7 @@ function setAmbient(art) {
 }
 
 function renderSide() {
+  renderNav();
   // The sidebar glow shows the running game's art; with nothing running it follows the accent color.
   const run = findGame(runningId());
   const artSrc = run && (run.art.heroBlur || run.art.hero);
@@ -316,17 +317,17 @@ function renderSide() {
     let list = src.filter(x => !q || x.name.toLowerCase().includes(q) || modsOf(x).some(m => modName(x, m).toLowerCase().includes(q) || m.name.toLowerCase().includes(q)));
     return state.sortAZ ? [...list].sort((a, b) => a.name.localeCompare(b.name)) : list;
   };
-  const row = (x, plain) => {
-    const n = state.showCounts ? activeCount(x) : 0;
-    return `<button class="gamebtn${plain ? ' plain' : ''}${x.id === state.game && state.view === 'game' ? ' on' : ''}" data-game="${x.id}">${tile(x)}<span class="name">${esc(x.name)}</span>${n ? `<span class="count">${n}</span>` : ''}</button>`;
-  };
-  const games = pick(gamesOnly()), soft = pick(softwareOnly());
-  // Games HotSwap can mod come first, in their own section; everything else under a divider.
+  const row = (x, plain) => sideEdit ? sideEditRow(x, plain)
+    : `<button class="gamebtn${plain ? ' plain' : ''}${x.id === state.game && state.view === 'game' ? ' on' : ''}" data-game="${x.id}">${tile(x)}<span class="name">${esc(x.name)}</span>${sideBadge(x)}</button>`;
+  const all = pick(gamesOnly()), soft = pick(softwareOnly());
+  // Pinned games first, then games HotSwap can mod in their own section, then everything else under a divider.
+  const pins = state.sidePins || {}, pinned = all.filter(g => pins[g.id]), games = all.filter(g => !pins[g.id]);
   const modded = games.filter(hasLiveMods), other = games.filter(g => !hasLiveMods(g));
   $('gameCount').textContent = gamesOnly().length;
-  let html = !games.length ? '<p class="empty" style="padding:6px 10px">No games match.</p>'
-    : (modded.length ? `<div class="side-sec">With mods <span class="n">${modded.length}</span></div>${modded.map(g => row(g)).join('')}` : '')
-      + (other.length ? `<div class="side-sec other">Other games <span class="n">${other.length}</span></div>${other.map(g => row(g, true)).join('')}` : '');
+  let html = (sideEdit ? sideEditBar() : '') + (!all.length ? '<p class="empty" style="padding:6px 10px">No games match.</p>'
+    : (pinned.length ? `<div class="side-sec">Pinned <span class="n">${pinned.length}</span></div>${pinned.map(g => row(g, !hasLiveMods(g))).join('')}` : '')
+      + (modded.length ? `<div class="side-sec${pinned.length ? ' other' : ''}">With mods <span class="n">${modded.length}</span></div>${modded.map(g => row(g)).join('')}` : '')
+      + (other.length ? `<div class="side-sec other">Other games <span class="n">${other.length}</span></div>${other.map(g => row(g, true)).join('')}` : ''));
   if (state.showSoftware && soft.length) {
     const open = state.softOpen || !!q;
     html += `<button class="soft-head" id="softToggle" aria-expanded="${open}">Software <span class="n">${soft.length}</span>

@@ -19,7 +19,7 @@
       </div>
       <div id="nowCard"></div>
     </div>
-    <nav class="mainnav">
+    <nav class="mainnav" id="mainnav">
       <button data-view="home"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 10.5L12 3l9 7.5V21h-6v-6H9v6H3z"/></svg>Home</button>
       <button data-view="library"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>Library</button>
       <button data-view="maps"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z" opacity=".35"/><path d="M9 4v14l6 2V6z"/></svg>Maps</button>
@@ -28,6 +28,7 @@
     </nav>
     <div class="side-label">
       My games <span class="n" id="gameCount"></span>
+      <button class="ghost" id="sideEditBtn" aria-label="Customise sidebar" title="Customise sidebar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 6h10M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
       <button class="ghost" id="sortBtn" aria-label="Sort games" title="Sort games"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg></button>
     </div>
     <div class="games" id="games"></div>
@@ -121,6 +122,7 @@
 <script src="stats-shared.js"></script>
 <script src="stats.js"></script>
 <script src="gamelook.js"></script>
+<script src="sidebar.js"></script>
 <script src="session.js"></script>
 <script src="updates.js"></script>
 <script src="hotkeys.js"></script>
