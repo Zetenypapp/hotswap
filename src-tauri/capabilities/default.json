@@ -23,6 +23,7 @@
     "allow-launch-game",
     "allow-set-hotkeys",
     "allow-fetch-home",
+    "allow-fetch-source",
     "allow-close-game",
     "allow-trainer-set",
     "allow-trainer-action",

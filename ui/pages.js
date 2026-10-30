@@ -311,6 +311,9 @@ function render() {
   applyAccent();
   // Leaving the Mods page frees its mod lists, here and in the app (Thunderstore's is big).
   if (lastView === 'mods' && state.view !== 'mods' && typeof Mods !== 'undefined') { Mods.release(); invoke?.('mods_release').catch(() => {}); }
+  if (state.view !== 'home' && homeEdit) { homeEdit = false; homeSrcOpen = null; }
+  const cb = $('customizeBtn');
+  if (cb) { cb.hidden = state.view !== 'home'; cb.classList.toggle('on', homeEdit); }
   lastView = state.view;
   const views = { home: 'homeView', library: 'libView', maps: 'mapsView', mods: 'modsView', overlay: 'ovView', settings: 'setView', game: 'gameView' };
   if (state.view === 'game' && !game()) state.view = 'home';
