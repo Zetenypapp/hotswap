@@ -172,6 +172,7 @@ function renderGame() {
     <div class="gh-actions">
       ${total ? `${profileControl(g)}
       <button class="roundbtn" id="resetBtn" aria-label="Turn off all mods" title="Turn off all mods"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>` : ''}
+      ${total && !g.anticheat.length ? `<button class="roundbtn${gameEditing() ? ' on' : ''}" id="gameEditBtn" aria-pressed="${gameEditing()}" aria-label="Customise this page" title="Customise this page"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 6h10M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>` : ''}
       <button class="roundbtn${state.panel ? ' on' : ''}" id="panelBtn" aria-pressed="${state.panel}" aria-label="Side panel" title="Side panel"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button>
       ${RUNNING === g.id && !live && invoke
         ? `<button class="play" id="injectBtn" title="Start HotSwap in the running game: mods, hotkeys and the session timer"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Inject</button>`
@@ -189,8 +190,9 @@ function renderGame() {
 function renderChips() {
   const g = game();
   if (state.cat !== 'all' && !g.cats.some(c => c.name === state.cat)) state.cat = 'all';
+  const hid = state.hiddenMods[g.id] || {}, editing = gameEditing();
   const chip = (k, label, n) => `<button class="chip${state.cat === k ? ' on' : ''}" data-chip="${esc(k)}">${icon(k === 'all' ? 'all' : k.toLowerCase(), 14)}${esc(label)}${n != null ? ` <span class="n">${n}</span>` : ''}</button>`;
-  $('chips').innerHTML = g.cats.length ? chip('all', 'All') + g.cats.map(c => chip(c.name, c.name, c.mods.length)).join('') : '';
+  $('chips').innerHTML = g.cats.length ? chip('all', 'All') + catsOf(g).map(c => chip(c.name, c.name, c.mods.filter(m => editing || !hid[m.id]).length)).join('') : '';
 }
 
 function keyChip(g, m, dir, clash) {
@@ -220,7 +222,7 @@ function modRow(g, m, clash, locked) {
   const keys = keyChip(g, m, 'up', clash) + (m.type === 'slider' ? keyChip(g, m, 'down', clash) : '');
   const pinned = !!state.pinned[g.id]?.[m.id];
   return `<div class="row${isActive(g, m) ? ' active' : ''}${locked ? ' locked' : ''}" data-mod="${m.id}">
-    <div class="label"><svg class="bolt" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>${esc(m.name)}${info}${m.live ? '' : '<span class="soon">Soon</span>'}${modDot(g, m)}
+    <div class="label"><svg class="bolt" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span class="mname"${modName(g, m) !== m.name ? ` title="${esc(m.name)}"` : ''}>${esc(modName(g, m))}</span>${info}${m.live ? '' : '<span class="soon">Soon</span>'}${modDot(g, m)}
       <button class="pin${pinned ? ' on' : ''}" data-pin="${m.id}" aria-pressed="${pinned}" aria-label="${pinned ? 'Unpin' : 'Pin to top'}" title="${pinned ? 'Unpin' : 'Pin to top'}"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M15 3l6 6-3 1-4 4 1 5-2 2-4-4-5 5H3v-1l5-5-4-4 2-2 5 1 4-4z"/></svg></button></div>
     ${ctl}<div class="keys">${keys}</div></div>`;
 }
@@ -246,19 +248,24 @@ function renderMods() {
   const lockbar = locked ? `<div class="lockbar"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V7a3 3 0 0 0-6 0z"/></svg>
       <span>${paused ? 'Mods are paused. Press the power button in the sidebar to turn them back on.' : `Start ${esc(g.name)} to change mods. You can set up hotkeys and profiles any time.`}</span></div>` : '';
   // Pinned mods get their own section at the top of All (and leave their category there).
-  const pins = state.pinned[g.id] || {};
-  const pinCat = state.cat === 'all' ? [{ name: 'Pinned', mods: modsOf(g).filter(m => pins[m.id]) }] : [];
-  const cats = [...pinCat, ...g.cats.filter(c => state.cat === 'all' || c.name === state.cat)].map(c => {
-    const mods = c.mods.filter(m => (!q || m.name.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
-      && (c.name === 'Pinned' || state.cat !== 'all' || !pins[m.id]));
+  // Customising shows every mod (no pinned section); otherwise hidden mods stay out unless searched for.
+  const editing = gameEditing(), pins = editing ? {} : state.pinned[g.id] || {}, hid = state.hiddenMods[g.id] || {};
+  const pinCat = state.cat === 'all' && !editing ? [{ name: 'Pinned', mods: modsOf(g).filter(m => pins[m.id] && (q || !hid[m.id])) }] : [];
+  let hidden = 0;
+  const cats = [...pinCat, ...catsOf(g).filter(c => state.cat === 'all' || c.name === state.cat)].map(c => {
+    const mods = c.mods.filter(m => (!q || modName(g, m).toLowerCase().includes(q) || m.name.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
+      && (c.name === 'Pinned' || state.cat !== 'all' || !pins[m.id])
+      && (editing || q || c.name === 'Pinned' || !hid[m.id] || (hidden++, false)));
     if (!mods.length) return '';
     const key = g.id + '/' + c.name, closed = state.closed[key] && !q;
-    return `<section class="cat${closed ? ' closed' : ''}">
+    return `<section class="cat${closed ? ' closed' : ''}"><div class="cat-bar">
       <button class="cat-head" data-cat="${esc(key)}" aria-expanded="${!closed}">${icon(c.name.toLowerCase(), 16)}${esc(c.name)}
-        <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
-      <div class="rows">${mods.map(m => modRow(g, m, clash, locked)).join('')}</div></section>`;
+        <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>${editing && c.name !== 'Pinned' ? gameEditMoves(g, c.name) : ''}</div>
+      <div class="rows">${mods.map(m => editing ? gameEditRow(g, m) : modRow(g, m, clash, locked)).join('')}</div></section>`;
   }).join('');
-  $('mods').innerHTML = lockbar + (cats || `<p class="noresults">No mods match “${esc(q)}”.</p>`);
+  const more = hidden ? `<button class="gl-hidden" data-gledit>${hidden} hidden mod${hidden > 1 ? 's' : ''} · Customise to show</button>` : '';
+  $('mods').classList.toggle('compact', state.rowSize === 'compact');
+  $('mods').innerHTML = (editing ? gameEditBar(g) : lockbar) + (cats || `<p class="noresults">No mods match “${esc(q)}”.</p>`) + more;
 }
 
 function renderPanel() {
@@ -270,7 +277,7 @@ function renderPanel() {
         : state.hotkeys ? 'Running. Hotkeys work inside the game.' : 'Running. Hotkeys are off in Settings.')
     : invoke ? 'Not running. Press Play to launch it through Steam.' : 'Press Play to start a session.'}`;
   $('activeList').innerHTML = act.length
-    ? act.map(m => `<li><span>${esc(m.name)}</span><span>${m.type === 'toggle' ? 'On' : fmt(m, valueOf(g, m))}</span></li>`).join('')
+    ? act.map(m => `<li><span>${esc(modName(g, m))}</span><span>${m.type === 'toggle' ? 'On' : fmt(m, valueOf(g, m))}</span></li>`).join('')
     : `<p class="empty">Nothing on in the ${esc(activeProf(g).name)} profile.</p>`;
   const log = state.log.filter(l => l.g === g.id).slice(-6).reverse();
   $('log').innerHTML = log.length ? log.map(l => `<li><time>${l.t}</time>${esc(l.msg)}</li>`).join('') : '<p class="empty">No activity yet.</p>';

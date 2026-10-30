@@ -10,21 +10,21 @@ function overlaySend(note) {
 
 // The menu: the running game's mods over the game, driven by mouse or keys (see overlay.html).
 function menuData(g) {
-  const pins = state.pinned[g.id] || {};
+  const pins = state.pinned[g.id] || {}, hid = state.hiddenMods[g.id] || {};
   return {
     game: g.name, connected: TRAINER.connected, message: TRAINER.message, paused: !!state.paused[g.id], count: activeCount(g),
     profile: activeProf(g).name, profiles: profilesOf(g).map(p => p.name), start: sessionStart, menuKey: comboLabel(state.menuKey),
-    cats: g.cats.map(c => ({
+    cats: catsOf(g).map(c => ({
       name: c.name,
-      mods: c.mods.map(m => {
+      mods: c.mods.filter(m => !hid[m.id]).map(m => {
         const v = valueOf(g, m), k = keysOf(g, m);
         return {
-          id: m.id, name: m.name, type: m.type, info: m.info || '', live: m.live, pinned: !!pins[m.id], on: isActive(g, m),
+          id: m.id, name: modName(g, m), type: m.type, info: m.info || '', live: m.live, pinned: !!pins[m.id], on: isActive(g, m),
           value: m.type === 'slider' ? v : null, shown: m.type === 'slider' ? fmt(m, v) : '', min: m.min, max: m.max, step: m.step,
           keys: [k.up && (m.type === 'slider' ? '↑ ' : '') + comboLabel(k.up), k.down && '↓ ' + comboLabel(k.down)].filter(Boolean),
         };
       }),
-    })),
+    })).filter(c => c.mods.length),
   };
 }
 let lastMenu = '';
@@ -86,7 +86,7 @@ async function syncHud(force) {
   if (state.hudStats) [cpu, ram] = await invoke('system_stats').catch(() => [null, null]);
   overlaySend({
     kind: 'hud',
-    data: { game: g.name, count: activeCount(g), mods: modsOf(g).filter(m => isActive(g, m)).map(m => m.type === 'slider' ? `${m.name} ${fmt(m, valueOf(g, m))}` : m.name),
+    data: { game: g.name, count: activeCount(g), mods: modsOf(g).filter(m => isActive(g, m)).map(m => m.type === 'slider' ? `${modName(g, m)} ${fmt(m, valueOf(g, m))}` : modName(g, m)),
       start: sessionStart, connected: TRAINER.connected && !state.paused[g.id], cpu, ram },
   });
 }

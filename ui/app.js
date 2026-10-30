@@ -58,7 +58,7 @@ const DEFAULTS = {
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
   showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, sounds: true, overlay: true, paused: {},
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
-  pinned: {}, sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, dcPopups: 'always', fgFriendly: false, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
+  pinned: {}, catOrder: {}, hiddenMods: {}, modNames: {}, rowSize: 'comfortable', sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, dcPopups: 'always', fgFriendly: false, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
 };
 const CORNERS = [['top-left', 'Top left'], ['top', 'Top'], ['top-right', 'Top right'], ['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right']];
 const SHEET = '__sheet'; // capture.mid while rebinding the cheat sheet key
@@ -185,6 +185,15 @@ const fmt = (m, v) => Number.isInteger(m.step) ? String(v) : v.toFixed(1);
 const pct = (m, v) => ((v - m.min) / (m.max - m.min) * 100).toFixed(1) + '%';
 const activeCount = g => modsOf(g).filter(m => isActive(g, m)).length;
 const query = () => $('search').value.trim().toLowerCase();
+// A mod's short name if the user gave it one (see gamelook.js).
+const modName = (g, m) => state.modNames[g.id]?.[m.id] || m.name;
+// A game's categories in the user's order (new ones from an update go last).
+function catsOf(g) {
+  const order = state.catOrder[g.id];
+  if (!order) return g.cats;
+  const at = c => { const i = order.indexOf(c.name); return i < 0 ? 1e9 : i; };
+  return [...g.cats].sort((a, b) => at(a) - at(b));
+}
 
 /* ---------- Key bindings ---------- */
 function keysOf(g, m) {
@@ -304,7 +313,7 @@ function renderSide() {
 
   const q = query();
   const pick = src => {
-    let list = src.filter(x => !q || x.name.toLowerCase().includes(q) || modsOf(x).some(m => m.name.toLowerCase().includes(q)));
+    let list = src.filter(x => !q || x.name.toLowerCase().includes(q) || modsOf(x).some(m => modName(x, m).toLowerCase().includes(q) || m.name.toLowerCase().includes(q)));
     return state.sortAZ ? [...list].sort((a, b) => a.name.localeCompare(b.name)) : list;
   };
   const row = (x, plain) => {
@@ -412,7 +421,7 @@ function logLine(g, msg) {
 function setMod(g, m, v, how) {
   // A rejected change must also snap the control back, or it shows a value that was never saved.
   const reject = (a, b) => { toast(a, b); if (state.view === 'game') renderGame(); };
-  if (!m.live) return reject(m.name, 'coming soon');
+  if (!m.live) return reject(modName(g, m), 'coming soon');
   if (!isLive(g)) return reject(`Start ${g.name} first`, '');
   if (state.paused[g.id]) return reject('Mods are paused', 'press ⏻ to resume');
   let shown;
@@ -424,11 +433,11 @@ function setMod(g, m, v, how) {
     if (v === valueOf(g, m)) return;
     vals(g)[m.id] = v; shown = v ? 'On' : 'Off';
   } else { shown = 'applied'; invoke?.('trainer_action', { id: m.id }); }
-  logLine(g, `${m.name} → ${shown}${how ? ' (' + how + ')' : ''}`);
+  logLine(g, `${modName(g, m)} → ${shown}${how ? ' (' + how + ')' : ''}`);
   save();
   syncTrainer();
-  toast(m.name, shown);
-  feedback(g, m.name, shown, m.type === 'toggle' ? !!v : true, !!how, m.type === 'slider' ? (v - m.min) / (m.max - m.min) * 100 : null);
+  toast(modName(g, m), shown);
+  feedback(g, modName(g, m), shown, m.type === 'toggle' ? !!v : true, !!how, m.type === 'slider' ? (v - m.min) / (m.max - m.min) * 100 : null);
   renderSide();
   if (state.view === 'game' && state.game === g.id) renderGame();
   if (state.mini) renderMini();

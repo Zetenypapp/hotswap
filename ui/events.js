@@ -32,7 +32,7 @@ document.addEventListener('click', e => {
     const g = game(), p = (state.pinned[g.id] ||= {});
     if (p[d.pin]) delete p[d.pin]; else p[d.pin] = true;
     save(); renderMods(); if (state.mini) renderMini();
-    toast(findMod(d.pin).name, p[d.pin] ? 'pinned' : 'unpinned');
+    toast(modName(g, findMod(d.pin)), p[d.pin] ? 'pinned' : 'unpinned');
   }
   else if (d.ocorner) { state.overlayCorner = d.ocorner; save(); renderSettings(); overlaySend({ title: 'Overlay', value: 'Here', on: true, game: 'Mod changes show up here' }); }
   else if (d.hcorner) { state.hudCorner = d.hcorner; save(); renderSettings(); syncHud(true); }

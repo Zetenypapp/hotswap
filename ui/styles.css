@@ -170,6 +170,32 @@ img { display: block; }
 .cat-head .chev { margin-left: auto; color: var(--dim); transition: transform .2s var(--ease); }
 .cat.closed .chev { transform: rotate(-90deg); }
 .cat.closed .rows { display: none; }
+.cat-bar { display: flex; align-items: center; padding-right: 12px; }
+.cat-bar .cat-head { flex: 1; min-width: 0; }
+.gl-move { display: flex; gap: 2px; }
+.gl-move button { width: 30px; height: 30px; border-radius: 9px; font-weight: 800; }
+.gl-move button[disabled] { opacity: .3; }
+.gl-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-radius: 14px; background: var(--surface); backdrop-filter: blur(18px); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+.gl-bar .txt { display: flex; flex-direction: column; gap: 2px; min-width: 220px; flex: 1; }
+.gl-bar .txt span { color: var(--muted); font-size: 13px; font-weight: 500; }
+.gl-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gl-tools .chips { padding: 0; margin-right: 6px; }
+.gl-row .btn { justify-self: end; }
+.gl-name { height: 32px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--well); color: var(--fg); font-weight: 600; outline: none; min-width: 0; }
+.gl-name:focus { box-shadow: inset 0 0 0 1px var(--glass-3); }
+.gl-row.gl-off .label { opacity: .45; text-decoration: line-through; }
+.gl-hidden { align-self: center; border: 0; background: transparent; color: var(--dim); font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 9px; }
+.gl-hidden:hover { color: var(--fg); background: var(--glass); }
+.label .mname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mods.compact { gap: 8px; }
+.mods.compact .cat { padding: 2px 0; border-radius: 14px; }
+.mods.compact .cat-head { padding: 7px 18px; font-size: 14px; }
+.mods.compact .row { padding-top: 2px; padding-bottom: 2px; gap: 12px; font-size: 13px; }
+.mods.compact .seg { padding: 2px; }
+.mods.compact .seg span { padding: 3px 14px; font-size: 12px; }
+.mods.compact .slider input[type=number], .mods.compact .slider input[type=range], .mods.compact .apply, .mods.compact .gl-name { height: 26px; }
+.mods.compact .slider input[type=range]::-webkit-slider-thumb { height: 20px; }
+.mods.compact .key { height: 24px; }
 .row { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(0, 230px) 170px; align-items: center; gap: 16px; padding: 7px 18px 7px 22px; border-radius: 12px; margin: 0 6px; transition: background .15s; }
 .row:hover { background: rgba(255, 255, 255, .03); }
 .label { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--soft); }

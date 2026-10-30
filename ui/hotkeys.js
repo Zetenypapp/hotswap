@@ -54,7 +54,7 @@ function finishCapture(combo) {
       const g = findGame(c.gid), m = modsOf(g).find(x => x.id === c.mid);
       const used = combo && whoUses(g, combo, `${m.id}/${c.dir}`);
       ((state.binds[g.id] ||= {})[m.id] ||= {})[c.dir] = combo;
-      toast(m.name, combo ? comboLabel(combo) : 'unbound');
+      toast(modName(g, m), combo ? comboLabel(combo) : 'unbound');
       if (used) setTimeout(() => toast(`${comboLabel(combo)} is also used by`, used), 900);
     }
     save();

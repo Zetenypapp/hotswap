@@ -33,10 +33,11 @@ function showSheet(on) {
   const g = findGame(runningId());
   if (!invoke || !state.overlay || !g || !modsOf(g).length) return;
   const pins = state.pinned[g.id] || {};
-  const items = modsOf(g).filter(m => m.live).sort((a, b) => !!pins[b.id] - !!pins[a.id]).map(m => {
+  const hid = state.hiddenMods[g.id] || {};
+  const items = modsOf(g).filter(m => m.live && !hid[m.id]).sort((a, b) => !!pins[b.id] - !!pins[a.id]).map(m => {
     const k = keysOf(g, m);
     return {
-      name: m.name, on: isActive(g, m),
+      name: modName(g, m), on: isActive(g, m),
       value: m.type === 'toggle' ? (valueOf(g, m) ? 'On' : 'Off') : m.type === 'slider' ? fmt(m, valueOf(g, m)) : '',
       keys: [k.up && (m.type === 'slider' ? '↑ ' : '') + comboLabel(k.up), k.down && '↓ ' + comboLabel(k.down)].filter(Boolean),
     };
@@ -146,7 +147,8 @@ function renderMini() {
   if (!g) return;
   const live = isLive(g), paused = live && state.paused[g.id], locked = !live || paused;
   const pins = state.pinned[g.id] || {};
-  const mods = modsOf(g).filter(m => m.live).sort((a, b) => !!pins[b.id] - !!pins[a.id]);
+  const hid = state.hiddenMods[g.id] || {};
+  const mods = modsOf(g).filter(m => m.live && !hid[m.id]).sort((a, b) => !!pins[b.id] - !!pins[a.id]);
   const row = m => {
     const v = valueOf(g, m), dis = locked ? ' disabled' : '', k = keysOf(g, m);
     const ctl = m.type === 'toggle'
@@ -154,7 +156,7 @@ function renderMini() {
       : m.type === 'slider'
         ? `<div class="slider sm"><input type="number" data-num="${m.id}" min="${m.min}" max="${m.max}" step="${m.step}" value="${fmt(m, v)}" aria-label="${esc(m.name)}"${dis}></div>`
         : `<button class="apply sm" data-act="${m.id}"${dis}>Apply</button>`;
-    return `<div class="mrow${isActive(g, m) ? ' active' : ''}"><div class="mlabel"><span>${pins[m.id] ? '<i class="mpin"></i>' : ''}${esc(m.name)}${modDot(g, m)}</span><small>${esc([k.up && comboLabel(k.up), k.down && comboLabel(k.down)].filter(Boolean).join(' / ') || 'No hotkey')}</small></div>${ctl}</div>`;
+    return `<div class="mrow${isActive(g, m) ? ' active' : ''}"><div class="mlabel"><span>${pins[m.id] ? '<i class="mpin"></i>' : ''}${esc(modName(g, m))}${modDot(g, m)}</span><small>${esc([k.up && comboLabel(k.up), k.down && comboLabel(k.down)].filter(Boolean).join(' / ') || 'No hotkey')}</small></div>${ctl}</div>`;
   };
   $('mini').innerHTML = `<div class="mhead" data-tauri-drag-region>${tile(g, 'md')}<div class="mtitle" data-tauri-drag-region><b data-tauri-drag-region>${esc(g.name)}</b>
       <span class="${live && TRAINER.connected ? 'ok' : ''}" data-tauri-drag-region>${!live ? 'Not running' : paused ? 'Mods paused' : invoke && !TRAINER.connected ? esc(TRAINER.message || 'Connecting…') : `${activeCount(g)} on`}</span></div>
