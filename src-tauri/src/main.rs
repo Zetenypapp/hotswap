@@ -27,6 +27,7 @@ mod sn1;
 mod sn1map;
 mod sn2;
 mod sources;
+mod stats;
 mod steam;
 mod trainer;
 mod spacedock;
@@ -294,17 +295,15 @@ fn migrate_old_data(app: &tauri::App) {
 }
 
 /// CPU and memory use in percent, for the overlay HUD.
-#[derive(Default)]
-struct Stats(Mutex<Option<sysinfo::System>>);
-
 #[tauri::command]
-fn system_stats(stats: State<Stats>) -> (f32, f32) {
-    let mut s = stats.0.lock().unwrap();
-    let sys = s.get_or_insert_with(sysinfo::System::new);
-    sys.refresh_cpu_usage();
-    sys.refresh_memory();
-    let ram = if sys.total_memory() > 0 { sys.used_memory() as f32 / sys.total_memory() as f32 * 100.0 } else { 0.0 };
-    (sys.global_cpu_usage(), ram)
+fn system_stats(stats: State<stats::Stats>) -> (f32, f32) {
+    stats.basic()
+}
+
+/// Everything the overlay's System tab graphs (see stats.rs).
+#[tauri::command]
+fn system_stats_full(stats: State<stats::Stats>) -> stats::Snapshot {
+    stats.read()
 }
 
 #[derive(serde::Serialize)]
@@ -466,6 +465,14 @@ fn main() {
             std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", format!("{args} {LEAN}").trim());
             LOW_MEMORY.store(true, Ordering::Relaxed);
         }
+    }
+    // Dev aid: `hotswap --stats` prints two readings of the System tab's stats, a second apart.
+    if std::env::args().any(|a| a == "--stats") {
+        let st = stats::Stats::default();
+        let _ = st.read();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        println!("{}", serde_json::to_string(&st.read()).unwrap_or_default());
+        return;
     }
     // Dev aid: `hotswap --export-logs [--discord]` writes the logs zip and prints where.
     if std::env::args().any(|a| a == "--export-logs") {
@@ -983,7 +990,7 @@ fn main() {
         .manage(trainer::Trainer::default())
         .manage(CloseToTray(AtomicBool::new(true)))
         .manage(Mini::default())
-        .manage(Stats::default())
+        .manage(stats::Stats::default())
         .manage(discord::Discord::default())
         .manage(voice::Voice::default())
         .plugin(tauri_plugin_opener::init())
@@ -1033,7 +1040,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            load_data, save_data, scan_library, running_game, launch_game, set_hotkeys, fetch_home, fetch_source, log_ui, export_logs, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart, cmd_maps::map_show, cmd_maps::map_hide, cmd_maps::map_world, cmd_maps::map_background, check_update, install_update, app_version, overlay::overlay_notify, overlay::overlay_close, overlay::overlay_menu, overlay::overlay_input, overlay::overlay_ready, cmd_mods::mods_release, cmd_mods::ts_search, cmd_mods::ts_list, cmd_mods::ts_install, cmd_mods::ts_install_file, cmd_mods::ts_set_enabled, cmd_mods::ts_remove, cmd_discord::voice_start, cmd_discord::voice_options, cmd_discord::voice_stop, cmd_discord::voice_state, cmd_discord::voice_send, system_stats, cmd_discord::discord_presence, overlay::radar_show, set_mini, cmd_mods::fmods_list, cmd_mods::fmods_set_enabled, cmd_mods::fmods_remove, cmd_mods::fmods_install, cmd_mods::fmods_downloads, cmd_mods::fmods_pick, cmd_mods::nexus_search, cmd_mods::mods_state, cmd_mods::mods_search, cmd_mods::mods_install, cmd_mods::mods_uninstall, cmd_mods::mods_set_enabled, cmd_mods::mods_updates, cmd_maps::map_player, cmd_maps::map_teleport, cmd_maps::map_pins_load, cmd_maps::map_pins_save
+            load_data, save_data, scan_library, running_game, launch_game, set_hotkeys, fetch_home, fetch_source, log_ui, export_logs, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart, cmd_maps::map_show, cmd_maps::map_hide, cmd_maps::map_world, cmd_maps::map_background, check_update, install_update, app_version, overlay::overlay_notify, overlay::overlay_close, overlay::overlay_menu, overlay::overlay_input, overlay::overlay_ready, cmd_mods::mods_release, cmd_mods::ts_search, cmd_mods::ts_list, cmd_mods::ts_install, cmd_mods::ts_install_file, cmd_mods::ts_set_enabled, cmd_mods::ts_remove, cmd_discord::voice_start, cmd_discord::voice_options, cmd_discord::voice_stop, cmd_discord::voice_state, cmd_discord::voice_send, system_stats, system_stats_full, cmd_discord::discord_presence, overlay::radar_show, set_mini, cmd_mods::fmods_list, cmd_mods::fmods_set_enabled, cmd_mods::fmods_remove, cmd_mods::fmods_install, cmd_mods::fmods_downloads, cmd_mods::fmods_pick, cmd_mods::nexus_search, cmd_mods::mods_state, cmd_mods::mods_search, cmd_mods::mods_install, cmd_mods::mods_uninstall, cmd_mods::mods_set_enabled, cmd_mods::mods_updates, cmd_maps::map_player, cmd_maps::map_teleport, cmd_maps::map_pins_load, cmd_maps::map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running HotSwap");

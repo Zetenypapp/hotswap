@@ -76,6 +76,7 @@
     "allow-voice-state",
     "allow-voice-send",
     "allow-system-stats",
+    "allow-system-stats-full",
     "allow-discord-presence"
   ]
 }
