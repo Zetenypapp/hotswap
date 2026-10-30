@@ -614,6 +614,8 @@ async fn overlay_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String>
 }
 
 static OVERLAY_READY: AtomicBool = AtomicBool::new(false);
+/// Low memory mode is on (read from the settings at startup).
+static LOW_MEMORY: AtomicBool = AtomicBool::new(false);
 
 /// Closes the overlay window after two minutes without notes, menu or HUD, freeing its memory;
 /// the next note or menu opens it again.
@@ -621,7 +623,7 @@ fn overlay_idle_close(app: &AppHandle) {
     let id = OVERLAY_GEN.fetch_add(1, Ordering::Relaxed) + 1;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        tokio_sleep(120_000).await;
+        tokio_sleep(if LOW_MEMORY.load(Ordering::Relaxed) { 20_000 } else { 120_000 }).await;
         if OVERLAY_GEN.load(Ordering::Relaxed) == id && !OVERLAY_KEEP.load(Ordering::Relaxed) && !OVERLAY_MENU.load(Ordering::Relaxed) {
             if let Some(win) = app.get_webview_window("overlay") {
                 OVERLAY_READY.store(false, Ordering::Relaxed);
@@ -903,7 +905,7 @@ fn webview_memory(win: &tauri::WebviewWindow, low: bool) {
 
 fn show_main(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
-        webview_memory(&win, false);
+        webview_memory(&win, LOW_MEMORY.load(Ordering::Relaxed));
         let _ = win.show();
         let _ = win.unminimize();
         let _ = win.set_focus();
@@ -967,13 +969,21 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 }
 
 fn main() {
-    // Low memory mode (a setting): the interface is drawn without graphics acceleration, which
-    // drops WebView2's GPU process from about 250 MB to about 20 MB. Read before any webview starts.
+    // Low memory mode (a setting), read before any webview starts. WebView2 runs leaner:
+    // - no graphics acceleration, with the GPU and network work inside the browser process
+    //   instead of their own processes;
+    // - no spare renderer kept warm, no extensions, no background downloads;
+    // - a smaller JavaScript heap.
+    // Together that's about 150 MB instead of 400+ (see also webview_memory and the UI).
     if let Ok(appdata) = std::env::var("APPDATA") {
         let state = fs::read_to_string(std::path::Path::new(&appdata).join("app.hotswap.desktop").join("state.json")).unwrap_or_default();
         if serde_json::from_str::<serde_json::Value>(state.trim_start_matches('\u{feff}')).ok().and_then(|v| v["lowMemory"].as_bool()) == Some(true) {
             let args = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
-            std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", format!("{args} --disable-gpu --disable-gpu-compositing").trim());
+            const LEAN: &str = "--disable-gpu --disable-gpu-compositing --in-process-gpu --enable-features=NetworkServiceInProcess2 \
+                --disable-features=SpareRendererForSitePerProcess,msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-site-isolation-trials \
+                --renderer-process-limit=1 --disable-background-networking --disable-component-update --disable-extensions --js-flags=--max-old-space-size=64";
+            std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", format!("{args} {LEAN}").trim());
+            LOW_MEMORY.store(true, Ordering::Relaxed);
         }
     }
     // Dev aid: `tinker --scan` prints what the library scanner finds and exits.
@@ -1520,6 +1530,12 @@ fn main() {
             app.state::<trainer::Trainer>().start(app.handle().clone(), move |id| watch.pid_of(id));
             build_tray(app)?;
             fit_window(app, !start_hidden);
+            // Low memory mode keeps WebView2's memory target low all the time, not only in the tray.
+            if LOW_MEMORY.load(Ordering::Relaxed) {
+                if let Some(w) = app.get_webview_window("main") {
+                    webview_memory(&w, true);
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -548,7 +548,7 @@ function renderSettings() {
       <div class="set-row"><div class="txt"><b>Show in Discord</b><span>Your Discord status shows the game you're playing with HotSwap and how many mods are on. Needs the Discord app running on this PC.${DISCORD_ERR ? ` <i>${esc(DISCORD_ERR)}.</i>` : ''}</span></div>${sw('setDiscord', state.discord)}</div>
     </div>` : ''}
     ${invoke ? `<div class="set-group"><h2>Startup and tray</h2>
-      ${invoke ? `<div class="set-row"><div class="txt"><b>Low memory mode</b><span>Draws HotSwap without graphics acceleration, so it uses about 250 MB less memory. Animations cost a little more CPU. Takes effect after restarting HotSwap.</span></div>${sw('setLowMem', state.lowMemory)}</div>` : ''}
+      ${invoke ? `<div class="set-row"><div class="txt"><b>Low memory mode</b><span>Runs HotSwap as lean as it can: no graphics acceleration, fewer background processes, no Maps or Mods pages, and the overlay closes soon after use. About 300 MB less memory. Animations cost a little more CPU. Takes effect after restarting HotSwap.</span></div>${sw('setLowMem', state.lowMemory)}</div>` : ''}
       <div class="set-row"><div class="txt"><b>Start with Windows</b><span>HotSwap opens quietly in the tray when you sign in, so hotkeys are ready when you start a game.</span></div>${sw('setAutostart', AUTOSTART)}</div>
       <div class="set-row"><div class="txt"><b>Close to tray</b><span>The close button hides HotSwap in the tray instead of quitting. Quit from the tray icon's menu.</span></div>${sw('setTray', state.closeToTray)}</div>
     </div>` : ''}
@@ -737,6 +737,9 @@ function applyAccent() {
 
 function render() {
   applyAccent();
+  // Low memory mode: no Maps or Mods pages at all (they're the heaviest).
+  if (state.lowMemory && (state.view === 'maps' || state.view === 'mods')) state.view = 'library';
+  document.querySelectorAll('.mainnav [data-view="maps"], .mainnav [data-view="mods"]').forEach(b => b.hidden = !!state.lowMemory);
   const views = { home: 'homeView', library: 'libView', maps: 'mapsView', mods: 'modsView', overlay: 'ovView', settings: 'setView', game: 'gameView' };
   if (state.view === 'game' && !game()) state.view = 'home';
   Object.entries(views).forEach(([v, id]) => $(id).hidden = v !== state.view);
@@ -1589,7 +1592,10 @@ const icon = (k, s = 16) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"
     invoke('set_close_to_tray', { enabled: state.closeToTray }).catch(console.error);
     AUTOSTART = await invoke('get_autostart').catch(() => false);
     VERSION = await invoke('app_version').catch(() => '');
+    if (state.lowMemory && state.view === 'home') { state.view = 'library'; render(); }
     if (state.autoUpdate) setTimeout(() => checkUpdate(false), 4000);
+    // And every 30 minutes after that.
+    setInterval(() => { if (state.autoUpdate) checkUpdate(false); }, 30 * 60 * 1000);
     // First start after an update: show what changed.
     if (VERSION && state.lastVersion && state.lastVersion !== VERSION) setTimeout(() => showWhatsNew(false), 800);
     if (VERSION) { state.lastVersion = VERSION; save(); }
