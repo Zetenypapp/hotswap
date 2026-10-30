@@ -294,23 +294,40 @@ struct UpdateInfo {
 /// A newer HotSwap release on GitHub, if there is one (signed; checked against the built-in key).
 #[tauri::command]
 async fn check_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
+    let update = updater(&app)?.check().await.map_err(|e| e.to_string())?;
+    Ok(update.map(|u| UpdateInfo { version: shown_version(&u.version), notes: u.body.clone().unwrap_or_default() }))
+}
+
+/// HotSwap versions can have a fourth number (0.3.5.1). Versions must be semver, so it's written
+/// as build metadata (0.3.5+1), which semver itself ignores when comparing: this compares it too.
+fn version_key(v: &semver::Version) -> (u64, u64, u64, u64) {
+    (v.major, v.minor, v.patch, v.build.as_str().parse().unwrap_or(0))
+}
+
+/// How a version is shown: 0.3.5+1 as 0.3.5.1.
+fn shown_version(v: &str) -> String {
+    v.replacen('+', ".", 1)
+}
+
+fn updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
     use tauri_plugin_updater::UpdaterExt;
-    let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
-    Ok(update.map(|u| UpdateInfo { version: u.version.clone(), notes: u.body.clone().unwrap_or_default() }))
+    app.updater_builder()
+        .version_comparator(|current, release| version_key(&release.version) > version_key(&current))
+        .build()
+        .map_err(|e| e.to_string())
 }
 
 /// Downloads and installs the newest release, then restarts into it.
 #[tauri::command]
 async fn install_update(app: AppHandle) -> Result<(), String> {
-    use tauri_plugin_updater::UpdaterExt;
-    let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?.ok_or("Already up to date")?;
+    let update = updater(&app)?.check().await.map_err(|e| e.to_string())?.ok_or("Already up to date")?;
     update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
     app.restart();
 }
 
 #[tauri::command]
 fn app_version(app: AppHandle) -> String {
-    app.package_info().version.to_string()
+    shown_version(&app.package_info().version.to_string())
 }
 
 #[tauri::command]
