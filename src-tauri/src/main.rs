@@ -1,3 +1,6 @@
+//! HotSwap's engine: starts the app (settings, main window, tray, hotkeys, library, launching
+//! games, updates) and lists every command the interface can call. See ARCHITECTURE.md.
+
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod appinfo;

@@ -152,6 +152,23 @@ cargo run
 
 Dev helpers: `hotswap.exe --scan` prints your detected library, `--home` prints the live Home data, `--trainer-peek` and `--machine-peek` inspect a running Satisfactory.
 
+## 🔧 Modifying HotSwap
+
+Want to change something? **[ARCHITECTURE.md](ARCHITECTURE.md)** lists every file with a one-line description of what it does. The short version:
+
+**Safe to change:**
+- 🎨 **Looks and text:** `ui/styles.css`, the page files in `ui/` and the overlay in `ui/overlay.html`. The worst case is a page that looks wrong; reload it with Ctrl+R in the app (it's a web page).
+- 📋 **Mod names, descriptions and default hotkeys:** `ui/data.js`. A mod only shows as working when its ID is in that game's `LIVE` list, and the ID must match the one its game file uses.
+
+**Change with care:**
+- 🎮 **Game support** (`ksp.rs`, `sn1.rs`, `sn2.rs`, `repo.rs`, `extra.rs`, `mono.rs`, `ue/`): these write into a running game's memory. A wrong class, field or value can crash the game or put a bad value into your save, so test on a throwaway save and keep backups. Game updates can rename things; HotSwap looks classes and fields up by name, so a renamed one just stops that mod rather than breaking the game.
+- 🧩 **Mod installers** (`modloader.rs`, `modfiles.rs`, `thunderstore.rs`, `spacedock.rs`): these add and delete files in your game folders. A mistake can remove mod files or leave a game that won't start until you verify its files in Steam.
+- ⌨️ **New engine commands:** a new `#[tauri::command]` has to be added in three places, or the interface's call is silently refused: the `generate_handler!` list in `main.rs`, `src-tauri/build.rs`, and `src-tauri/capabilities/default.json`.
+
+**Don't:**
+- 🛡️ Add mods for games with anti-cheat, or for multiplayer advantages. HotSwap is single-player only and deliberately refuses games with VAC, Easy Anti-Cheat, BattlEye and similar; that check lives in the library code and must stay.
+- 🔑 Ship builds signed with your own updater key under the HotSwap name: installed copies only accept updates signed with the project's key.
+
 ## ⚠️ Fair play
 
 HotSwap is for **single-player and private games only**. It refuses to mod anything with anti-cheat, and you shouldn't use it to get an edge over other players.

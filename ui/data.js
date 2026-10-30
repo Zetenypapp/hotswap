@@ -1,4 +1,4 @@
-// Mod catalog and Home feed. Mods are UI-only for now: nothing here touches a game.
+// Every game's mod list (names, descriptions, hotkeys), which mods work (LIVE), and the Home feed.
 
 const T = (name, info) => ({ type: 'toggle', name, info });
 const S = (name, min, max, step, def, info) => ({ type: 'slider', name, min, max, step, def, info });
