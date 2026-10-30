@@ -39,13 +39,7 @@ struct Status {
 
 /// Appends a line to %APPDATA%\app.hotswap.desktop\trainer.log (for debugging).
 pub fn log(msg: &str) {
-    use std::io::Write;
-    let Ok(appdata) = std::env::var("APPDATA") else { return };
-    let path = std::path::Path::new(&appdata).join("app.hotswap.desktop").join("trainer.log");
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-        let _ = writeln!(f, "{t} {msg}");
-    }
+    crate::logs::write("game", msg);
 }
 
 impl Trainer {

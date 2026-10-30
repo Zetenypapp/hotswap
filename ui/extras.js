@@ -44,6 +44,30 @@ function showSheet(on) {
   overlaySend({ kind: 'sheet', show: on, items, game: g.name });
 }
 
+/* ---------- Export logs ---------- */
+// A summary of this setup for bug reports: version, Windows, the settings that change behaviour.
+function logSummary() {
+  const r = RUNNING && findGame(RUNNING);
+  return [
+    `HotSwap ${VERSION || '?'}`,
+    `Windows: ${navigator.userAgent}`,
+    `Games: ${LIB.length} in the library, running: ${r ? `${r.name} (${r.id})` : 'none'}, injected: ${INJECTED || 'no'}`,
+    `Trainer: ${TRAINER.connected ? 'connected' : 'not connected'} ${TRAINER.message || ''}`,
+    `Low memory mode: ${!!state.lowMemory}, overlay: ${!!state.overlay}, Discord overlay: ${!!state.dcOverlay}, Discord voice: ${typeof dcVoiceOn === 'function' && dcVoiceOn()}`,
+    `Hotkeys: ${!!state.hotkeys}, menu key: ${state.menuKey || 'none'}, auto updates: ${!!state.autoUpdate}`,
+  ].join('\n');
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-exportlogs]');
+  if (!b || !invoke) return;
+  b.disabled = true;
+  try {
+    const path = await invoke('export_logs', { small: b.dataset.exportlogs === 'small', summary: logSummary() });
+    toast('Logs exported', path.split(/[\\/]/).pop());
+  } catch (err) { toast("Couldn't export logs", String(err)); }
+  b.disabled = false;
+});
+
 /* ---------- Share codes: a profile as a short string ---------- */
 function shareCode(g) {
   const p = activeProf(g);

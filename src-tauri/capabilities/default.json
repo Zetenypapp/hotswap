@@ -24,6 +24,8 @@
     "allow-set-hotkeys",
     "allow-fetch-home",
     "allow-fetch-source",
+    "allow-log-ui",
+    "allow-export-logs",
     "allow-close-game",
     "allow-trainer-set",
     "allow-trainer-action",

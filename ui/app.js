@@ -1,7 +1,20 @@
 // HotSwap UI. Runs inside the Tauri window; also opens in a plain browser with demo data for quick styling work.
 
 const tauri = window.__TAURI__;
-const invoke = tauri?.core?.invoke;
+const rawInvoke = tauri?.core?.invoke;
+// The log (hotswap.log, see logs.rs): interface errors and every failed engine command go there.
+// The same line is written at most once a minute, so a repeating failure can't flood it.
+const logSeen = new Map();
+function logUi(msg) {
+  if (!rawInvoke) return;
+  const now = Date.now();
+  if (now - (logSeen.get(msg) || 0) < 60000) return;
+  logSeen.set(msg, now);
+  rawInvoke('log_ui', { msg: String(msg) }).catch(() => {});
+}
+const invoke = rawInvoke && ((cmd, args) => rawInvoke(cmd, args).catch(e => { if (cmd !== 'log_ui') logUi(`${cmd} failed: ${e}`); throw e; }));
+addEventListener('error', e => logUi(`error ${(e.filename || '').split('/').pop()}:${e.lineno} ${e.message}`));
+addEventListener('unhandledrejection', e => logUi(`unhandled: ${e.reason?.message || e.reason}`));
 const listen = tauri?.event?.listen;
 const fileSrc = p => (p && tauri?.core?.convertFileSrc ? tauri.core.convertFileSrc(p) : null);
 const appWin = tauri?.window?.getCurrentWindow?.();
@@ -391,6 +404,7 @@ function toast(name, val) {
   toastTimer = setTimeout(() => $('toast').classList.remove('show'), 1800);
 }
 function logLine(g, msg) {
+  logUi(`${g.name}: ${msg}`);
   state.log.push({ g: g.id, t: clock(), msg });
   state.log = state.log.slice(-150);
 }

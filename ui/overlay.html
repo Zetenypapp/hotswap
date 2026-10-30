@@ -167,6 +167,8 @@
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const $ = id => document.getElementById(id);
   const send = input => invoke('overlay_input', { input }).catch(() => {});
+  // Overlay errors go to HotSwap's log too.
+  addEventListener('error', e => invoke('log_ui', { msg: `overlay error :${e.lineno} ${e.message}` }).catch(() => {}));
   const fmtTime = ms => { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60; return h ? `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${m}:${String(s % 60).padStart(2, '0')}`; };
   const clock = () => new Date().toTimeString().slice(0, 5);
   const logo = size => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true" style="flex:none"><rect x="1" y="1" width="22" height="22" rx="7" fill="var(--c)"/><path d="M6.5 9.5h10l-3-3M17.5 14.5h-10l3 3" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;

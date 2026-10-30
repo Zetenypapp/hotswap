@@ -141,7 +141,7 @@ fn connect() -> Option<Ws> {
 }
 
 fn set_status(state: &Mutex<State>, status: &str, message: &str) {
-    crate::trainer::log(&format!("voice: {status} {message}"));
+    crate::logs::write("discord", &format!("voice: {status} {message}"));
     let mut s = state.lock().unwrap();
     s.status = status.into();
     s.message = message.into();
@@ -234,7 +234,7 @@ impl Session {
         let purpose = v["nonce"].as_str().and_then(|n| self.pending.remove(n)).unwrap_or("");
         if evt == "ERROR" {
             let msg = data["message"].as_str().unwrap_or("Discord said no").to_string();
-            crate::trainer::log(&format!("voice: {cmd} refused: {msg}"));
+            crate::logs::write("discord", &format!("voice: {cmd} refused: {msg}"));
             return match purpose {
                 "auth" => {
                     // Saved token expired or was revoked: ask again.
