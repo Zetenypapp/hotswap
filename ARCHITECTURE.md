@@ -15,6 +15,7 @@ A map of every file and what it does. HotSwap has two halves:
 | `overlay.rs` | The in-game overlay window (notes, cheat sheet, HUD and menu) and the radar window; hands focus back to the game and closes itself when idle. |
 | `watch.rs` | Notices which installed game is running, and tells the interface when that changes. |
 | `trainer.rs` | Runs the mods: attaches to the running game and keeps applying the values you've set. |
+| `logs.rs` | HotSwap's log file (rotates at 5 MB), crash logging, and Export logs (full, or under 5 MB for Discord). |
 
 ### Commands for the pages
 
@@ -34,6 +35,7 @@ A map of every file and what it does. HotSwap has two halves:
 | `epic.rs` | Finds installed Epic Games Store games. |
 | `gog.rs` | Finds installed GOG games. |
 | `home.rs` | Fetches the Home page's news, deals, top sellers and new releases. |
+| `sources.rs` | Custom Home panel sources: recognises feeds, sites with feeds, JSON lists and websites. |
 
 ### Game support
 
@@ -90,14 +92,15 @@ A map of every file and what it does. HotSwap has two halves:
 | `index.html` | The main window's layout: sidebar, top bar and the page containers. |
 | `styles.css` | How the main window looks. |
 | `data.js` | Every game's mod list (names, descriptions, hotkeys) and which mods work. |
-| `app.js` | The core: saved settings, the library, profiles, key bindings and changing mods. |
+| `app.js` | The core: saved settings, the library, profiles, key bindings, changing mods, and sending errors to the log. |
+| `home.js` | The Home page: its panels, customise mode (move, resize, hide, add) and custom sources. |
 | `pages.js` | The Maps, Settings and game pages, and the function that draws whichever page is open. |
 | `ingame.js` | Sends mod changes, the menu and the HUD to the overlay. |
 | `discord.js` | The Overlay page, Discord voice popups, who's talking, and your Discord status. |
 | `session.js` | Sounds, the Play button, Inject and the running game's session. |
 | `hotkeys.js` | Reacts to hotkey presses and records new key bindings. |
 | `updates.js` | Checks for and installs HotSwap updates. |
-| `extras.js` | Status dots, the cheat sheet, share codes, What's new and mini mode. |
+| `extras.js` | Status dots, the cheat sheet, Export logs, share codes, What's new and mini mode. |
 | `palette.js` | The Ctrl+K command palette. |
 | `events.js` | Every click, key and form input in the main window. |
 | `icons.js` | Small icons used across the pages. |
