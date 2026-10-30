@@ -17,6 +17,17 @@ const STREAMKIT: &str = "207646673902501888";
 
 /// Whether Discord notifications show as overlay toasts (a setting).
 pub static NOTES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+/// What notification toasts reveal: 0 everything, 1 only the kind ("Private message"),
+/// 2 only that a message came.
+pub static PRIVACY: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+/// Whether people joining or leaving your call pop up.
+pub static JOINS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+#[derive(Clone, Default, Serialize)]
+pub struct Device {
+    id: String,
+    name: String,
+}
 
 #[derive(Clone, Default, Serialize)]
 pub struct Member {
@@ -54,6 +65,13 @@ pub struct State {
     input_volume: f64,
     output_volume: f64,
     noise: bool,
+    /// Microphones and outputs Discord offers, and the ones in use.
+    inputs: Vec<Device>,
+    outputs: Vec<Device>,
+    input_device: String,
+    output_device: String,
+    /// PUSH_TO_TALK or VOICE_ACTIVITY.
+    mode: String,
 }
 
 /// Commands the overlay may send to Discord, with their arguments.
@@ -133,7 +151,7 @@ fn run(app: tauri::AppHandle, state: Arc<Mutex<State>>, rx: mpsc::Receiver<Cmd>)
     loop {
         set_status(&state, "connecting", "Looking for the Discord app…");
         if let Some(ws) = connect() {
-            let mut s = Session { ws, app: app.clone(), state: state.clone(), nonce: 0, channel: None, guild: None, pending: Default::default() };
+            let mut s = Session { ws, app: app.clone(), state: state.clone(), nonce: 0, channel: None, guild: None, notes: Default::default(), since: Instant::now(), pending: Default::default() };
             match s.serve(&rx) {
                 Ok(()) => return, // stopped
                 Err(e) => set_status(&state, "error", &e),
@@ -156,6 +174,10 @@ struct Session {
     nonce: u64,
     channel: Option<String>,
     guild: Option<String>,
+    /// Notifications waiting for their channel's kind (privacy mode), by nonce.
+    notes: std::collections::HashMap<String, Value>,
+    /// When the current channel was joined: people already in it don't pop up.
+    since: Instant,
     /// Nonce -> what the reply is for.
     pending: std::collections::HashMap<String, &'static str>,
 }
@@ -275,6 +297,22 @@ impl Session {
                 if let Some(n) = data["noise_suppression"].as_bool() {
                     s.noise = n;
                 }
+                let devices = |v: &Value| v["available_devices"].as_array().map(|a| a.iter().map(|d| Device { id: d["id"].as_str().unwrap_or("").into(), name: d["name"].as_str().unwrap_or("").into() }).collect());
+                if let Some(d) = devices(&data["input"]) {
+                    s.inputs = d;
+                }
+                if let Some(d) = devices(&data["output"]) {
+                    s.outputs = d;
+                }
+                if let Some(d) = data["input"]["device_id"].as_str() {
+                    s.input_device = d.into();
+                }
+                if let Some(d) = data["output"]["device_id"].as_str() {
+                    s.output_device = d.into();
+                }
+                if let Some(m) = data["mode"]["type"].as_str() {
+                    s.mode = m.into();
+                }
             }
             ("SET_USER_VOICE_SETTINGS", _) => {
                 let id = data["user_id"].as_str().unwrap_or("");
@@ -303,10 +341,29 @@ impl Session {
                     return Ok(());
                 }
                 let note = json!({ "kind": "discord", "title": data["title"], "body": data["body"], "icon": data["icon_url"] });
-                let app = self.app.clone();
-                tauri::async_runtime::spawn(async move {
-                    let _ = crate::overlay_notify(app, note).await;
-                });
+                match (PRIVACY.load(std::sync::atomic::Ordering::Relaxed), data["channel_id"].as_str()) {
+                    (1, Some(ch)) => {
+                        // Only the kind is shown: ask which kind of channel it came from.
+                        self.nonce += 1;
+                        let nonce = self.nonce.to_string();
+                        self.notes.insert(nonce.clone(), note);
+                        let msg = json!({ "cmd": "GET_CHANNEL", "args": { "channel_id": ch }, "nonce": nonce });
+                        self.ws.send(Message::text(msg.to_string())).map_err(|e| format!("Lost Discord: {e}"))?;
+                    }
+                    (0, _) => self.toast(note),
+                    _ => self.toast(json!({ "kind": "discord", "title": "Message received", "body": "" })),
+                }
+            }
+            ("GET_CHANNEL", _) => {
+                if let Some(_note) = v["nonce"].as_str().and_then(|n| self.notes.remove(n)) {
+                    // Discord channel types: 1 a private message, 3 a group, the rest a server.
+                    let kind = match data["type"].as_i64() {
+                        Some(1) => "Private message",
+                        Some(3) => "Group message",
+                        _ => "Server message",
+                    };
+                    self.toast(json!({ "kind": "discord", "title": kind, "body": "" }));
+                }
             }
             ("GET_SELECTED_VOICE_CHANNEL", _) => self.channel(data)?,
             ("DISPATCH", "VOICE_CHANNEL_SELECT") => {
@@ -314,15 +371,35 @@ impl Session {
             }
             ("DISPATCH", "VOICE_STATE_CREATE" | "VOICE_STATE_UPDATE") => {
                 let m = member(data);
-                let mut s = self.state.lock().unwrap();
-                match s.members.iter_mut().find(|x| x.id == m.id) {
-                    Some(x) => *x = Member { speaking: x.speaking, ..m },
-                    None => s.members.push(m),
+                let mut joined = None;
+                {
+                    let mut s = self.state.lock().unwrap();
+                    let me = s.me.clone();
+                    match s.members.iter_mut().find(|x| x.id == m.id) {
+                        Some(x) => *x = Member { speaking: x.speaking, ..m },
+                        None => {
+                            if m.id != me && self.since.elapsed() > Duration::from_secs(3) {
+                                joined = Some((m.name.clone(), m.avatar.clone()));
+                            }
+                            s.members.push(m);
+                        }
+                    }
+                }
+                if let Some((name, icon)) = joined {
+                    self.join_toast(&name, &icon, "joined the call");
                 }
             }
             ("DISPATCH", "VOICE_STATE_DELETE") => {
                 let id = data["user"]["id"].as_str().unwrap_or("").to_string();
-                self.state.lock().unwrap().members.retain(|x| x.id != id);
+                let left = {
+                    let mut s = self.state.lock().unwrap();
+                    let gone = s.members.iter().find(|x| x.id == id && x.id != s.me).map(|x| (x.name.clone(), x.avatar.clone()));
+                    s.members.retain(|x| x.id != id);
+                    gone
+                };
+                if let Some((name, icon)) = left {
+                    self.join_toast(&name, &icon, "left the call");
+                }
             }
             ("DISPATCH", "SPEAKING_START" | "SPEAKING_STOP") => {
                 let id = data["user_id"].as_str().unwrap_or("");
@@ -334,6 +411,19 @@ impl Session {
             _ => {}
         }
         Ok(())
+    }
+
+    fn toast(&self, note: Value) {
+        let app = self.app.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = crate::overlay_notify(app, note).await;
+        });
+    }
+
+    fn join_toast(&self, name: &str, icon: &str, what: &str) {
+        if JOINS.load(std::sync::atomic::Ordering::Relaxed) {
+            self.toast(json!({ "kind": "discord", "title": name, "body": what, "icon": icon }));
+        }
     }
 
     fn authorize(&mut self) -> Result<(), String> {
@@ -354,6 +444,7 @@ impl Session {
                 }
             }
             self.channel = id.clone();
+            self.since = Instant::now();
         }
         // The server's voice channels, for switching.
         let guild = data["guild_id"].as_str().map(str::to_string);

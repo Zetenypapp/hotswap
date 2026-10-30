@@ -103,6 +103,11 @@
   .dc-chs button { height: 28px; padding: 0 10px; border: 0; border-radius: 9px; background: rgba(255, 255, 255, .07); color: var(--soft); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
   .dc-chs button:hover { background: rgba(255, 255, 255, .14); }
   .dc-chs button.on { background: #5865f2; color: #fff; }
+  .dc-set select { grid-column: 2 / 4; min-width: 0; height: 30px; border: 0; border-radius: 9px; padding: 0 8px; background: rgba(255, 255, 255, .08); color: var(--fg); font: inherit; font-size: 12px; font-weight: 700; }
+  .dc-set select option { background: #16181d; }
+  .dc-set .chips2 { grid-column: 2 / 4; display: flex; gap: 6px; }
+  .dc-set .chips2 button { flex: 1; height: 28px; border: 0; border-radius: 9px; background: rgba(255, 255, 255, .07); color: var(--soft); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+  .dc-set .chips2 button.on { background: #5865f2; color: #fff; }
   .dc-h { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 4px 2px 0; }
   /* Who's talking, under the HUD. */
   #talk { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 16px; }
@@ -173,7 +178,7 @@
   const voiceOpt = on => { try { localStorage.setItem('hs.dc.voice', on ? '1' : '0'); } catch {} };
   if (voiceOn()) invoke('voice_start').catch(() => {});
   setInterval(async () => {
-    if (!voiceOn() || dragging) return;
+    if (!voiceOn() || dragging || document.activeElement?.tagName === 'SELECT') return;
     const v = await invoke('voice_state').catch(() => null);
     if (JSON.stringify(v) === JSON.stringify(voice)) return;
     voice = v;
@@ -347,7 +352,10 @@
       <p class="dc-h">Your audio</p>
       <div class="dc-set"><span>Mic</span><input type="range" min="0" max="100" step="1" value="${Math.round(v.input_volume)}" style="${pct(v.input_volume, 100)}" data-gvol="input"><span class="val">${Math.round(v.input_volume)}%</span>
         <span>Headphones</span><input type="range" min="0" max="200" step="1" value="${Math.round(v.output_volume)}" style="${pct(v.output_volume, 200)}" data-gvol="output"><span class="val">${Math.round(v.output_volume)}%</span>
-        <span>Noise suppression</span><span></span><button class="btn sm${v.noise ? ' on' : ''}" data-noise="1">${v.noise ? 'On' : 'Off'}</button></div>
+        <span>Noise suppression</span><span></span><button class="btn sm${v.noise ? ' on' : ''}" data-noise="1">${v.noise ? 'On' : 'Off'}</button>
+        <span>Input mode</span><div class="chips2">${[['VOICE_ACTIVITY', 'Voice activity'], ['PUSH_TO_TALK', 'Push to talk']].map(([k, l]) => `<button class="${v.mode === k ? 'on' : ''}" data-vmode="${k}">${l}</button>`).join('')}</div>
+        ${v.inputs?.length ? `<span>Microphone</span><select data-vdev="input">${v.inputs.map(d => `<option value="${esc(d.id)}"${d.id === v.input_device ? ' selected' : ''}>${esc(d.name)}</option>`).join('')}</select>` : ''}
+        ${v.outputs?.length ? `<span>Output</span><select data-vdev="output">${v.outputs.map(d => `<option value="${esc(d.id)}"${d.id === v.output_device ? ' selected' : ''}>${esc(d.name)}</option>`).join('')}</select>` : ''}</div>
       <div class="dc-row"><div class="t"><b>Discord voice (beta)</b><span>Connected as Discord’s StreamKit overlay. Notifications show as toasts.</span></div><button class="btn" data-voice="off">Turn off</button></div>`;
   }
   function discordPanel() {
@@ -388,13 +396,14 @@
     if (!menu) return;
     const t = e.target;
     if (t.matches('input[type=range]')) return;
-    const v = t.closest('[data-view],[data-rec],[data-dc],[data-voice],[data-vset],[data-umute],[data-join],[data-leave],[data-noise]');
+    const v = t.closest('[data-view],[data-rec],[data-dc],[data-voice],[data-vset],[data-umute],[data-join],[data-leave],[data-noise],[data-vmode]');
     if (v) {
       if (v.dataset.voice) { const on = v.dataset.voice === 'on'; voiceOpt(on); voice = null; invoke(on ? 'voice_start' : 'voice_stop').catch(() => {}); }
       else if (v.dataset.vset) { const k = v.dataset.vset; if (voice) { voice[k] = !voice[k]; dcSend('SET_VOICE_SETTINGS', { [k]: voice[k] }); } }
       else if (v.dataset.umute) { const m = voice?.members.find(x => x.id === v.dataset.umute); if (m) { m.local_mute = !m.local_mute; dcSend('SET_USER_VOICE_SETTINGS', { user_id: m.id, mute: m.local_mute }); } }
       else if (v.dataset.join) dcSend('SELECT_VOICE_CHANNEL', { channel_id: v.dataset.join, force: true });
       else if (v.dataset.leave) dcSend('SELECT_VOICE_CHANNEL', { channel_id: null });
+      else if (v.dataset.vmode) { if (voice) { voice.mode = v.dataset.vmode; dcSend('SET_VOICE_SETTINGS', { mode: { type: v.dataset.vmode } }); } }
       else if (v.dataset.noise) { if (voice) { voice.noise = !voice.noise; dcSend('SET_VOICE_SETTINGS', { noise_suppression: voice.noise }); } }
       else if (v.dataset.view) view = v.dataset.view;
       return renderMenu();
@@ -415,6 +424,13 @@
     dragging = true;
     e.target.style.setProperty('--p', (e.target.value / e.target.max * 100).toFixed(1) + '%');
     if (e.target.nextElementSibling?.classList.contains('val')) e.target.nextElementSibling.textContent = e.target.value + '%';
+  });
+  // Picking a microphone or output device.
+  document.addEventListener('change', e => {
+    const k = e.target.dataset.vdev;
+    if (!k) return;
+    if (voice) voice[k + '_device'] = e.target.value;
+    dcSend('SET_VOICE_SETTINGS', { [k]: { device_id: e.target.value } });
   });
   document.addEventListener('change', e => {
     const d = e.target.dataset;

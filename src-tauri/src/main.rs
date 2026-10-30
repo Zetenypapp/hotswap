@@ -757,8 +757,10 @@ fn voice_start(app: AppHandle, voice: State<voice::Voice>) {
     voice.start(app);
 }
 #[tauri::command]
-fn voice_options(notes: bool) {
+fn voice_options(notes: bool, privacy: u8, joins: bool) {
     voice::NOTES.store(notes, Ordering::Relaxed);
+    voice::PRIVACY.store(privacy.min(2), Ordering::Relaxed);
+    voice::JOINS.store(joins, Ordering::Relaxed);
 }
 #[tauri::command]
 fn voice_stop(voice: State<voice::Voice>) {

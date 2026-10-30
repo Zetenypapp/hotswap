@@ -45,7 +45,7 @@ const DEFAULTS = {
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
   showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, sounds: true, overlay: true, paused: {},
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
-  pinned: {}, sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
+  pinned: {}, sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
 };
 const CORNERS = [['top-left', 'Top left'], ['top', 'Top'], ['top-right', 'Top right'], ['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right']];
 const SHEET = '__sheet'; // capture.mid while rebinding the cheat sheet key
@@ -871,7 +871,8 @@ function onOverlayInput(i) {
 // is kept in localStorage (shared with the overlay page).
 const dcVoiceOn = () => { try { return localStorage.getItem('hs.dc.voice') === '1'; } catch { return false; } };
 if (invoke && dcVoiceOn()) invoke('voice_start').catch(() => {});
-if (invoke) invoke('voice_options', { notes: state.dcNotes !== false }).catch(() => {});
+const dcOptions = () => invoke?.('voice_options', { notes: state.dcNotes !== false, privacy: state.dcPrivacy || 0, joins: state.dcJoins !== false }).catch(() => {});
+dcOptions();
 // Who's talking, shown over any game (unless the HUD already shows it).
 var talkOn = false, lastTalk = '', VOICE = null;
 setInterval(async () => {
@@ -886,6 +887,11 @@ setInterval(async () => {
   overlaySend({ kind: 'talk', members: talking });
 }, 350);
 
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-dcprivacy]');
+  if (!c) return;
+  state.dcPrivacy = +c.dataset.dcprivacy; save(); dcOptions(); render();
+});
 function renderOverlayPage() {
   const sw = (id, on) => `<button class="switch" role="switch" id="${id}" aria-checked="${!!on}"></button>`;
   const v = VOICE, on = dcVoiceOn();
@@ -902,6 +908,9 @@ function renderOverlayPage() {
         <button class="btn${on ? '' : ' accent'}" id="dcVoiceBtn">${on ? 'Turn off' : 'Connect'}</button></div>
       <div class="set-row"><div class="txt"><b>Show who’s talking</b><span>Avatars of the people speaking, in the HUD corner over any game.</span></div>${sw('setDcTalk', state.dcTalk)}</div>
       <div class="set-row"><div class="txt"><b>Discord notifications</b><span>Messages and pings pop up over the game.</span></div>${sw('setDcNotes', state.dcNotes)}</div>
+      <div class="set-row"><div class="txt"><b>Notification privacy</b><span>For streaming or screen sharing. <b>Kind only</b> shows “Private message”, “Group message” or “Server message”; <b>Hidden</b> only says a message came.</span></div>
+        <div class="chips">${[['0', 'Off'], ['1', 'Kind only'], ['2', 'Hidden']].map(([k, l]) => `<button class="chip${String(state.dcPrivacy || 0) === k ? ' on' : ''}" data-dcprivacy="${k}">${l}</button>`).join('')}</div></div>
+      <div class="set-row"><div class="txt"><b>Join and leave popups</b><span>A popup when someone joins or leaves your call.</span></div>${sw('setDcJoins', state.dcJoins)}</div>
     </div>`;
   if ($('ovBody').innerHTML !== html) $('ovBody').innerHTML = html;
 }
@@ -1398,7 +1407,8 @@ document.addEventListener('click', e => {
     case 'setDiscord': state.discord = !state.discord; save(); render(); break;
     case 'setDcOverlay': state.dcOverlay = !state.dcOverlay; save(); render(); break;
     case 'setDcTalk': state.dcTalk = !state.dcTalk; save(); render(); break;
-    case 'setDcNotes': state.dcNotes = !state.dcNotes; save(); invoke?.('voice_options', { notes: state.dcNotes }).catch(() => {}); render(); break;
+    case 'setDcNotes': state.dcNotes = !state.dcNotes; save(); dcOptions(); render(); break;
+    case 'setDcJoins': state.dcJoins = !state.dcJoins; save(); dcOptions(); render(); break;
     case 'dcVoiceBtn': {
       const on = !dcVoiceOn();
       try { localStorage.setItem('hs.dc.voice', on ? '1' : '0'); } catch {}
