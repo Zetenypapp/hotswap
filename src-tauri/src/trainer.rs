@@ -28,6 +28,8 @@ struct Wanted {
     /// For games run by the generic engine mods (engines.rs): the engine and each mod's specs.
     engine: Option<String>,
     specs: HashMap<String, Vec<crate::engines::Spec>>,
+    /// Values that must hold for the mods to run, e.g. "in singleplayer" (engines.rs `allowed`).
+    guard: Vec<crate::engines::Spec>,
 }
 
 #[derive(Clone, Default)]
@@ -46,7 +48,7 @@ pub fn log(msg: &str) {
 }
 
 impl Trainer {
-    pub fn set(&self, game: Option<String>, paused: bool, values: HashMap<String, f64>, engine: Option<String>, specs: HashMap<String, Vec<crate::engines::Spec>>) {
+    pub fn set(&self, game: Option<String>, paused: bool, values: HashMap<String, f64>, engine: Option<String>, specs: HashMap<String, Vec<crate::engines::Spec>>, guard: Vec<crate::engines::Spec>) {
         log(&format!("set game={game:?} paused={paused} values={values:?} engine={engine:?} specs={}", specs.len()));
         let mut w = self.0.lock().unwrap();
         w.game = game;
@@ -54,6 +56,7 @@ impl Trainer {
         w.values = values;
         w.engine = engine;
         w.specs = specs;
+        w.guard = guard;
     }
 
     pub fn action(&self, id: String) {
@@ -81,14 +84,17 @@ impl Trainer {
             let mut sw: Option<crate::stormworks::Session> = None;
             let mut ets2: Option<crate::ets2::Session> = None;
             let mut generic: Option<(String, crate::engines::Live, HashMap<String, Vec<crate::engines::Spec>>)> = None;
+            // A guarded game (singleplayer only) where an anti-cheat showed up: left alone until it restarts.
+            let mut locked: Option<u32> = None;
+            let mut generic_pid: Option<u32> = None;
             let mut last_attach: Option<Instant> = None;
             // Why the generic engine mods couldn't connect, for the status line.
             let mut attach_error: Option<String> = None;
             let mut last = Status { game: None, connected: false, message: String::new() };
             loop {
-                let (game, paused, values, actions, teleport, engine, specs) = {
+                let (game, paused, values, actions, teleport, engine, specs, guard) = {
                     let mut w = me.0.lock().unwrap();
-                    (w.game.clone(), w.paused, w.values.clone(), std::mem::take(&mut w.actions), w.teleport.take(), w.engine.clone(), w.specs.clone())
+                    (w.game.clone(), w.paused, w.values.clone(), std::mem::take(&mut w.actions), w.teleport.take(), w.engine.clone(), w.specs.clone(), w.guard.clone())
                 };
                 // Another game, or no game: put back what the generic mods changed, if it still runs.
                 if generic.as_ref().is_some_and(|(g, _, _)| Some(g) != game.as_ref()) {
@@ -297,22 +303,40 @@ impl Trainer {
                     }
                     Some(g) if engine.is_some() && !specs.is_empty() => {
                         let engine = engine.clone().unwrap_or_default();
+                        // Singleplayer-only games: an anti-cheat loaded into the game means it went
+                        // online. Stop touching it at once, and for good until the game restarts.
+                        let anticheat = !guard.is_empty()
+                            && generic_pid.is_some_and(|pid| ["BEClient", "EasyAntiCheat"].iter().any(|m| crate::ue::mem::has_module(pid, m)));
+                        if anticheat {
+                            log(&format!("{g}: anti-cheat loaded, mods off until the game restarts"));
+                            locked = generic_pid;
+                            generic = None;
+                        }
                         if generic.is_none() && last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
                             last_attach = Some(Instant::now());
-                            generic = crate::engines::Live::attach(&engine, pid_of(g), install_of(g))
-                                .map_err(|e| {
-                                    if attach_error.as_ref() != Some(&e) {
-                                        log(&format!("{g} {engine} attach: {e}"));
-                                    }
-                                    attach_error = Some(e);
-                                })
-                                .ok()
-                                .map(|r| (g.to_string(), r, HashMap::new()));
+                            let pid = pid_of(g);
+                            let anticheat_at_start = !guard.is_empty() && pid.is_some_and(|pid| ["BEClient", "EasyAntiCheat"].iter().any(|m| crate::ue::mem::has_module(pid, m)));
+                            if anticheat_at_start {
+                                locked = pid;
+                                generic_pid = pid;
+                            } else if guard.is_empty() || pid != locked {
+                                generic_pid = pid;
+                                generic = crate::engines::Live::attach(&engine, pid, install_of(g))
+                                    .map_err(|e| {
+                                        if attach_error.as_ref() != Some(&e) {
+                                            log(&format!("{g} {engine} attach: {e}"));
+                                        }
+                                        attach_error = Some(e);
+                                    })
+                                    .ok()
+                                    .map(|r| (g.to_string(), r, HashMap::new()));
+                            }
                         }
+                        let locked_now = generic.is_none() && locked.is_some() && generic_pid == locked;
                         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                             generic.as_mut().map(|(_, s, old)| {
                                 *old = specs.clone();
-                                s.tick(&specs, if paused { None } else { Some(&values) }, &actions)
+                                s.tick(&specs, if paused { None } else { Some(&values) }, &actions, &guard)
                             })
                         }))
                         .unwrap_or_else(|_| Some(Err("Lost track of the game, reconnecting".into())));
@@ -322,7 +346,12 @@ impl Trainer {
                                 generic = None;
                                 Status { game: game.clone(), connected: false, message: e }
                             }
-                            _ => Status { game: game.clone(), connected: false, message: attach_error.clone().unwrap_or_else(|| "Waiting for the game to load".into()) },
+                            _ if locked_now => Status { game: game.clone(), connected: false, message: "Mods are off: the game's anti-cheat started (you went online). Restart the game to use mods in singleplayer.".into() },
+                            _ => Status {
+                                game: game.clone(),
+                                connected: false,
+                                message: generic.as_ref().and_then(|(_, s, _)| s.note()).or_else(|| attach_error.clone()).unwrap_or_else(|| "Waiting for the game to load".into()),
+                            },
                         }
                     }
                     _ => {

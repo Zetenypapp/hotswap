@@ -111,3 +111,24 @@ impl Drop for Proc {
         unsafe { CloseHandle(self.handle) };
     }
 }
+
+/// True if the process `pid` has a module whose file name contains `needle` (case-insensitive).
+/// Needs no handle to the process itself.
+pub fn has_module(pid: u32, needle: &str) -> bool {
+    let snap = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) };
+    if snap == INVALID_HANDLE_VALUE {
+        return false;
+    }
+    let needle = needle.to_lowercase();
+    let mut entry: MODULEENTRY32W = unsafe { std::mem::zeroed() };
+    entry.dwSize = std::mem::size_of::<MODULEENTRY32W>() as u32;
+    let mut found = false;
+    let mut ok = unsafe { Module32FirstW(snap, &mut entry) };
+    while ok != 0 && !found {
+        let len = entry.szModule.iter().position(|&c| c == 0).unwrap_or(entry.szModule.len());
+        found = String::from_utf16_lossy(&entry.szModule[..len]).to_lowercase().contains(&needle);
+        ok = unsafe { Module32NextW(snap, &mut entry) };
+    }
+    unsafe { CloseHandle(snap) };
+    found
+}

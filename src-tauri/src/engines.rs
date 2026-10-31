@@ -337,16 +337,24 @@ impl Live {
             return crate::cdp::Session::attach().map(Live::Web);
         }
         if crate::bridge::is_script(engine) {
-            return crate::bridge::Session::attach(engine, install).map(Live::Script);
+            return crate::bridge::Session::attach(engine, install, pid).map(Live::Script);
         }
         attach(engine, pid.ok_or("Waiting for the game to start")?).map(|r| Live::Mem(Session::new(r)))
     }
 
-    pub fn tick(&mut self, specs: &HashMap<String, Vec<Spec>>, values: Option<&HashMap<String, f64>>, actions: &[String]) -> Result<bool, String> {
+    pub fn tick(&mut self, specs: &HashMap<String, Vec<Spec>>, values: Option<&HashMap<String, f64>>, actions: &[String], guard: &[Spec]) -> Result<bool, String> {
         match self {
-            Live::Mem(s) => s.tick(specs, values, actions),
+            Live::Mem(s) => s.tick(specs, values, actions, guard),
             Live::Web(s) => s.tick(specs, values, actions),
             Live::Script(s) => s.tick(specs, values, actions),
+        }
+    }
+
+    /// Why mods are off right now, if a guard closed them.
+    pub fn note(&self) -> Option<String> {
+        match self {
+            Live::Mem(s) => s.note.clone(),
+            _ => None,
         }
     }
 
@@ -385,11 +393,15 @@ pub struct Session {
     prop_names: Vec<String>,
     /// Paths that didn't resolve, logged once.
     missing: std::collections::HashSet<String>,
+    /// Where the `guard` values live (found once, then only read).
+    guards: HashMap<String, Vec<Target>>,
+    /// Why mods are off right now (the guard failed), for the status line.
+    pub note: Option<String>,
 }
 
 impl Session {
     pub fn new(r: Box<dyn Reader + Send>) -> Session {
-        Session { r, resolved: HashMap::new(), orig: HashMap::new(), found: HashMap::new(), fields: HashMap::new(), prop_names: Vec::new(), missing: Default::default() }
+        Session { r, resolved: HashMap::new(), orig: HashMap::new(), found: HashMap::new(), fields: HashMap::new(), prop_names: Vec::new(), missing: Default::default(), guards: HashMap::new(), note: None }
     }
 
     /// Live objects of a class, as (object, its own class). Searching is slow, so the result is
@@ -597,10 +609,39 @@ impl Session {
         }
     }
 
-    pub fn tick(&mut self, specs: &HashMap<String, Vec<Spec>>, values: Option<&HashMap<String, f64>>, actions: &[String]) -> Result<bool, String> {
+    /// True if every guard value is what it must be (`op` "is", value `v`), e.g. "the game is in
+    /// singleplayer". Only the first check looks anything up; after that it is plain reads.
+    fn allowed(&mut self, guard: &[Spec]) -> bool {
+        guard.iter().all(|g| {
+            if !self.guards.contains_key(&g.at) {
+                let found = self.resolve(&g.at, g.ty.as_deref().and_then(Ty::parse)).map(|r| r.targets).unwrap_or_default();
+                if found.is_empty() {
+                    return false;
+                }
+                self.guards.insert(g.at.clone(), found);
+            }
+            let ts = self.guards[&g.at].clone();
+            ts.iter().all(|&t| matches!(t, Target::Mem(..)) && self.read(t) == Some(g.v))
+        })
+    }
+
+    pub fn tick(&mut self, specs: &HashMap<String, Vec<Spec>>, values: Option<&HashMap<String, f64>>, actions: &[String], guard: &[Spec]) -> Result<bool, String> {
         if self.r.p().read::<u8>(0x7FFE_0000).is_none() {
             return Err("the game closed".into());
         }
+        if !guard.is_empty() && !self.allowed(guard) {
+            // Not allowed now (e.g. online): touch nothing. What the mods changed belonged to the
+            // world that was left, so it is forgotten rather than written back.
+            if self.note.is_none() {
+                log("engine mods: guard closed, mods off");
+            }
+            self.note = Some("Singleplayer only: mods are off until you play offline.".into());
+            self.orig.clear();
+            self.resolved.clear();
+            self.found.clear();
+            return Ok(false);
+        }
+        self.note = None;
         for (id, list) in specs {
             if list.iter().any(|s| s.act) {
                 continue;
@@ -627,6 +668,9 @@ impl Session {
 
     /// Puts back everything still changed (the game is still running, HotSwap stops modding it).
     pub fn restore(&mut self, specs: &HashMap<String, Vec<Spec>>) {
+        if self.note.is_some() {
+            return;
+        }
         for (id, list) in specs.iter().filter(|(_, l)| !l.iter().any(|s| s.act)) {
             let off = list.first().map_or(0.0, |s| if matches!(s.op.as_str(), "scale" | "value") { s.def } else { 0.0 });
             self.apply(id, list, off);
@@ -643,6 +687,10 @@ pub fn detect(install: &std::path::Path) -> Option<&'static str> {
     let mut dirs = vec![install.to_path_buf()];
     if let Ok(entries) = std::fs::read_dir(install) {
         dirs.extend(entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()).take(40));
+    }
+    // GTA V (Legacy and Enhanced): story mode through Script Hook V (bridge.rs).
+    if install.join("GTA5.exe").exists() || install.join("GTA5_Enhanced.exe").exists() {
+        return Some("gta");
     }
     for dir in &dirs {
         let has = |rel: &str| dir.join(rel).exists();

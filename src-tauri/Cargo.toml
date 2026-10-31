@@ -1,6 +1,6 @@
 [package]
 name = "hotswap"
-version = "0.3.8"
+version = "0.3.9"
 description = "HotSwap desktop app"
 license = "GPL-3.0-or-later"
 edition = "2021"
@@ -26,7 +26,7 @@ jpeg-encoder = "0.7"
 tauri-plugin-updater = "2"
 semver = "1"
 sha2 = "0.10"
-zip = { version = "4", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 tauri-plugin-dialog = "2"
 sevenz-rust = "0.6"
 tungstenite = "0.24"

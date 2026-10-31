@@ -62,6 +62,14 @@ Infinite Money, Add $100,000, Add 100 Research Points, Infinite Fuel, Infinite B
 
 No Damage, Infinite Fuel, No Fatigue, Repair Truck and Trailer, Refuel, Infinite Money, Add €100,000 (or $), Add 10,000 XP and Level Up, live while you drive. No hard-coded offsets: HotSwap reads the game's own save-file metadata from the exe you have, so updates are followed automatically. Not tested in game yet.
 
+## 🧟 Unturned mods (experimental, singleplayer only)
+
+Infinite Health, No Hunger, No Thirst, Infinite Stamina, No Infection, Infinite Oxygen, Infinite Ammo, No Weapon Decay and Add 1,000 Experience. Unturned's servers use VAC and BattlEye, so the mods only run in singleplayer: HotSwap checks twice a second that the game is its own server with no anti-cheat active, turns everything off the moment you join a server, and stops touching the game until it restarts if an anti-cheat loads. Not tested in game yet.
+
+## 🚓 GTA V story mode mods (experimental, Legacy and Enhanced)
+
+God Mode, Never Wanted, Fast Run, Fast Swim, Super Jump, Heal and Armor, Infinite Ammo, Vehicle God Mode, Repair Vehicle, Spawn Sports Car, Spawn Helicopter, Add $1,000,000, Teleport to Waypoint, time and weather. They use the game's own script commands through [Script Hook V](https://www.dev-c.com/gtav/scripthookv/) (install it once; the game page has a short guide) and HotSwap's own plugin (`gta-asi`). Story mode only: BattlEye has to be off (`-nobattleye`), which keeps the game out of GTA Online, and the plugin does nothing in an online session. Not tested in game yet.
+
 ## ⛏️ Mr.Mine mods (experimental)
 
 Infinite Money and Double Money, live. Start Mr.Mine with HotSwap's Play button: HotSwap opens the game's debugging port and changes the game's own JavaScript variables.
@@ -197,16 +205,9 @@ Want to change something? **[ARCHITECTURE.md](ARCHITECTURE.md)** lists every fil
 
 HotSwap is for **single-player and private games only**. It refuses to mod anything with anti-cheat, and you shouldn't use it to get an edge over other players.
 
-## 🔏 Code signing policy
+## 🔒 Privacy
 
-Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
-
-- Committers and reviewers: [Zetenypapp](https://github.com/Zetenypapp)
-- Approvers: [Zetenypapp](https://github.com/Zetenypapp)
-
-Release builds are made by GitHub Actions from this repository and signed only after a maintainer approves them.
-
-**Privacy:** HotSwap doesn't send anything about you anywhere. It only talks to the services you use through it (Steam, Thunderstore, SpaceDock, ficsit.app, Nexus Mods, GitHub for updates, and Discord on your own PC), and only to fetch what you ask for.
+HotSwap doesn't send anything about you anywhere. It only talks to the services you use through it (Steam, Thunderstore, SpaceDock, ficsit.app, Nexus Mods, GitHub for updates, and Discord on your own PC), and only to fetch what you ask for.
 
 ## ⚖️ License
 

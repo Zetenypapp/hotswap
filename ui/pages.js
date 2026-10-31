@@ -168,6 +168,7 @@ function renderGame() {
         g.solo ? 'Solo or private sessions only' : '',
       ].filter(Boolean).join(' · ')}</div>
       ${g.anticheat.length ? `<div class="ac-note"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5z"/></svg>Uses ${esc(g.anticheat.join(' and '))}. Modding it can get your account banned.</div>` : ''}
+      ${g.offline ? `<div class="ac-note"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5z"/></svg>${g.offlineNote ? esc(g.offlineNote) : `Singleplayer only. Online servers use ${esc(g.onlineAnticheat.join(' and ') || 'anti-cheat')}: mods turn off by themselves the moment you join one.`}</div>` : ''}
       ${g.experimental && !g.anticheat.length ? `<div class="ac-note exp" title="Tell us how they work: Settings → Report a bug"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M9 2h6v2h-1v5.5l5.6 9.4A2 2 0 0 1 17.9 22H6.1a2 2 0 0 1-1.7-3.1L10 9.5V4H9z"/></svg>Experimental: these mods are new and not tested in the game yet.</div>` : ''}</div>
     <div class="gh-actions">
       ${total ? `${profileControl(g)}
@@ -227,6 +228,21 @@ function modRow(g, m, clash, locked) {
     ${ctl}<div class="keys">${keys}</div></div>`;
 }
 
+// A game's one-time setup guide (SETUPS in data.js), until the app says it's done.
+const setupDone = {};
+function setupCard(g) {
+  const s = g.setup && SETUPS[g.setup];
+  if (!s) return '';
+  if (!(g.id in setupDone)) {
+    setupDone[g.id] = null;
+    invoke?.('setup_check', { id: g.id, kind: g.setup }).then(ok => { setupDone[g.id] = !!ok; if (game()?.id === g.id) renderMods(); }).catch(() => { });
+  }
+  if (setupDone[g.id]) return `<details class="setup done"><summary><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${esc(s.done)} Show the setup steps</summary>${setupBody(s)}</details>`;
+  return `<section class="setup"><h3>${esc(s.title)}</h3>${setupBody(s)}</section>`;
+}
+const setupBody = s => `<p>${esc(s.intro)}</p><ol>${s.steps.map(t => `<li>${t}</li>`).join('')}</ol>
+  <div class="setup-actions"><a class="btn accent" href="${esc(s.link.url)}" ${ext}>${esc(s.link.label)}</a><button class="btn" data-setupcheck>Check again</button></div>`;
+
 function renderMods() {
   const g = game(), q = query();
   if (g.anticheat.length && !g.software) {
@@ -265,7 +281,7 @@ function renderMods() {
   }).join('');
   const more = hidden ? `<button class="gl-hidden" data-gledit>${hidden} hidden mod${hidden > 1 ? 's' : ''} · Customise to show</button>` : '';
   $('mods').classList.toggle('compact', state.rowSize === 'compact');
-  $('mods').innerHTML = (editing ? gameEditBar(g) : lockbar) + (cats || `<p class="noresults">No mods match “${esc(q)}”.</p>`) + more;
+  $('mods').innerHTML = setupCard(g) + (editing ? gameEditBar(g) : lockbar) + (cats || `<p class="noresults">No mods match “${esc(q)}”.</p>`) + more;
 }
 
 function renderPanel() {

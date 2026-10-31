@@ -280,8 +280,18 @@ async fn fetch_source(url: String) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-fn trainer_set(trainer: State<trainer::Trainer>, game: Option<String>, paused: bool, values: HashMap<String, f64>, engine: Option<String>, specs: Option<HashMap<String, Vec<engines::Spec>>>) {
-    trainer.set(game, paused, values, engine, specs.unwrap_or_default());
+fn trainer_set(trainer: State<trainer::Trainer>, game: Option<String>, paused: bool, values: HashMap<String, f64>, engine: Option<String>, specs: Option<HashMap<String, Vec<engines::Spec>>>, guard: Option<Vec<engines::Spec>>) {
+    trainer.set(game, paused, values, engine, specs.unwrap_or_default(), guard.unwrap_or_default());
+}
+
+/// Whether a game's one-time setup is done (the guide on its page): "scripthookv" for GTA V.
+#[tauri::command]
+fn setup_check(watch: State<watch::Watch>, id: String, kind: String) -> bool {
+    let Some(dir) = watch.install_of(&id) else { return false };
+    match kind.as_str() {
+        "scripthookv" => bridge::has_script_hook(&dir),
+        _ => false,
+    }
 }
 
 /// One-shot mods like "Add 1,000 Coupons".
@@ -1104,7 +1114,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            load_data, save_data, scan_library, running_game, launch_game, set_hotkeys, fetch_home, fetch_source, log_ui, export_logs, close_game, trainer_set, trainer_action, set_close_to_tray, get_autostart, set_autostart, cmd_maps::map_show, cmd_maps::map_hide, cmd_maps::map_world, cmd_maps::map_background, check_update, install_update, app_version, overlay::overlay_notify, overlay::overlay_close, overlay::overlay_menu, overlay::overlay_input, overlay::overlay_ready, overlay::overlay_fit, cmd_mods::mods_release, cmd_mods::ts_search, cmd_mods::ts_list, cmd_mods::ts_install, cmd_mods::ts_install_file, cmd_mods::ts_set_enabled, cmd_mods::ts_remove, cmd_discord::voice_start, cmd_discord::voice_options, cmd_discord::voice_stop, cmd_discord::voice_state, cmd_discord::voice_send, system_stats, system_stats_full, cmd_discord::discord_presence, overlay::radar_show, set_mini, cmd_mods::fmods_list, cmd_mods::fmods_set_enabled, cmd_mods::fmods_remove, cmd_mods::fmods_install, cmd_mods::fmods_downloads, cmd_mods::fmods_pick, cmd_mods::nexus_search, cmd_mods::mods_state, cmd_mods::mods_search, cmd_mods::mods_install, cmd_mods::mods_uninstall, cmd_mods::mods_set_enabled, cmd_mods::mods_updates, cmd_maps::map_player, cmd_maps::map_teleport, cmd_maps::map_pins_load, cmd_maps::map_pins_save
+            load_data, save_data, scan_library, running_game, launch_game, set_hotkeys, fetch_home, fetch_source, log_ui, export_logs, close_game, trainer_set, setup_check, trainer_action, set_close_to_tray, get_autostart, set_autostart, cmd_maps::map_show, cmd_maps::map_hide, cmd_maps::map_world, cmd_maps::map_background, check_update, install_update, app_version, overlay::overlay_notify, overlay::overlay_close, overlay::overlay_menu, overlay::overlay_input, overlay::overlay_ready, overlay::overlay_fit, cmd_mods::mods_release, cmd_mods::ts_search, cmd_mods::ts_list, cmd_mods::ts_install, cmd_mods::ts_install_file, cmd_mods::ts_set_enabled, cmd_mods::ts_remove, cmd_discord::voice_start, cmd_discord::voice_options, cmd_discord::voice_stop, cmd_discord::voice_state, cmd_discord::voice_send, system_stats, system_stats_full, cmd_discord::discord_presence, overlay::radar_show, set_mini, cmd_mods::fmods_list, cmd_mods::fmods_set_enabled, cmd_mods::fmods_remove, cmd_mods::fmods_install, cmd_mods::fmods_downloads, cmd_mods::fmods_pick, cmd_mods::nexus_search, cmd_mods::mods_state, cmd_mods::mods_search, cmd_mods::mods_install, cmd_mods::mods_uninstall, cmd_mods::mods_set_enabled, cmd_mods::mods_updates, cmd_maps::map_player, cmd_maps::map_teleport, cmd_maps::map_pins_load, cmd_maps::map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running HotSwap");

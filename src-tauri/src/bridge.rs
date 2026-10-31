@@ -1,5 +1,5 @@
-//! Script engines, Ren'Py and Godot: HotSwap adds a small script the game loads at startup
-//! (assets/hotswap.rpy, assets/hotswap_godot.gd). Twice a second it asks HotSwap over local UDP for
+//! Script engines, Ren'Py and Godot, and GTA V story mode: HotSwap adds a small script or plugin the
+//! game loads at startup (assets/hotswap.rpy, assets/hotswap_godot.gd, gta-asi for Script Hook V). Twice a second it asks HotSwap over local UDP for
 //! the mods, and applies them to the game's own variables by name. Same operations as engines.rs.
 
 use crate::engines::Spec;
@@ -15,7 +15,20 @@ use std::{
 pub const PORT: u16 = 47831;
 
 pub fn is_script(engine: &str) -> bool {
-    matches!(engine, "renpy" | "godot")
+    matches!(engine, "renpy" | "godot" | "gta")
+}
+
+/// HotSwap's Script Hook V plugin, built from gta-asi by build.rs.
+const GTA_ASI: &[u8] = include_bytes!(env!("HOTSWAP_GTA_ASI"));
+
+/// True when Script Hook V is installed in a GTA V folder.
+pub fn has_script_hook(game_dir: &Path) -> bool {
+    game_dir.join("ScriptHookV.dll").exists()
+}
+
+/// True when BattlEye is running for the game `pid` (GTA V loads it unless started with -nobattleye).
+fn battleye(pid: Option<u32>) -> bool {
+    pid.is_some_and(|pid| crate::ue::mem::has_module(pid, "BEClient"))
 }
 
 const RENPY: &str = include_str!("../assets/hotswap.rpy");
@@ -63,6 +76,17 @@ pub fn install(engine: &str, game_dir: &Path) -> Result<(), String> {
             }
             Ok(())
         }
+        // Script Hook V loads every .asi file in the game folder.
+        "gta" => {
+            if !has_script_hook(game_dir) {
+                return Err("Script Hook V isn't installed yet: follow the setup steps on this page.".into());
+            }
+            let p = game_dir.join("HotSwap.asi");
+            if std::fs::read(&p).ok().as_deref() != Some(GTA_ASI) {
+                std::fs::write(&p, GTA_ASI).map_err(|e| format!("couldn't add HotSwap to the game: {e}"))?;
+            }
+            Ok(())
+        }
         _ => Err("not a script engine".into()),
     }
 }
@@ -96,6 +120,8 @@ fn godot_script(v4: bool) -> String {
 }
 
 pub struct Session {
+    engine: String,
+    pid: Option<u32>,
     /// When the game's script last asked.
     seen: Option<Instant>,
     /// Changes every time HotSwap connects, so the script starts its action counts over.
@@ -104,11 +130,11 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn attach(engine: &str, dir: Option<PathBuf>) -> Result<Session, String> {
+    pub fn attach(engine: &str, dir: Option<PathBuf>, pid: Option<u32>) -> Result<Session, String> {
         socket().ok_or("couldn't open HotSwap's local port")?;
         dir.ok_or_else(|| "couldn't find the game's folder".to_string()).and_then(|d| install(engine, &d))?;
         let run = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(1);
-        Ok(Session { seen: None, run, pressed: HashMap::new() })
+        Ok(Session { engine: engine.to_string(), pid, seen: None, run, pressed: HashMap::new() })
     }
 
     pub fn tick(&mut self, specs: &HashMap<String, Vec<Spec>>, values: Option<&HashMap<String, f64>>, actions: &[String]) -> Result<bool, String> {
@@ -122,6 +148,12 @@ impl Session {
         let acts: Vec<Value> = self.pressed.iter().filter_map(|(id, n)| Some(json!({ "id": id, "n": n, "specs": specs.get(id)? }))).collect();
         let reply = json!({ "run": self.run, "mods": mods, "actions": acts }).to_string();
         let Some(s) = socket() else { return Err("couldn't open HotSwap's local port".into()) };
+        // GTA with BattlEye on: answer nothing (the plugin then keeps every mod off).
+        if self.engine == "gta" && battleye(self.pid) {
+            let mut buf = [0u8; 512];
+            while s.recv_from(&mut buf).is_ok() {}
+            return Err("BattlEye is on, so mods are off. Follow step 3 on this page (start GTA with -nobattleye) for story mode mods.".into());
+        }
         let mut buf = [0u8; 512];
         while let Ok((n, from)) = s.recv_from(&mut buf) {
             if from.ip().is_loopback() && buf[..n].starts_with(b"hs") {
@@ -130,7 +162,11 @@ impl Session {
             }
         }
         if self.seen.is_none_or(|t| t.elapsed() > Duration::from_secs(3)) {
-            return Err("HotSwap is added to the game. Restart the game once so it loads HotSwap.".into());
+            return Err(if self.engine == "gta" {
+                "Waiting for story mode. Just installed Script Hook V? Restart GTA once so it loads HotSwap.".into()
+            } else {
+                "HotSwap is added to the game. Restart the game once so it loads HotSwap.".into()
+            });
         }
         Ok(true)
     }

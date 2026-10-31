@@ -9,6 +9,36 @@ const T = (name, info, spec) => ({ type: 'toggle', name, info, spec });
 const S = (name, min, max, step, def, info, spec) => ({ type: 'slider', name, min, max, step, def, info, spec });
 const A = (name, info, spec) => ({ type: 'action', name, info, spec });
 
+// GTA V's mods (the plugin knows each `native` key).
+const GTA_CATS = [
+  { name: 'Player', mods: [T('God Mode', 'Nothing can hurt you.', { native: 'god' }), T('Never Wanted', 'The police never come after you.', { native: 'never-wanted' }),
+    T('Fast Run', 'Run and sprint about 50% faster.', { native: 'fast-run' }), T('Fast Swim', '', { native: 'fast-swim' }), T('Super Jump', '', { native: 'super-jump' }),
+    A('Heal and Armor', 'Full health and full armor.', { native: 'heal' })] },
+  { name: 'Weapons', mods: [T('Infinite Ammo', 'No reloading, no running out.', { native: 'ammo' })] },
+  { name: 'Vehicles', mods: [T('Vehicle God Mode', 'The vehicle you drive takes no damage.', { native: 'vehicle-god' }), A('Repair Vehicle', 'Fixes and cleans the vehicle you’re in.', { native: 'repair' }),
+    A('Spawn Sports Car', 'A Truffade Adder, with you in it.', { native: 'spawn:adder' }), A('Spawn Helicopter', 'A Buzzard, with you in it.', { native: 'spawn:buzzard' })] },
+  { name: 'Money', mods: [A('Add $1,000,000', 'For the character you’re playing (Michael, Franklin or Trevor).', { native: 'money:1000000' })] },
+  { name: 'World', mods: [A('Teleport to Waypoint', 'Set a waypoint on the map first.', { native: 'waypoint' }), A('Set Time to Noon', '', { native: 'time:12' }),
+    A('Set Time to Midnight', '', { native: 'time:0' }), A('Clear Weather', '', { native: 'weather:CLEAR' })] },
+];
+
+// One-time setup guides shown on a game's page until done (`setup` in the catalog). `check` asks
+// the app whether it's done.
+const SETUPS = {
+  scripthookv: {
+    title: 'Set up story mode mods',
+    intro: 'GTA V needs Script Hook V, a free tool almost every story mode mod uses. HotSwap can’t include it, so it’s a one-time install.',
+    steps: [
+      'Download Script Hook V from its official page (button below). Pick the version for your game: Legacy or Enhanced.',
+      'Open the zip, go into its <b>bin</b> folder and copy everything there (ScriptHookV.dll and the loader next to it) into your GTA V folder.',
+      'Turn BattlEye off for story mode: in Steam, right-click GTA V → Properties → Launch options, type <code>-nobattleye</code>. (Or untick BattlEye in the Rockstar Games Launcher settings.) GTA Online won’t start this way; remove it to play online.',
+      'Start GTA V. HotSwap adds its own plugin by itself and connects in story mode.',
+    ],
+    link: { url: 'https://www.dev-c.com/gtav/scripthookv/', label: 'Get Script Hook V' },
+    done: 'Script Hook V is installed.',
+  },
+};
+
 // Keyed by Steam app ID.
 const CATALOG = {
   526870: { genre: 'Factory building', cats: [
@@ -26,9 +56,20 @@ const CATALOG = {
     { name: 'Round', mods: [T('Infinite Battery', 'Items and weapons never run out of battery.'), A('Complete Extractions', 'Skips every extraction point, so you can head straight to the truck.')] },
     { name: 'World', mods: [T('Valuables Never Break'), A('Add $10,000')] },
   ]},
-  304930: { genre: 'Survival', solo: true, cats: [
-    { name: 'Player', mods: [T('Infinite Health'), T('No Hunger'), T('No Thirst'), T('Infinite Stamina')] },
-    { name: 'Weapons', mods: [T('Infinite Ammo'), T('No Reload'), T('No Weapon Decay')] },
+  // Unturned: Unity on Mono (engines.rs). Its servers use VAC and BattlEye, so mods only run in
+  // singleplayer: `offline` must hold every tick, and an anti-cheat loading stops HotSwap for good.
+  304930: { genre: 'Survival', solo: true, experimental: true, offline: [
+    { at: 'SDG.Unturned/Provider._isServer', is: 1 }, { at: 'SDG.Unturned/Provider.isVacActive', is: 0 }, { at: 'SDG.Unturned/Provider.isThirdpartyAntiCheatActive', is: 0 },
+  ], cats: [
+    { name: 'Player', mods: [T('Infinite Health', '', { at: 'SDG.Unturned/Player._localPlayer._life._health', min: 100 }),
+      T('No Hunger', '', { at: 'SDG.Unturned/Player._localPlayer._life._food', min: 100 }),
+      T('No Thirst', '', { at: 'SDG.Unturned/Player._localPlayer._life._water', min: 100 }),
+      T('Infinite Stamina', '', { at: 'SDG.Unturned/Player._localPlayer._life._stamina', min: 100 }),
+      T('No Infection', 'Immunity stays full.', { at: 'SDG.Unturned/Player._localPlayer._life._virus', min: 100 }),
+      T('Infinite Oxygen', '', { at: 'SDG.Unturned/Player._localPlayer._life._oxygen', min: 100 })] },
+    { name: 'Weapons', mods: [T('Infinite Ammo', 'The magazine in your gun never empties.', { at: 'SDG.Unturned/Player._localPlayer._equipment._useable.ammo', best: true }),
+      T('No Reload'), T('No Weapon Decay', 'The item in your hands stays at full quality.', { at: 'SDG.Unturned/Player._localPlayer._equipment._quality', min: 100 })] },
+    { name: 'Skills', mods: [A('Add 1,000 Experience', '', { at: 'SDG.Unturned/Player._localPlayer._skills._experience', add: 1000 })] },
   ]},
   220200: { genre: 'Space sim', cats: [
     { name: 'Vessel', mods: [T('Unlimited Fuel', 'Liquid fuel, oxidizer, solid fuel, xenon and EVA propellant stay full on the vessel you fly.'), T('Unlimited Monopropellant', 'RCS fuel stays full on the vessel you fly.'),
@@ -99,6 +140,12 @@ const CATALOG = {
       A('Repair Truck and Trailer'), A('Refuel')] },
     { name: 'Career', mods: [T('Infinite Money', 'Your money never goes down; earnings still add up.'), A('Add $100,000'), A('Add 10,000 XP'), A('Level Up', 'Straight to the next level, for one more skill point.')] },
   ]},
+  // GTA V Legacy and Enhanced: story mode through Script Hook V and HotSwap's plugin (bridge.rs,
+  // gta-asi). BattlEye has to be off, which also keeps the game out of GTA Online.
+  271590: { genre: 'Action', experimental: true, setup: 'scripthookv', offline: true,
+    offlineNote: 'Story mode only. GTA Online uses BattlEye: mods need BattlEye off, which keeps the game out of GTA Online.', cats: GTA_CATS },
+  3240220: { genre: 'Action', experimental: true, setup: 'scripthookv', offline: true,
+    offlineNote: 'Story mode only. GTA Online uses BattlEye: mods need BattlEye off, which keeps the game out of GTA Online.', cats: GTA_CATS },
   // Mr.Mine: an Electron game, modded through its page (cdp.rs). Start it from HotSwap.
   1397920: { genre: 'Idle', experimental: true, cats: [
     { name: 'Money', mods: [T('Infinite Money', 'Buying things costs nothing.', { js: 'window.__hsSub = window.__hsSub || subtractMoney; subtractMoney = () => {}', off: 'if (window.__hsSub) subtractMoney = window.__hsSub' }),
@@ -117,7 +164,7 @@ const CATALOG = {
 // Mods for any single-player game of an engine (without its own list above), from the engine itself.
 const ENGINE_NAMES = { 'unity-mono': 'Unity', 'unity-il2cpp': 'Unity', unreal: 'Unreal Engine', 'rpgmaker-mv': 'RPG Maker MV', 'rpgmaker-mz': 'RPG Maker MZ', renpy: "Ren'Py", godot: 'Godot' };
 // Engines whose mods can be described as data (`spec`).
-const SPEC_ENGINES = ['unity-mono', 'unity-il2cpp', 'unreal', 'electron', 'nwjs', 'rpgmaker-mv', 'rpgmaker-mz', 'renpy', 'godot'];
+const SPEC_ENGINES = ['unity-mono', 'unity-il2cpp', 'unreal', 'electron', 'nwjs', 'rpgmaker-mv', 'rpgmaker-mz', 'renpy', 'godot', 'gta'];
 const ENGINE_CATS = {
   'unity-mono': [
     { name: 'Game', mods: [S('Game Speed', 10, 500, 10, 100, 'Percent of normal speed, for everything in the game.', { at: 'UnityEngine/Time.timeScale', value: true, mul: 0.01 })] },

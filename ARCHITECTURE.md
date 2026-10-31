@@ -47,7 +47,8 @@ A map of every file and what it does. HotSwap has two halves:
 | `remote.rs` | Runs a function inside the game on a short-lived thread (used by the Mono and IL2CPP readers), and heap search helpers. |
 | `engines.rs` | Mods described as data (`spec` in ui/data.js) on any engine HotSwap reads by name; engine detection for the library scan. |
 | `cdp.rs` | Electron, NW.js and RPG Maker MV/MZ games over Chromium's DevTools protocol (HotSwap starts them with the debugging port open). |
-| `bridge.rs` | Ren'Py and Godot: a script added to the game (assets/hotswap.rpy, assets/hotswap_godot.gd) asks HotSwap for mods over local UDP. |
+| `bridge.rs` | Ren'Py, Godot and GTA V: a script or plugin added to the game (assets/hotswap.rpy, assets/hotswap_godot.gd, gta-asi) asks HotSwap for mods over local UDP. |
+| `../gta-asi/` | HotSwap's Script Hook V plugin for GTA V story mode (Rust, built into the app by build.rs). |
 | `ksp.rs` | Kerbal Space Program mods: the game's cheat switches, resources, funds, science and reputation. |
 | `sn1.rs` | Subnautica and Below Zero mods: the game's cheats and game-mode options. |
 | `sn2.rs` | Subnautica 2 mods: player stats in an Unreal game without debug symbols. |
@@ -131,4 +132,3 @@ A map of every file and what it does. HotSwap has two halves:
 | `src-tauri/build.rs` | Lists the commands the interface is allowed to call. |
 | `src-tauri/capabilities/` | Which windows may use which commands. |
 | `src-tauri/assets/sm_bridge.lua` | The Scrap Mechanic Lua bridge (unused while Scrap Mechanic is off). |
-| `.github/workflows/release.yml` | A signed release build on GitHub (waiting for code signing). |

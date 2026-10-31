@@ -123,10 +123,13 @@ function buildGame(raw) {
   const g = {
     id: raw.id || String(appId), appId, source: raw.source || 'steam', name: raw.name,
     lastPlayed: raw.lastPlayed || 0, size: raw.sizeOnDisk || 0, playtime: raw.playtime || 0,
-    software: raw.kind === 'software', steamType: raw.steamType || null, anticheat: raw.anticheat || [], engine: raw.engine || null,
+    software: raw.kind === 'software', steamType: raw.steamType || null, engine: raw.engine || null,
+    // Games whose anti-cheat only runs online can have singleplayer-only mods (`offline` in the catalog).
+    anticheat: c?.offline ? [] : raw.anticheat || [], offline: c?.offline ? c.offline : null, onlineAnticheat: c?.offline ? raw.anticheat || [] : [],
+    offlineNote: c?.offlineNote || null, setup: c?.setup || null,
     genre: c?.genre || '', solo: !!c?.solo, experimental: !!c?.experimental, color: hue(raw.id || appId),
     // Anti-cheat games never get mods, even if the catalog has some.
-    cats: raw.anticheat?.length ? [] : c?.cats || [],
+    cats: raw.anticheat?.length && !c?.offline ? [] : c?.cats || [],
     art: {
       icon: fileSrc(art.icon), logo: fileSrc(art.logo), hero: fileSrc(art.hero), heroBlur: fileSrc(art.heroBlur),
       capsule: fileSrc(art.capsule) || (!invoke && appId ? steamCdn(appId, 'library_600x900.jpg') : null),
@@ -244,12 +247,14 @@ function syncHotkeys() {
 }
 
 // A mod's spec(s) in the shape the trainer takes: { at, op, v, def, mul, ty, from }.
-const SPEC_OPS = ['set', 'min', 'max', 'freeze', 'best', 'fill', 'scale', 'value', 'add', 'put', 'js'];
+const SPEC_OPS = ['set', 'min', 'max', 'freeze', 'best', 'fill', 'scale', 'value', 'add', 'put', 'js', 'native'];
 function specList(m) {
   return [].concat(m.spec).map(s => {
     const op = SPEC_OPS.find(o => o in s);
     // js: code to run (when on, or once for actions); `off`: code to run when turned off.
     if (op === 'js') return { at: s.js, op, v: 0, def: 0, mul: 1, ty: null, from: s.off ?? null, act: m.type === 'action' };
+    // native: a key the game's plugin knows (GTA V).
+    if (op === 'native') return { at: s.native, op, v: 0, def: 0, mul: 1, ty: null, from: null, act: m.type === 'action' };
     return { at: s.at, op, v: typeof s[op] === 'number' ? s[op] : 0, def: m.def ?? 0, mul: s.mul ?? 1, ty: s.ty ?? null, from: op === 'fill' ? s.fill : null, act: m.type === 'action' };
   });
 }
@@ -263,10 +268,14 @@ function syncTrainer() {
   const g = findGame(runningId());
   const values = {};
   if (g) for (const m of modsOf(g)) if (m.live && m.type !== 'action') values[m.id] = m.type === 'toggle' ? (valueOf(g, m) ? 1 : 0) : valueOf(g, m);
-  const args = { game: g?.id ?? null, paused: !!(g && state.paused[g.id]), values, engine: null, specs: null };
+  const args = { game: g?.id ?? null, paused: !!(g && state.paused[g.id]), values, engine: null, specs: null, guard: null };
   // Mods described as data go to the engine reader with what they change.
   const specs = g ? Object.fromEntries(modsOf(g).filter(m => m.live && m.spec).map(m => [m.id, specList(m)])) : {};
-  if (Object.keys(specs).length) { args.engine = g.engine; args.specs = specs; }
+  if (Object.keys(specs).length) {
+    args.engine = g.engine; args.specs = specs;
+    // Singleplayer-only games: what must hold for the mods to run.
+    if (Array.isArray(g.offline)) args.guard = g.offline.map(o => ({ at: o.at, op: 'is', v: o.is, def: 0, mul: 1, ty: null, from: null, act: false }));
+  }
   const sig = JSON.stringify(args);
   if (sig === lastTrainer) return;
   lastTrainer = sig;

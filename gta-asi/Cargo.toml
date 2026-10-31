@@ -1,0 +1,18 @@
+[package]
+name = "hotswap-gta"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "HotSwap's Script Hook V plugin for GTA V story mode (built by src-tauri/build.rs)"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
+strip = true

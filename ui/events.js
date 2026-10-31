@@ -4,6 +4,7 @@ const findMod = id => modsOf(game()).find(m => m.id === id);
 let wipeArmed = false;
 
 document.addEventListener('click', e => {
+  if (e.target.closest('[data-setupcheck]')) { const g = game(); if (g) { delete setupDone[g.id]; renderMods(); } return; }
   const a = e.target.closest('a[target="_blank"]');
   if (a && invoke) { e.preventDefault(); invoke('plugin:opener|open_url', { url: a.href }).catch(console.error); return; }
   if (e.target.closest('#whatsNew') && (e.target.id === 'whatsNew' || e.target.closest('#wnClose'))) { $('whatsNew').hidden = true; return; }
