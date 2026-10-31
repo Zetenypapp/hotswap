@@ -184,6 +184,14 @@ Release builds are made by GitHub Actions from this repository and signed only a
 
 **Privacy:** HotSwap doesn't send anything about you anywhere. It only talks to the services you use through it (Steam, Thunderstore, SpaceDock, ficsit.app, Nexus Mods, GitHub for updates, and Discord on your own PC), and only to fetch what you ask for.
 
+## ⚖️ License
+
+HotSwap is free software under the [GNU General Public License v3.0 or later](LICENSE). You can use, change and share it, and sell copies, as long as what you share stays under the same license with its full source code and keeps the copyright notice.
+
+The **HotSwap** name and logo aren't covered by the license: forks need their own name and logo, so nobody mistakes them for HotSwap.
+
+Copyright © 2026 Zetenypapp
+
 ## 📜 Credits
 
 - Font: [Figtree](https://github.com/erikdkennedy/figtree), SIL Open Font License
