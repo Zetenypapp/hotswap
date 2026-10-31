@@ -74,6 +74,7 @@ impl Trainer {
             let mut extra: Option<crate::extra::Session> = None;
             let mut scrap: Option<crate::scrap::Session> = None;
             let mut sw: Option<crate::stormworks::Session> = None;
+            let mut ets2: Option<crate::ets2::Session> = None;
             let mut last_attach: Option<Instant> = None;
             let mut last = Status { game: None, connected: false, message: String::new() };
             loop {
@@ -200,6 +201,26 @@ impl Trainer {
                             None => Status { game: game.clone(), connected: false, message: "Waiting for the game to start".into() },
                         }
                     }
+                    Some(g @ (crate::ets2::ETS2 | crate::ets2::ATS)) => {
+                        // Reading the game's exe takes a few seconds: at most every 10 seconds.
+                        if ets2.is_none() && last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(10)) {
+                            last_attach = Some(Instant::now());
+                            ets2 = pid_of(g).and_then(|pid| crate::ets2::Session::attach(pid).map_err(|e| log(&format!("ets2 attach: {e}"))).ok());
+                        }
+                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            ets2.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions))
+                        }))
+                        .unwrap_or_else(|_| Some(Err("Lost track of the game, reconnecting".into())));
+                        match result {
+                            Some(Ok(true)) => Status { game: game.clone(), connected: true, message: "Connected".into() },
+                            Some(Ok(false)) => Status { game: game.clone(), connected: false, message: "Waiting for your profile to load".into() },
+                            Some(Err(e)) => {
+                                ets2 = None;
+                                Status { game: game.clone(), connected: false, message: e }
+                            }
+                            None => Status { game: game.clone(), connected: false, message: "Waiting for the game to start".into() },
+                        }
+                    }
                     Some(crate::stormworks::STORMWORKS) => {
                         // Looking for the process is the expensive part: at most every 3 seconds.
                         if last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
@@ -268,6 +289,7 @@ impl Trainer {
                         ksp = None;
                         scrap = None;
                         sw = None;
+                        ets2 = None;
                         extra = None;
                         me.0.lock().unwrap().pos = None;
                         Status { game: game.clone(), connected: false, message: String::new() }

@@ -9,6 +9,7 @@ mod cmd_maps;
 mod cmd_mods;
 mod discord;
 mod epic;
+mod ets2;
 mod extra;
 mod gog;
 mod home;
@@ -471,6 +472,12 @@ fn main() {
     #[cfg(windows)]
     if std::env::args().any(|a| a == "--gpu-sensors") {
         println!("{:?}", stats::gpu_sensors());
+        return;
+    }
+    // Dev aid: `hotswap --ets2-layout <exe>` reads ETS2's or ATS's save metadata from the exe.
+    if let Some(i) = std::env::args().position(|a| a == "--ets2-layout") {
+        let path = std::env::args().nth(i + 1).unwrap_or_default();
+        println!("{}", ets2::describe(std::path::Path::new(&path)));
         return;
     }
     // Dev aid: `hotswap --stats` prints two readings of the System tab's stats, a second apart.

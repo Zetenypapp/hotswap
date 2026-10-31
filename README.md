@@ -58,6 +58,10 @@ No Hunger, No Thirst, No Sleep, No Anxiety, Unlimited Money, Add $10,000, Walk S
 
 Infinite Money, Add $100,000, Add 100 Research Points, Infinite Fuel, Infinite Batteries, Infinite Ammo, No Vehicle Damage, No Engine Overheating, No Player Damage, No Clip, Map Teleport, Unlock All Components, Unlock All Islands, Clear Fog of War, Clear Weather, No Sharks and No Megalodon. They work through the game's own addon system (no memory editing): HotSwap adds a HotSwap addon, which you turn on when you create a world. Not tested in game yet.
 
+## 🚚 Euro Truck Simulator 2 and American Truck Simulator mods (experimental)
+
+No Damage, Infinite Fuel, No Fatigue, Repair Truck and Trailer, Refuel, Infinite Money, Add €100,000 (or $), Add 10,000 XP and Level Up, live while you drive. No hard-coded offsets: HotSwap reads the game's own save-file metadata from the exe you have, so updates are followed automatically. Not tested in game yet.
+
 ## 🌊 Subnautica 2 mods
 
 | Mod | What it does |
@@ -198,6 +202,7 @@ Copyright © 2026 Zetenypapp
 
 ## 📜 Credits
 
+- Euro Truck Simulator 2 and American Truck Simulator mods: ported from [ETS2Trainer](https://github.com/Despical/ETS2Trainer) by Berke Akçen (Despical), GPL-3.0
 - Font: [Figtree](https://github.com/erikdkennedy/figtree), SIL Open Font License
 - Game news and store data: Steam Web API and storefront; deals: [CheapShark](https://www.cheapshark.com)
 - Game artwork is read from your own Steam install and is never bundled or redistributed

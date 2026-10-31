@@ -76,7 +76,7 @@ impl Watch {
         exes.iter().find(|(_, e)| e.ends_with("-win64-shipping.exe"))
             .or_else(|| exes.iter().find(|(_, e)| std::path::Path::new(&format!("{}_Data", e.trim_end_matches(".exe"))).is_dir()))
             // Games on their own engine, by exe name.
-            .or_else(|| exes.iter().find(|(_, e)| e.ends_with(r"\scrapmechanic.exe")))
+            .or_else(|| exes.iter().find(|(_, e)| [r"\scrapmechanic.exe", r"\stormworks64.exe", r"\stormworks.exe", r"\eurotrucks2.exe", r"\amtrucks.exe"].iter().any(|n| e.ends_with(n))))
             .map(|(pid, _)| *pid)
     }
 

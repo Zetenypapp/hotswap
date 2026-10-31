@@ -83,9 +83,16 @@ const CATALOG = {
     { name: 'Movement', mods: [S('Swim Speed', 10, 500, 10, 100, 'Percent of normal swim speed.'), S('Walk Speed', 10, 500, 10, 100, 'Percent of normal walking speed.')] },
     { name: 'Crafting', mods: [T('Free Crafting', 'Crafting and building need no materials. Reopen the crafting menu after turning it on.'), T('Instant Crafting'), T('Infinite Energy', 'Tools, vehicles and batteries never run out.')] },
   ]},
-  227300: { genre: 'Driving sim', cats: [
-    { name: 'Truck', mods: [T('No Damage'), T('Infinite Fuel'), T('No Fatigue')] },
-    { name: 'Career', mods: [A('Add €100,000'), A('Add 5 Skill Points'), A('Add 10,000 XP')] },
+  // Euro Truck and American Truck Simulator: live, from the game's own save metadata (ets2.rs).
+  227300: { genre: 'Driving sim', experimental: true, cats: [
+    { name: 'Truck', mods: [T('No Damage', 'Your truck, trailer and cargo take no new damage or wear. Existing damage stays: use Repair.'), T('Infinite Fuel'), T('No Fatigue', 'You never need to sleep.'),
+      A('Repair Truck and Trailer'), A('Refuel')] },
+    { name: 'Career', mods: [T('Infinite Money', 'Your money never goes down; earnings still add up.'), A('Add €100,000'), A('Add 10,000 XP'), A('Level Up', 'Straight to the next level, for one more skill point.')] },
+  ]},
+  270880: { genre: 'Driving sim', experimental: true, cats: [
+    { name: 'Truck', mods: [T('No Damage', 'Your truck, trailer and cargo take no new damage or wear. Existing damage stays: use Repair.'), T('Infinite Fuel'), T('No Fatigue', 'You never need to sleep.'),
+      A('Repair Truck and Trailer'), A('Refuel')] },
+    { name: 'Career', mods: [T('Infinite Money', 'Your money never goes down; earnings still add up.'), A('Add $100,000'), A('Add 10,000 XP'), A('Level Up', 'Straight to the next level, for one more skill point.')] },
   ]},
   // Stormworks: through the game's own addon API (stormworks.rs). The addon has to be on in the world.
   573090: { genre: 'Sandbox', experimental: true, cats: [
@@ -121,6 +128,8 @@ const LIVE = {
     'infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'no-temperature-damage', 'free-dash',
     'swim-speed', 'walk-speed', 'free-crafting', 'instant-crafting', 'infinite-energy',
   ],
+  227300: ['no-damage', 'infinite-fuel', 'no-fatigue', 'repair-truck-and-trailer', 'refuel', 'infinite-money', 'add-100-000', 'add-10-000-xp', 'level-up'],
+  270880: ['no-damage', 'infinite-fuel', 'no-fatigue', 'repair-truck-and-trailer', 'refuel', 'infinite-money', 'add-100-000', 'add-10-000-xp', 'level-up'],
   573090: [
     'infinite-money', 'add-100-000', 'add-100-research-points', 'infinite-fuel', 'infinite-batteries', 'infinite-ammo',
     'no-vehicle-damage', 'no-engine-overheating', 'no-player-damage', 'no-clip', 'map-teleport',

@@ -49,6 +49,8 @@ A map of every file and what it does. HotSwap has two halves:
 | `repo.rs` | R.E.P.O. mods: health, stamina, extraction skipping and the enemy radar. |
 | `extra.rs` | Oxygen Not Included, Mon Bazou and Occupy Mars mods. |
 | `scrap.rs` | Scrap Mechanic mods through a Lua bridge (switched off for now). |
+| `stormworks.rs` | Stormworks mods through the game's addon API: an addon (assets/sw_addon.lua) asks HotSwap over localhost. |
+| `ets2.rs` | Euro Truck and American Truck Simulator mods, from the save metadata in the game's exe. |
 | `world.rs` | Reads Satisfactory's world for the HotSwap map: resources, collectibles and your factory. |
 
 ### Unreal Engine games: `ue/`
