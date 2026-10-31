@@ -166,24 +166,31 @@ pub fn find_words(p: &Proc, wanted: &[u64], limit: usize) -> Vec<Vec<u64>> {
     }
     // Nearly every word is outside the range the wanted values span: one compare skips it.
     let (lo, hi) = wanted.iter().filter(|&&v| v != 0).fold((u64::MAX, 0), |(lo, hi), &v| (lo.min(v), hi.max(v)));
+    // One reused 4 MB buffer: regions can be hundreds of MB, and a page that can't be read
+    // only costs its own chunk.
+    const CHUNK: usize = 4 << 20;
+    let mut buf = vec![0u8; CHUNK];
     for (base, size) in heap_regions(p) {
-        let mut buf = vec![0u8; size];
-        if !p.read_into(base, &mut buf) {
-            continue;
-        }
-        for (i, w) in buf.chunks_exact(8).enumerate() {
-            let w = u64::from_le_bytes(w.try_into().unwrap());
-            if w < lo || w > hi {
+        for off in (0..size).step_by(CHUNK) {
+            let n = CHUNK.min(size - off);
+            let at = base + off as u64;
+            if !p.read_into(at, &mut buf[..n]) {
                 continue;
             }
-            for (k, v) in wanted.iter().enumerate() {
-                if *v == w && out[k].len() < limit {
-                    out[k].push(base + i as u64 * 8);
+            for (i, w) in buf[..n].chunks_exact(8).enumerate() {
+                let w = u64::from_le_bytes(w.try_into().unwrap());
+                if w < lo || w > hi {
+                    continue;
+                }
+                for (k, v) in wanted.iter().enumerate() {
+                    if *v == w && out[k].len() < limit {
+                        out[k].push(at + i as u64 * 8);
+                    }
                 }
             }
-        }
-        if out.iter().zip(wanted).all(|(o, &v)| v == 0 || o.len() >= limit) {
-            break;
+            if out.iter().zip(wanted).all(|(o, &v)| v == 0 || o.len() >= limit) {
+                return out;
+            }
         }
     }
     out

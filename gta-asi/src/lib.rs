@@ -162,10 +162,8 @@ struct State {
 }
 
 extern "C" fn script_main() {
-    let sock = UdpSocket::bind(("127.0.0.1", 0)).ok();
-    if let Some(s) = &sock {
-        let _ = s.set_nonblocking(true);
-    }
+    // Connected: only HotSwap's port can answer.
+    let sock = UdpSocket::bind(("127.0.0.1", 0)).ok().filter(|s| s.connect(("127.0.0.1", PORT)).is_ok() && s.set_nonblocking(true).is_ok());
     let mut st = State::default();
     let (mut last_ask, mut last_answer) = (Instant::now() - Duration::from_secs(10), None::<Instant>);
     loop {
@@ -173,7 +171,7 @@ extern "C" fn script_main() {
         if let Some(s) = &sock {
             if last_ask.elapsed() > Duration::from_millis(500) {
                 last_ask = Instant::now();
-                let _ = s.send_to(b"hs", ("127.0.0.1", PORT));
+                let _ = s.send(b"hs");
             }
             let mut buf = vec![0u8; 65536];
             while let Ok(n) = s.recv(&mut buf) {

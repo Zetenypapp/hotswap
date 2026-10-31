@@ -24,7 +24,9 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 const initials = n => n.replace(/[^A-Za-z0-9 ]/g, '').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const hue = id => `hsl(${([...String(id)].reduce((h, c) => h * 31 + c.charCodeAt(0), 7) * 47 >>> 0) % 360} 55% 55%)`;
 const steamCdn = (app, file) => `https://cdn.akamai.steamstatic.com/steam/apps/${app}/${file}`;
-const img = (src, cls = '') => src ? `<img class="${cls}" src="${esc(src)}" alt="" loading="lazy" onerror="this.remove()">` : '';
+const img = (src, cls = '') => src ? `<img class="${cls}" src="${esc(src)}" alt="" loading="lazy" data-drop>` : '';
+// Images that fail to load disappear (no inline handlers: the content security policy forbids them).
+document.addEventListener('error', e => { if (e.target instanceof HTMLImageElement && e.target.hasAttribute('data-drop')) e.target.remove(); }, true);
 const ext = 'target="_blank" rel="noopener"';
 const money = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: n >= 1000 ? 0 : 2, maximumFractionDigits: 2 });
 const shortDate = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });

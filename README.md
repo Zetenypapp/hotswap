@@ -205,6 +205,19 @@ Want to change something? **[ARCHITECTURE.md](ARCHITECTURE.md)** lists every fil
 
 HotSwap is for **single-player and private games only**. It refuses to mod anything with anti-cheat, and you shouldn't use it to get an edge over other players.
 
+## 🛡️ Security
+
+HotSwap changes other programs' memory, so it's built to be careful with its own:
+
+- **Locked-down app window.** A strict Content Security Policy: only HotSwap's own script files run. No inline code, no `eval`, no plugins, and the app can only talk to itself and GitHub's API. Even if a mod description or news item contained malicious code, it couldn't run.
+- **Least privilege for every window.** The in-game overlay can only use the 9 commands it needs, the enemy radar only receives positions, and the map website only gets the map commands. Neither can launch games, write files or install mods.
+- **Signed updates.** Every update is checked against HotSwap's signing key before it installs.
+- **Safe downloads.** Mod archives come over HTTPS, have size limits, and are unpacked with a zip library that refuses paths escaping the target folder (kept up to date for known zip security issues).
+- **Local only.** The game connections (Stormworks addon, Ren'Py, Godot and GTA scripts, web games' debug port) only listen on `127.0.0.1`, so nothing on your network can reach them, and the scripts only accept answers from HotSwap's own port.
+- **Anti-cheat aware.** Games with anti-cheat get no mods. The few exceptions (Unturned singleplayer, GTA V story mode) turn themselves off the moment you go online, and HotSwap stops touching a game for good if its anti-cheat loads.
+- **Logged, not silent.** Anything the security policy blocks is written to HotSwap's logs (Settings → Export logs).
+- **Scanned.** Every release is checked with Microsoft Defender before it's published.
+
 ## 🔒 Privacy
 
 HotSwap doesn't send anything about you anywhere. It only talks to the services you use through it (Steam, Thunderstore, SpaceDock, ficsit.app, Nexus Mods, GitHub for updates, and Discord on your own PC), and only to fetch what you ask for.

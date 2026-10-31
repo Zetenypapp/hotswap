@@ -159,11 +159,13 @@ init 999 python:
             try:
                 if self.sock is None:
                     self.sock = _hs_socket.socket(_hs_socket.AF_INET, _hs_socket.SOCK_DGRAM)
+                    # Connected: only HotSwap's port can answer.
+                    self.sock.connect(("127.0.0.1", 47831))
                     self.sock.setblocking(False)
                 now = _hs_time.time()
                 if now - self.last_ask > 0.5:
                     self.last_ask = now
-                    self.sock.sendto(b"hs", ("127.0.0.1", 47831))
+                    self.sock.send(b"hs")
                 while True:
                     try:
                         data = self.sock.recv(65536)

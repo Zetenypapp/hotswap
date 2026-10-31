@@ -1,6 +1,6 @@
 [package]
 name = "hotswap"
-version = "0.3.9"
+version = "0.3.10"
 description = "HotSwap desktop app"
 license = "GPL-3.0-or-later"
 edition = "2021"
@@ -46,5 +46,6 @@ opt-level = 2
 [profile.release]
 codegen-units = 1
 lto = true
-opt-level = "s"
+# Speed over size: game memory searches are the hot path.
+opt-level = 3
 strip = true

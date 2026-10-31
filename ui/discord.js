@@ -16,11 +16,15 @@ function dcOptions() {
 };
 dcOptions();
 // Who's talking, shown over any game (unless the HUD already shows it).
-var talkOn = false, lastTalk = '', VOICE = null;
+var talkOn = false, lastTalk = '', VOICE = null, lastVoice = '';
 setInterval(async () => {
   if (!invoke || !dcVoiceOn()) { VOICE = null; return; }
-  VOICE = await invoke('voice_state').catch(() => null);
-  if (state.view === 'overlay') renderOverlayPage();
+  const v = await invoke('voice_state').catch(() => null);
+  // Only redraw the Overlay page when something changed (this runs about three times a second).
+  const vsig = JSON.stringify(v);
+  const changed = vsig !== lastVoice;
+  VOICE = v; lastVoice = vsig;
+  if (changed && state.view === 'overlay') renderOverlayPage();
   const talking = state.overlay && state.dcTalk && !state.fgFriendly && dcPopupsNow() && !hudOn && VOICE?.status === 'ready' ? VOICE.members.filter(m => m.speaking).map(m => ({ name: m.name, avatar: m.avatar })) : [];
   const sig = JSON.stringify(talking);
   if (sig === lastTalk) return;

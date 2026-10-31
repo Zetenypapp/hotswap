@@ -2,6 +2,8 @@
 // last, after every other script has defined what it needs.
 
 /* ---------- Boot ---------- */
+// Anything the content security policy blocks goes to the logs (it would point at a bug, or an attack).
+document.addEventListener('securitypolicyviolation', e => invoke?.('log_ui', { msg: `CSP blocked ${e.violatedDirective}: ${e.blockedURI || 'inline'} (${e.sourceFile?.split('/').pop() || ''}:${e.lineNumber})` }));
 (async () => {
   if (!appWin) $('winctl').hidden = true;
   await loadState();
@@ -37,5 +39,6 @@
   console.error(err);
   document.querySelectorAll('.view').forEach(v => v.hidden = v.id !== 'mapsView');
   $('mapsBody').innerHTML = `<div class="empty-page"><h1>HotSwap couldn't start</h1>
-    <p>${esc(err?.message || err)}</p><button class="btn" onclick="location.reload()">Try again</button></div>`;
+    <p>${esc(err?.message || err)}</p><button class="btn" id="bootRetry">Try again</button></div>`;
+  $('bootRetry').addEventListener('click', () => location.reload());
 });
