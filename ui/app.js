@@ -122,7 +122,7 @@ function buildGame(raw) {
     id: raw.id || String(appId), appId, source: raw.source || 'steam', name: raw.name,
     lastPlayed: raw.lastPlayed || 0, size: raw.sizeOnDisk || 0, playtime: raw.playtime || 0,
     software: raw.kind === 'software', steamType: raw.steamType || null, anticheat: raw.anticheat || [],
-    genre: c?.genre || '', solo: !!c?.solo, color: hue(raw.id || appId),
+    genre: c?.genre || '', solo: !!c?.solo, experimental: !!c?.experimental, color: hue(raw.id || appId),
     // Anti-cheat games never get mods, even if the catalog has some.
     cats: raw.anticheat?.length ? [] : c?.cats || [],
     art: {

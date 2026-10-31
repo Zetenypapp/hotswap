@@ -54,6 +54,10 @@ Instant Build, Sandbox Tools, Printing Pod Always Ready, Max Game Speed, No Stre
 
 No Hunger, No Thirst, No Sleep, No Anxiety, Unlimited Money, Add $10,000, Walk Speed, Jump Height, Infinite Fuel, No Derby Damage, Freeze Time and Always Day.
 
+## 🚁 Stormworks mods (experimental)
+
+Infinite Money, Add $100,000, Add 100 Research Points, Infinite Fuel, Infinite Batteries, Infinite Ammo, No Vehicle Damage, No Engine Overheating, No Player Damage, No Clip, Map Teleport, Unlock All Components, Unlock All Islands, Clear Fog of War, Clear Weather, No Sharks and No Megalodon. They work through the game's own addon system (no memory editing): HotSwap adds a HotSwap addon, which you turn on when you create a world. Not tested in game yet.
+
 ## 🌊 Subnautica 2 mods
 
 | Mod | What it does |

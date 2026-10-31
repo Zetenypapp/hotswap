@@ -167,7 +167,8 @@ function renderGame() {
         g.source !== 'steam' ? SOURCES[g.source] : '',
         g.solo ? 'Solo or private sessions only' : '',
       ].filter(Boolean).join(' · ')}</div>
-      ${g.anticheat.length ? `<div class="ac-note"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5z"/></svg>Uses ${esc(g.anticheat.join(' and '))}. Modding it can get your account banned.</div>` : ''}</div>
+      ${g.anticheat.length ? `<div class="ac-note"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5z"/></svg>Uses ${esc(g.anticheat.join(' and '))}. Modding it can get your account banned.</div>` : ''}
+      ${g.experimental && !g.anticheat.length ? `<div class="ac-note exp" title="Tell us how they work: Settings → Report a bug"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M9 2h6v2h-1v5.5l5.6 9.4A2 2 0 0 1 17.9 22H6.1a2 2 0 0 1-1.7-3.1L10 9.5V4H9z"/></svg>Experimental: these mods are new and not tested in the game yet.</div>` : ''}</div>
     <div class="gh-actions">
       ${total ? `${profileControl(g)}
       <button class="roundbtn" id="resetBtn" aria-label="Turn off all mods" title="Turn off all mods"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>` : ''}

@@ -73,6 +73,7 @@ impl Trainer {
             let mut ksp: Option<crate::ksp::Session> = None;
             let mut extra: Option<crate::extra::Session> = None;
             let mut scrap: Option<crate::scrap::Session> = None;
+            let mut sw: Option<crate::stormworks::Session> = None;
             let mut last_attach: Option<Instant> = None;
             let mut last = Status { game: None, connected: false, message: String::new() };
             loop {
@@ -199,6 +200,25 @@ impl Trainer {
                             None => Status { game: game.clone(), connected: false, message: "Waiting for the game to start".into() },
                         }
                     }
+                    Some(crate::stormworks::STORMWORKS) => {
+                        // Looking for the process is the expensive part: at most every 3 seconds.
+                        if last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
+                            last_attach = Some(Instant::now());
+                            match pid_of(crate::stormworks::STORMWORKS) {
+                                None => sw = None,
+                                Some(_) if sw.is_none() => {
+                                    sw = crate::stormworks::Session::attach().map_err(|e| log(&format!("stormworks attach: {e}"))).ok();
+                                }
+                                _ => {}
+                            }
+                        }
+                        match sw.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions)) {
+                            Some(Ok(true)) => Status { game: game.clone(), connected: true, message: "Connected".into() },
+                            Some(Err(e)) => Status { game: game.clone(), connected: false, message: e },
+                            Some(Ok(false)) => Status { game: game.clone(), connected: false, message: "Waiting for a world with the HotSwap addon. Turn on HotSwap under Addons when you create a new world (if it isn't listed, restart Stormworks once).".into() },
+                            None => Status { game: game.clone(), connected: false, message: "Waiting for the game to start".into() },
+                        }
+                    }
                     Some(g @ (crate::extra::ONI | crate::extra::MON_BAZOU | crate::extra::OCCUPY_MARS)) => {
                         if extra.is_none() && last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
                             last_attach = Some(Instant::now());
@@ -247,6 +267,7 @@ impl Trainer {
                         repo = None;
                         ksp = None;
                         scrap = None;
+                        sw = None;
                         extra = None;
                         me.0.lock().unwrap().pos = None;
                         Status { game: game.clone(), connected: false, message: String::new() }

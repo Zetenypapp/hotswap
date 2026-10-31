@@ -87,6 +87,14 @@ const CATALOG = {
     { name: 'Truck', mods: [T('No Damage'), T('Infinite Fuel'), T('No Fatigue')] },
     { name: 'Career', mods: [A('Add €100,000'), A('Add 5 Skill Points'), A('Add 10,000 XP')] },
   ]},
+  // Stormworks: through the game's own addon API (stormworks.rs). The addon has to be on in the world.
+  573090: { genre: 'Sandbox', experimental: true, cats: [
+    { name: 'Money', mods: [T('Infinite Money', 'The game’s own infinite money setting.'), A('Add $100,000'), A('Add 100 Research Points')] },
+    { name: 'Vehicles', mods: [T('Infinite Fuel'), T('Infinite Batteries'), T('Infinite Ammo'), T('No Vehicle Damage'), T('No Engine Overheating')] },
+    { name: 'Player', mods: [T('No Player Damage'), T('No Clip', 'Walk and fly through anything.'), T('Map Teleport', 'Click the map to teleport there.')] },
+    { name: 'World', mods: [T('Unlock All Components', 'Every vehicle part in the editor.'), T('Unlock All Islands'), T('Clear Fog of War', 'Reveals the whole map.'),
+      T('Clear Weather', 'No fog, rain or wind.'), T('No Sharks'), T('No Megalodon')] },
+  ]},
 };
 
 // Mods the trainer can actually apply, by Steam app ID. Everything else shows as "Soon".
@@ -112,6 +120,11 @@ const LIVE = {
   1962700: [
     'infinite-health', 'infinite-oxygen', 'no-hunger', 'no-thirst', 'no-temperature-damage', 'free-dash',
     'swim-speed', 'walk-speed', 'free-crafting', 'instant-crafting', 'infinite-energy',
+  ],
+  573090: [
+    'infinite-money', 'add-100-000', 'add-100-research-points', 'infinite-fuel', 'infinite-batteries', 'infinite-ammo',
+    'no-vehicle-damage', 'no-engine-overheating', 'no-player-damage', 'no-clip', 'map-teleport',
+    'unlock-all-components', 'unlock-all-islands', 'clear-fog-of-war', 'clear-weather', 'no-sharks', 'no-megalodon',
   ],
 };
 

@@ -146,6 +146,7 @@ img { display: block; }
 .gamehead h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.01em; }
 .gh-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .gh-sub { color: var(--muted); font-size: 13px; font-weight: 600; margin-top: 2px; }
+.ac-note.exp { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
 .ac-note { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 3px 9px; border-radius: 8px; background: color-mix(in srgb, var(--danger) 18%, transparent); color: #ffb3b5; font-size: 12px; font-weight: 700; }
 .gh-title .ghost { width: 28px; height: 28px; }
 .gh-title .ghost.on { color: var(--accent); }

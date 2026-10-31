@@ -29,6 +29,7 @@ mod sn2;
 mod sources;
 mod stats;
 mod steam;
+mod stormworks;
 mod trainer;
 mod spacedock;
 mod thunderstore;
