@@ -43,6 +43,11 @@ A map of every file and what it does. HotSwap has two halves:
 | File | What it does |
 |---|---|
 | `mono.rs` | Reads and changes Unity (Mono) games by asking the game's own runtime where things are. |
+| `il2cpp.rs` | The same for Unity games built with IL2CPP (GameAssembly.dll's exported API). |
+| `remote.rs` | Runs a function inside the game on a short-lived thread (used by the Mono and IL2CPP readers), and heap search helpers. |
+| `engines.rs` | Mods described as data (`spec` in ui/data.js) on any engine HotSwap reads by name; engine detection for the library scan. |
+| `cdp.rs` | Electron, NW.js and RPG Maker MV/MZ games over Chromium's DevTools protocol (HotSwap starts them with the debugging port open). |
+| `bridge.rs` | Ren'Py and Godot: a script added to the game (assets/hotswap.rpy, assets/hotswap_godot.gd) asks HotSwap for mods over local UDP. |
 | `ksp.rs` | Kerbal Space Program mods: the game's cheat switches, resources, funds, science and reputation. |
 | `sn1.rs` | Subnautica and Below Zero mods: the game's cheats and game-mode options. |
 | `sn2.rs` | Subnautica 2 mods: player stats in an Unreal game without debug symbols. |

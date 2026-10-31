@@ -34,6 +34,8 @@ pub fn scan() -> Vec<Game> {
             playtime: 0,
             steam_type: None,
             anticheat: detect_anticheat(&Default::default(), &path),
+            engine: crate::engines::detect(&path),
+            single_player: false,
             art: Art::default(),
             launch: if exe.is_file() { Launch::Exe { path: exe, dir } } else { Launch::None },
             install: path,

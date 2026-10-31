@@ -7,7 +7,12 @@ mod appinfo;
 mod cmd_discord;
 mod cmd_maps;
 mod cmd_mods;
+mod bridge;
+mod cdp;
 mod discord;
+mod engines;
+mod il2cpp;
+mod remote;
 mod epic;
 mod ets2;
 mod extra;
@@ -212,6 +217,14 @@ fn launch_game(launches: State<Launches>, id: String) -> Result<(), String> {
     let result = match launch {
         steam::Launch::Url(url) => std::process::Command::new("explorer.exe").arg(url).spawn(),
         steam::Launch::Exe { path, dir } => std::process::Command::new(path).current_dir(dir).spawn(),
+        steam::Launch::Web { path, dir, app_id } => std::process::Command::new(path)
+            .current_dir(dir)
+            .arg(format!("--remote-debugging-port={}", cdp::PORT))
+            .env("SteamAppId", app_id.to_string())
+            .env("SteamGameId", app_id.to_string())
+            // Set when HotSwap itself was started from an Electron app; it would make the game run as plain Node.
+            .env_remove("ELECTRON_RUN_AS_NODE")
+            .spawn(),
         steam::Launch::None => return Err("HotSwap doesn't know how to start this game".into()),
     };
     result.map(|_| ()).map_err(|e| e.to_string())
@@ -267,8 +280,8 @@ async fn fetch_source(url: String) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-fn trainer_set(trainer: State<trainer::Trainer>, game: Option<String>, paused: bool, values: HashMap<String, f64>) {
-    trainer.set(game, paused, values);
+fn trainer_set(trainer: State<trainer::Trainer>, game: Option<String>, paused: bool, values: HashMap<String, f64>, engine: Option<String>, specs: Option<HashMap<String, Vec<engines::Spec>>>) {
+    trainer.set(game, paused, values, engine, specs.unwrap_or_default());
 }
 
 /// One-shot mods like "Add 1,000 Coupons".
@@ -478,6 +491,42 @@ fn main() {
     if let Some(i) = std::env::args().position(|a| a == "--ets2-layout") {
         let path = std::env::args().nth(i + 1).unwrap_or_default();
         println!("{}", ets2::describe(std::path::Path::new(&path)));
+        return;
+    }
+    // Dev aid: `hotswap --engine-dump <engine> <exe name part> [Namespace/Class]` attaches the way the
+    // engine mods do and lists the game's classes, or one class's fields with offsets and types.
+    if let Some(i) = std::env::args().position(|a| a == "--engine-dump") {
+        let a: Vec<String> = std::env::args().collect();
+        let (engine, exe) = (a.get(i + 1).cloned().unwrap_or_default(), a.get(i + 2).cloned().unwrap_or_default().to_lowercase());
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let Some(pid) = sys.processes().values().find(|p| p.name().to_string_lossy().to_lowercase().contains(&exe)).map(|p| p.pid().as_u32()) else { return println!("not running") };
+        let t = std::time::Instant::now();
+        match engines::attach(&engine, pid) {
+            Ok(mut r) => println!("{}\n({:?})", r.dump(a.get(i + 3).map(|s| s.as_str())), t.elapsed()),
+            Err(e) => println!("attach failed: {e}"),
+        }
+        return;
+    }
+    // Dev aid: `hotswap --cdp <js> [spec json]` runs JavaScript in a web-tech game started by HotSwap;
+    // with a spec map (`{"id": [spec, ...]}`), runs one tick of those mods turned on at value 1.
+    if let Some(i) = std::env::args().position(|a| a == "--cdp") {
+        let a: Vec<String> = std::env::args().collect();
+        let mut s = match cdp::Session::attach() { Ok(s) => s, Err(e) => return println!("{e}") };
+        println!("{:?}", s.eval(&a[i + 1]));
+        if let Some(Ok(specs)) = a.get(i + 2).map(|j| serde_json::from_str::<HashMap<String, Vec<engines::Spec>>>(j)) {
+            let on: HashMap<String, f64> = specs.keys().map(|k| (k.clone(), 1.0)).collect();
+            let acts: Vec<String> = specs.iter().filter(|(_, l)| l.iter().any(|s| s.act)).map(|(k, _)| k.clone()).collect();
+            println!("tick {:?}", s.tick(&specs, Some(&on), &acts));
+            println!("{:?}", s.eval(&a[i + 1]));
+        }
+        return;
+    }
+    // Dev aid: `hotswap --engines` prints the engine of every installed game.
+    if std::env::args().any(|a| a == "--engines") {
+        for g in steam::scan().games {
+            println!("{:<14} {} {}", g.engine.unwrap_or("-"), if g.single_player { "SP" } else { "  " }, g.name);
+        }
         return;
     }
     // Dev aid: `hotswap --stats` prints two readings of the System tab's stats, a second apart.
@@ -1041,7 +1090,8 @@ fn main() {
             migrate_old_data(app);
             app.state::<watch::Watch>().start(app.handle().clone());
             let watch = app.state::<watch::Watch>().inner().clone();
-            app.state::<trainer::Trainer>().start(app.handle().clone(), move |id| watch.pid_of(id));
+            let watch2 = watch.clone();
+            app.state::<trainer::Trainer>().start(app.handle().clone(), move |id| watch.pid_of(id), move |id| watch2.install_of(id));
             build_tray(app)?;
             logs::write("app", &format!("HotSwap {} started (low memory mode {}, {})", app.package_info().version, LOW_MEMORY.load(Ordering::Relaxed), if start_hidden { "in the tray" } else { "window shown" }));
             fit_window(app, !start_hidden);

@@ -29,6 +29,9 @@ pub enum Launch {
     /// A launcher URL such as `steam://rungameid/526870`.
     Url(String),
     Exe { path: PathBuf, dir: PathBuf },
+    /// A web-tech game (cdp.rs), started directly with its debugging port open. The Steam app ID
+    /// lets it start without going back through Steam (which would drop the port, or ask first).
+    Web { path: PathBuf, dir: PathBuf, app_id: u32 },
 }
 
 #[derive(Serialize)]
@@ -51,6 +54,10 @@ pub struct Game {
     pub steam_type: Option<String>,
     /// Anti-cheat systems detected, e.g. ["VAC"] or ["Easy Anti-Cheat"]. Empty if none found.
     pub anticheat: Vec<&'static str>,
+    /// The game's engine, from its files (see engines::detect), e.g. "unity-mono" or "unreal".
+    pub engine: Option<&'static str>,
+    /// Steam lists it as single-player.
+    pub single_player: bool,
     pub art: Art,
     #[serde(skip)]
     pub install: PathBuf,
@@ -143,6 +150,8 @@ fn scan_steam() -> Scan {
                 kind: "game",
                 steam_type: None,
                 anticheat: Vec::new(),
+                engine: None,
+                single_player: false,
                 art: find_art(&cache, app_id),
                 install: if install_dir.is_empty() { PathBuf::new() } else { lib.join("steamapps").join("common").join(install_dir) },
                 launch: Launch::Url(format!("steam://rungameid/{app_id}")),
@@ -157,6 +166,14 @@ fn scan_steam() -> Scan {
         g.steam_type = f.get("common/type").map(|t| t.to_ascii_lowercase());
         g.kind = kind_of(g.steam_type.as_deref(), &g.name);
         g.anticheat = detect_anticheat(&f, &g.install);
+        g.single_player = f.get("common/category/category_2").is_some_and(|v| v == "1");
+        g.engine = crate::engines::detect(&g.install);
+        if g.engine.is_some_and(crate::cdp::is_web) {
+            if let Some(path) = crate::cdp::main_exe(&g.install) {
+                let dir = path.parent().unwrap_or(&g.install).to_path_buf();
+                g.launch = Launch::Web { path, dir, app_id: g.app_id };
+            }
+        }
     }
     games.dedup_by_key(|g| g.app_id);
 

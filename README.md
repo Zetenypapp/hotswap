@@ -62,6 +62,20 @@ Infinite Money, Add $100,000, Add 100 Research Points, Infinite Fuel, Infinite B
 
 No Damage, Infinite Fuel, No Fatigue, Repair Truck and Trailer, Refuel, Infinite Money, Add €100,000 (or $), Add 10,000 XP and Level Up, live while you drive. No hard-coded offsets: HotSwap reads the game's own save-file metadata from the exe you have, so updates are followed automatically. Not tested in game yet.
 
+## ⛏️ Mr.Mine mods (experimental)
+
+Infinite Money and Double Money, live. Start Mr.Mine with HotSwap's Play button: HotSwap opens the game's debugging port and changes the game's own JavaScript variables.
+
+## 🧰 Engine mods (experimental)
+
+Single-player games without their own mod list still get mods if HotSwap knows their engine. The mods use the engine's own names, so they keep working after game updates:
+
+- **Unity** (Mono and IL2CPP), **Unreal Engine** 4.25 to 5.x and **Godot**: Game Speed.
+- **RPG Maker MV and MZ**: Infinite HP, Infinite MP, Level Up Party, Infinite Gold, Add 10,000 Gold, Defeat All Enemies, No Random Encounters, Walk Through Walls, Move Speed and Save Anywhere. Start the game with HotSwap's Play button.
+- **Ren'Py**: Developer Console, Skip Unseen Text and Rollback Anywhere.
+
+For Ren'Py and Godot, HotSwap adds a small script to the game, so the game needs one restart. Engine mods are new and not tested on many games yet.
+
 ## 🌊 Subnautica 2 mods
 
 | Mod | What it does |
@@ -142,6 +156,8 @@ HotSwap is a trainer, like a friendlier Cheat Engine:
 1. 🔎 **Finds the engine's tables by name.** Unreal Engine games like Satisfactory ship debug symbol files. HotSwap reads them to find the list of every live object and every name in the game.
 2. 🧭 **Looks values up by name, not by hardcoded offsets.** For example "the player's `CharacterMovement` → `MaxWalkSpeed`". That's why it keeps working after game updates.
 3. ✍️ **Writes the values you pick**, twice a second, so they stick through respawns.
+For other engines, HotSwap asks the engine the same way: Unity's Mono and IL2CPP runtimes for classes and fields by name, Chromium's DevTools protocol for Electron, NW.js and RPG Maker games, and a small script inside Ren'Py and Godot games. A new game's mods are then just a few lines of data (see `spec` in `ui/data.js`).
+
 4. 💉 **Calls game functions when needed.** For things like adding items, it runs the game's own `AddStack` through Unreal's `ProcessEvent`, so the game reacts properly.
 
 ## 🛠️ Built with

@@ -25,6 +25,9 @@ struct Wanted {
     teleport: Option<[f64; 3]>,
     /// Map: the player's last known x, y, z and yaw.
     pos: Option<[f64; 4]>,
+    /// For games run by the generic engine mods (engines.rs): the engine and each mod's specs.
+    engine: Option<String>,
+    specs: HashMap<String, Vec<crate::engines::Spec>>,
 }
 
 #[derive(Clone, Default)]
@@ -43,12 +46,14 @@ pub fn log(msg: &str) {
 }
 
 impl Trainer {
-    pub fn set(&self, game: Option<String>, paused: bool, values: HashMap<String, f64>) {
-        log(&format!("set game={game:?} paused={paused} values={values:?}"));
+    pub fn set(&self, game: Option<String>, paused: bool, values: HashMap<String, f64>, engine: Option<String>, specs: HashMap<String, Vec<crate::engines::Spec>>) {
+        log(&format!("set game={game:?} paused={paused} values={values:?} engine={engine:?} specs={}", specs.len()));
         let mut w = self.0.lock().unwrap();
         w.game = game;
         w.paused = paused;
         w.values = values;
+        w.engine = engine;
+        w.specs = specs;
     }
 
     pub fn action(&self, id: String) {
@@ -63,7 +68,7 @@ impl Trainer {
         self.0.lock().unwrap().teleport = Some(to);
     }
 
-    pub fn start(&self, app: AppHandle, pid_of: impl Fn(&str) -> Option<u32> + Send + 'static) {
+    pub fn start(&self, app: AppHandle, pid_of: impl Fn(&str) -> Option<u32> + Send + 'static, install_of: impl Fn(&str) -> Option<std::path::PathBuf> + Send + 'static) {
         let me = self.clone();
         thread::spawn(move || {
             let mut session: Option<Session> = None;
@@ -75,13 +80,22 @@ impl Trainer {
             let mut scrap: Option<crate::scrap::Session> = None;
             let mut sw: Option<crate::stormworks::Session> = None;
             let mut ets2: Option<crate::ets2::Session> = None;
+            let mut generic: Option<(String, crate::engines::Live, HashMap<String, Vec<crate::engines::Spec>>)> = None;
             let mut last_attach: Option<Instant> = None;
+            // Why the generic engine mods couldn't connect, for the status line.
+            let mut attach_error: Option<String> = None;
             let mut last = Status { game: None, connected: false, message: String::new() };
             loop {
-                let (game, paused, values, actions, teleport) = {
+                let (game, paused, values, actions, teleport, engine, specs) = {
                     let mut w = me.0.lock().unwrap();
-                    (w.game.clone(), w.paused, w.values.clone(), std::mem::take(&mut w.actions), w.teleport.take())
+                    (w.game.clone(), w.paused, w.values.clone(), std::mem::take(&mut w.actions), w.teleport.take(), w.engine.clone(), w.specs.clone())
                 };
+                // Another game, or no game: put back what the generic mods changed, if it still runs.
+                if generic.as_ref().is_some_and(|(g, _, _)| Some(g) != game.as_ref()) {
+                    if let Some((_, mut s, old)) = generic.take() {
+                        s.restore(&old);
+                    }
+                }
                 if let Some(s) = session.as_mut() {
                     s.teleport = teleport;
                 }
@@ -281,7 +295,38 @@ impl Trainer {
                             _ => Status { game: game.clone(), connected: false, message: "Waiting for the game to load".into() },
                         }
                     }
+                    Some(g) if engine.is_some() && !specs.is_empty() => {
+                        let engine = engine.clone().unwrap_or_default();
+                        if generic.is_none() && last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
+                            last_attach = Some(Instant::now());
+                            generic = crate::engines::Live::attach(&engine, pid_of(g), install_of(g))
+                                .map_err(|e| {
+                                    if attach_error.as_ref() != Some(&e) {
+                                        log(&format!("{g} {engine} attach: {e}"));
+                                    }
+                                    attach_error = Some(e);
+                                })
+                                .ok()
+                                .map(|r| (g.to_string(), r, HashMap::new()));
+                        }
+                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            generic.as_mut().map(|(_, s, old)| {
+                                *old = specs.clone();
+                                s.tick(&specs, if paused { None } else { Some(&values) }, &actions)
+                            })
+                        }))
+                        .unwrap_or_else(|_| Some(Err("Lost track of the game, reconnecting".into())));
+                        match result {
+                            Some(Ok(true)) => Status { game: game.clone(), connected: true, message: "Connected".into() },
+                            Some(Err(e)) => {
+                                generic = None;
+                                Status { game: game.clone(), connected: false, message: e }
+                            }
+                            _ => Status { game: game.clone(), connected: false, message: attach_error.clone().unwrap_or_else(|| "Waiting for the game to load".into()) },
+                        }
+                    }
                     _ => {
+                        generic = None;
                         session = None;
                         sn2 = None;
                         sn1 = None;

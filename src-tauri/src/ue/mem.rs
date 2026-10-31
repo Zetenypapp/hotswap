@@ -66,6 +66,22 @@ impl Proc {
         ok != 0 && put == bytes.len()
     }
 
+    /// Base address and file path of the game's own executable.
+    pub fn main_module(&self) -> Option<(u64, PathBuf)> {
+        let snap = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, self.pid) };
+        if snap == INVALID_HANDLE_VALUE {
+            return None;
+        }
+        let mut entry: MODULEENTRY32W = unsafe { std::mem::zeroed() };
+        entry.dwSize = std::mem::size_of::<MODULEENTRY32W>() as u32;
+        let found = (unsafe { Module32FirstW(snap, &mut entry) } != 0).then(|| {
+            let len = entry.szExePath.iter().position(|&c| c == 0).unwrap_or(entry.szExePath.len());
+            (entry.modBaseAddr as u64, PathBuf::from(String::from_utf16_lossy(&entry.szExePath[..len])))
+        });
+        unsafe { CloseHandle(snap) };
+        found
+    }
+
     /// Base address and file path of the first loaded module whose file name contains `needle`.
     pub fn module(&self, needle: &str) -> Option<(u64, PathBuf)> {
         let snap = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, self.pid) };

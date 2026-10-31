@@ -1,5 +1,6 @@
-//! Walks a running UE5 game's object table and name pool. Layouts are UE 5.x defaults
-//! for 64-bit shipping builds; `attach` sanity-checks them before anything is used.
+//! Walks a running Unreal game's object table and name pool. Layouts are the defaults for 64-bit
+//! shipping builds of UE 4.25 to 5.x; `attach` sanity-checks them before anything is used, and the
+//! property layout (it changed in 5.3) is picked by looking at the first property read.
 
 use super::{mem::Proc, symbols};
 use std::{collections::HashMap, path::Path};
@@ -13,13 +14,15 @@ const OBJ_OUTER: u64 = 0x20;
 // UStruct (after UField::Next and FStructBaseChain)
 const STRUCT_SUPER: u64 = 0x40;
 const STRUCT_CHILD_PROPS: u64 = 0x50;
-// FField / FProperty / FBoolProperty (UE 5.3+: FFieldVariant Owner is 8 bytes)
+// FField / FProperty / FBoolProperty
 const FIELD_CLASS: u64 = 0x08;
-const FIELD_NEXT: u64 = 0x18;
-const FIELD_NAME: u64 = 0x20;
-const PROP_OFFSET: u64 = 0x44;
-const BOOL_BYTE_OFFSET: u64 = 0x71;
-const BOOL_FIELD_MASK: u64 = 0x73;
+
+/// Where FField and FProperty keep their parts: (Next, Name, Offset_Internal, FBoolProperty::ByteOffset).
+/// UE 5.3+ stores the owner in 8 bytes; 4.25 to 5.2 used 16 (a pointer and a flag).
+#[derive(Clone, Copy)]
+struct FieldLayout(u64, u64, u64, u64);
+const LAYOUT_5_3: FieldLayout = FieldLayout(0x18, 0x20, 0x44, 0x71);
+const LAYOUT_4_25: FieldLayout = FieldLayout(0x20, 0x28, 0x4C, 0x79);
 
 /// A reflected property: where it lives inside an object and what type it is.
 #[derive(Debug, Clone)]
@@ -41,6 +44,7 @@ pub struct Ue {
     /// UObject::ProcessEvent, for calling script functions (0 if not found).
     pub process_event: u64,
     name_cache: std::sync::Mutex<HashMap<u32, String>>,
+    layout: std::sync::OnceLock<FieldLayout>,
 }
 
 impl Ue {
@@ -56,6 +60,7 @@ impl Ue {
             process_event: rva(&cu_path, "ProcessEvent@UObject@@").map_or(0, |r| core_uobj + r as u64),
             p,
             name_cache: Default::default(),
+            layout: Default::default(),
         };
         // FName 0 is always "None"; if not, the layout guesses are wrong for this game.
         match ue.fname(0).as_deref() {
@@ -70,7 +75,7 @@ impl Ue {
         let p = Proc::open(pid)?;
         let (base, _) = p.module(module).ok_or("game module not loaded")?;
         let (objs, names) = super::scan::find_tables(&p, base);
-        let mut ue = Ue { p, objects: 0, names: 0, process_event: 0, name_cache: Default::default() };
+        let mut ue = Ue { p, objects: 0, names: 0, process_event: 0, name_cache: Default::default(), layout: Default::default() };
         ue.names = names.into_iter().take(100_000).find(|&n| {
             ue.names = n;
             ue.name_cache.lock().unwrap().clear();
@@ -169,6 +174,17 @@ impl Ue {
         self.p.ptr(cls + STRUCT_SUPER)
     }
 
+    /// The property layout, from a property: in 4.25 to 5.2 the word after the owner pointer is the
+    /// owner's "is an object" flag (1); in 5.3+ it is the next property (a pointer, or 0 with a
+    /// readable name right after).
+    fn layout(&self, field: u64) -> FieldLayout {
+        *self.layout.get_or_init(|| match self.p.read::<u64>(field + 0x18) {
+            Some(1) => LAYOUT_4_25,
+            Some(0) if self.name_at(field + 0x20).is_none_or(|n| n.is_empty() || n == "None") => LAYOUT_4_25,
+            _ => LAYOUT_5_3,
+        })
+    }
+
     /// Every property on `cls` and its parents, nearest class first.
     pub fn props(&self, cls: u64) -> Vec<Prop> {
         let mut out = Vec::new();
@@ -181,16 +197,17 @@ impl Ue {
             let mut n = 0;
             while let Some(field) = f.filter(|_| n < 2000) {
                 n += 1;
+                let FieldLayout(next, name, offset, bool_byte) = self.layout(field);
                 let kind = self.p.ptr(field + FIELD_CLASS).and_then(|fc| self.name_at(fc)).unwrap_or_default();
                 out.push(Prop {
-                    name: self.name_at(field + FIELD_NAME).unwrap_or_default(),
+                    name: self.name_at(field + name).unwrap_or_default(),
                     kind,
-                    offset: self.p.read::<i32>(field + PROP_OFFSET).unwrap_or(-1),
-                    bool_byte: self.p.read::<u8>(field + BOOL_BYTE_OFFSET).unwrap_or(0),
-                    bool_mask: self.p.read::<u8>(field + BOOL_FIELD_MASK).unwrap_or(0),
+                    offset: self.p.read::<i32>(field + offset).unwrap_or(-1),
+                    bool_byte: self.p.read::<u8>(field + bool_byte).unwrap_or(0),
+                    bool_mask: self.p.read::<u8>(field + bool_byte + 2).unwrap_or(0),
                     owner: self.name_of(c).unwrap_or_default(),
                 });
-                f = self.p.ptr(field + FIELD_NEXT);
+                f = self.p.ptr(field + next);
             }
             cur = self.super_of(c);
         }

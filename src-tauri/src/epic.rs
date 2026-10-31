@@ -49,6 +49,8 @@ pub fn scan() -> Vec<Game> {
             kind,
             steam_type: None,
             anticheat: detect_anticheat(&Default::default(), &install),
+            engine: crate::engines::detect(&install),
+            single_player: false,
             art: Art::default(),
             install,
             launch: Launch::Url(url),

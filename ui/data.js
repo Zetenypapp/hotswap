@@ -1,8 +1,13 @@
 // Every game's mod list (names, descriptions, hotkeys), which mods work (LIVE), and the Home feed.
 
-const T = (name, info) => ({ type: 'toggle', name, info });
-const S = (name, min, max, step, def, info) => ({ type: 'slider', name, min, max, step, def, info });
-const A = (name, info) => ({ type: 'action', name, info });
+// `spec` (optional): what the mod changes, for games run by the engine readers (engines.rs), e.g.
+// { at: 'GameManager.instance.money', min: 999999 }. One spec or a list. The key names the change:
+// toggles set/min/max (a value), freeze (true), fill (a sibling field to copy); sliders scale
+// (true: percent of the original) or value (true, times `mul`); actions add/put (a value).
+// Optional `ty` ('i32', 'f32', 'bool', ...) when the engine can't tell the type.
+const T = (name, info, spec) => ({ type: 'toggle', name, info, spec });
+const S = (name, min, max, step, def, info, spec) => ({ type: 'slider', name, min, max, step, def, info, spec });
+const A = (name, info, spec) => ({ type: 'action', name, info, spec });
 
 // Keyed by Steam app ID.
 const CATALOG = {
@@ -94,6 +99,11 @@ const CATALOG = {
       A('Repair Truck and Trailer'), A('Refuel')] },
     { name: 'Career', mods: [T('Infinite Money', 'Your money never goes down; earnings still add up.'), A('Add $100,000'), A('Add 10,000 XP'), A('Level Up', 'Straight to the next level, for one more skill point.')] },
   ]},
+  // Mr.Mine: an Electron game, modded through its page (cdp.rs). Start it from HotSwap.
+  1397920: { genre: 'Idle', experimental: true, cats: [
+    { name: 'Money', mods: [T('Infinite Money', 'Buying things costs nothing.', { js: 'window.__hsSub = window.__hsSub || subtractMoney; subtractMoney = () => {}', off: 'if (window.__hsSub) subtractMoney = window.__hsSub' }),
+      A('Double Money', 'Adds as much money as you have now.', { js: 'addMoney(money)' })] },
+  ]},
   // Stormworks: through the game's own addon API (stormworks.rs). The addon has to be on in the world.
   573090: { genre: 'Sandbox', experimental: true, cats: [
     { name: 'Money', mods: [T('Infinite Money', 'The game’s own infinite money setting.'), A('Add $100,000'), A('Add 100 Research Points')] },
@@ -103,6 +113,41 @@ const CATALOG = {
       T('Clear Weather', 'No fog, rain or wind.'), T('No Sharks'), T('No Megalodon')] },
   ]},
 };
+
+// Mods for any single-player game of an engine (without its own list above), from the engine itself.
+const ENGINE_NAMES = { 'unity-mono': 'Unity', 'unity-il2cpp': 'Unity', unreal: 'Unreal Engine', 'rpgmaker-mv': 'RPG Maker MV', 'rpgmaker-mz': 'RPG Maker MZ', renpy: "Ren'Py", godot: 'Godot' };
+// Engines whose mods can be described as data (`spec`).
+const SPEC_ENGINES = ['unity-mono', 'unity-il2cpp', 'unreal', 'electron', 'nwjs', 'rpgmaker-mv', 'rpgmaker-mz', 'renpy', 'godot'];
+const ENGINE_CATS = {
+  'unity-mono': [
+    { name: 'Game', mods: [S('Game Speed', 10, 500, 10, 100, 'Percent of normal speed, for everything in the game.', { at: 'UnityEngine/Time.timeScale', value: true, mul: 0.01 })] },
+  ],
+  unreal: [
+    { name: 'Game', mods: [S('Game Speed', 10, 500, 10, 100, 'Percent of normal speed, for everything in the game.', { at: 'WorldSettings.TimeDilation', value: true, mul: 0.01 })] },
+  ],
+};
+// RPG Maker MV and MZ share their game objects, so these work in any of their games.
+ENGINE_CATS['rpgmaker-mv'] = [
+  { name: 'Party', mods: [T('Infinite HP', 'Everyone in the party stays at full HP.', { at: '$gameParty.members()[]._hp', fill: 'mhp' }),
+    T('Infinite MP', 'Everyone in the party stays at full MP.', { at: '$gameParty.members()[]._mp', fill: 'mmp' }),
+    A('Level Up Party', 'Every party member goes up one level.', { js: '$gameParty.members().forEach(a => a.changeLevel(a.level + 1, false))' })] },
+  { name: 'Gold', mods: [T('Infinite Gold', 'Gold stays at 999,999 or more.', { at: '$gameParty._gold', min: 999999 }), A('Add 10,000 Gold', '', { at: '$gameParty._gold', add: 10000 })] },
+  { name: 'Battle', mods: [A('Defeat All Enemies', 'Every enemy in the current battle falls.', { js: '$gameTroop.members().forEach(e => e.addState(e.deathStateId()))' })] },
+  { name: 'World', mods: [T('No Random Encounters', 'Walk anywhere without random battles.', { at: '$gamePlayer._encounterCount', min: 999 }),
+    T('Walk Through Walls', '', { at: '$gamePlayer._through', set: 1 }), S('Move Speed', 4, 6, 1, 4, '4 is the game default.', { at: '$gamePlayer._moveSpeed', value: true }),
+    T('Save Anywhere', 'Saving in the menu is always allowed.', { at: '$gameSystem._saveEnabled', set: 1 })] },
+];
+ENGINE_CATS['rpgmaker-mz'] = ENGINE_CATS['rpgmaker-mv'];
+// Ren'Py and Godot: HotSwap adds a small script to the game (bridge.rs); the game needs one restart.
+ENGINE_CATS.renpy = [
+  { name: 'Game', mods: [T('Developer Console', "Ren'Py's own console: press Shift+O in game.", { at: 'config.console', set: 1 }),
+    T('Skip Unseen Text', 'Skipping also skips text you haven’t read yet.', { at: '_preferences.skip_unseen', set: 1 }),
+    T('Rollback Anywhere', 'Scroll back even where the game turns rollback off.', { at: 'config.rollback_enabled', set: 1 })] },
+];
+ENGINE_CATS.godot = [
+  { name: 'Game', mods: [S('Game Speed', 10, 500, 10, 100, 'Percent of normal speed, for everything in the game.', { at: 'Engine.time_scale', value: true, mul: 0.01 })] },
+];
+ENGINE_CATS['unity-il2cpp'] = ENGINE_CATS['unity-mono'];
 
 // Mods the trainer can actually apply, by Steam app ID. Everything else shows as "Soon".
 const LIVE = {

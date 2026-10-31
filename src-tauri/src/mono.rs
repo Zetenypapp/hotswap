@@ -1,18 +1,13 @@
 //! Reads Unity games that run on Mono. Instead of guessing Mono's internal layouts (they change
 //! between Unity versions), HotSwap asks Mono itself: it calls the runtime's exported API
 //! (mono_class_from_name, mono_class_get_field_from_name, ...) from a short-lived thread in the
-//! game, attached to Mono for the call. The answers (field offsets, static field addresses, class
-//! vtables) are cached, and the mods themselves are plain memory reads and writes.
+//! game, attached to Mono for the call (see remote.rs). The answers (field offsets, static field
+//! addresses, class vtables) are cached, and the mods themselves are plain memory reads and writes.
 
+use crate::remote::{self, Attach, Buf};
+pub use crate::remote::Arg;
 use crate::ue::mem::Proc;
 use std::collections::HashMap;
-use windows_sys::Win32::{
-    Foundation::CloseHandle,
-    System::{
-        Memory::{VirtualAllocEx, VirtualFreeEx, VirtualQueryEx, MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_PRIVATE, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE},
-        Threading::{CreateRemoteThread, WaitForSingleObject},
-    },
-};
 
 pub struct Mono {
     pub p: Proc,
@@ -20,26 +15,22 @@ pub struct Mono {
     domain: u64,
     /// Assembly-CSharp, where a Unity game's own classes live.
     image: u64,
-    classes: HashMap<String, u64>,
+    /// Every other loaded assembly's image, searched when a class isn't in Assembly-CSharp.
+    others: Option<Vec<u64>>,
+    classes: HashMap<String, Option<u64>>,
     fields: HashMap<(u64, String), Option<u32>>,
     statics: HashMap<u64, u64>,
-}
-
-/// An argument for a call into the game: a number, or a string copied into the game's memory.
-pub enum Arg<'a> {
-    N(u64),
-    S(&'a str),
 }
 
 impl Mono {
     pub fn attach(pid: u32) -> Result<Mono, String> {
         let p = Proc::open(pid)?;
         let (base, _) = p.module("mono-2.0-bdwgc.dll").or_else(|| p.module("mono.dll")).ok_or("Mono isn't loaded (not a Mono Unity game?)")?;
-        let exports = exports(&p, base);
+        let exports = remote::exports(&p, base);
         if !exports.contains_key("mono_class_from_name") {
             return Err("Mono API not found".into());
         }
-        let mut m = Mono { p, exports, domain: 0, image: 0, classes: HashMap::new(), fields: HashMap::new(), statics: HashMap::new() };
+        let mut m = Mono { p, exports, domain: 0, image: 0, others: None, classes: HashMap::new(), fields: HashMap::new(), statics: HashMap::new() };
         m.domain = m.call("mono_get_root_domain", &[])?;
         if m.domain == 0 {
             return Err("Mono hasn't started yet".into());
@@ -54,82 +45,51 @@ impl Mono {
     /// Calls an exported Mono function with up to 4 arguments and returns what it returned.
     pub fn call(&self, func: &str, args: &[Arg]) -> Result<u64, String> {
         let f = *self.exports.get(func).ok_or_else(|| format!("{func} not exported"))?;
-        let h = self.p.raw_handle();
-        let mem = unsafe { VirtualAllocEx(h, std::ptr::null(), 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE) } as u64;
-        if mem == 0 {
-            return Err("couldn't allocate memory in the game".into());
-        }
-        let (result, thread_slot, strings) = (mem + 0x400, mem + 0x408, mem + 0x500);
-        // Strings go after the code; numbers are used as is.
-        let mut values = [0u64; 4];
-        let mut next = strings;
-        for (i, a) in args.iter().take(4).enumerate() {
-            values[i] = match a {
-                Arg::N(n) => *n,
-                Arg::S(s) => {
-                    let mut bytes = s.as_bytes().to_vec();
-                    bytes.push(0);
-                    if !self.p.write_bytes(next, &bytes) {
-                        return Err("couldn't write a string".into());
-                    }
-                    let at = next;
-                    next += (bytes.len() as u64 + 15) & !15;
-                    at
-                }
-            };
-        }
-        let mut code: Vec<u8> = vec![0x48, 0x83, 0xEC, 0x28]; // sub rsp, 0x28
-        let attach = self.domain != 0 && func != "mono_get_root_domain";
-        let mov = |code: &mut Vec<u8>, op: [u8; 2], v: u64| { code.extend(op); code.extend(v.to_le_bytes()); };
-        if attach {
-            // mono_thread_attach(domain): Mono only allows calls from threads it knows about.
-            mov(&mut code, [0x48, 0xB9], self.domain); // mov rcx, domain
-            mov(&mut code, [0x48, 0xB8], self.exports["mono_thread_attach"]); // mov rax, fn
-            code.extend([0xFF, 0xD0]); // call rax
-            mov(&mut code, [0x48, 0xA3], thread_slot); // mov [thread_slot], rax
-        }
-        mov(&mut code, [0x48, 0xB9], values[0]); // rcx
-        mov(&mut code, [0x48, 0xBA], values[1]); // rdx
-        mov(&mut code, [0x49, 0xB8], values[2]); // r8
-        mov(&mut code, [0x49, 0xB9], values[3]); // r9
-        mov(&mut code, [0x48, 0xB8], f);
-        code.extend([0xFF, 0xD0]); // call rax
-        mov(&mut code, [0x48, 0xA3], result); // mov [result], rax
-        if attach {
-            mov(&mut code, [0x48, 0xB8], thread_slot); // mov rax, &thread
-            code.extend([0x48, 0x8B, 0x08]); // mov rcx, [rax]
-            mov(&mut code, [0x48, 0xB8], self.exports["mono_thread_detach"]);
-            code.extend([0xFF, 0xD0]); // call rax
-        }
-        code.extend([0x48, 0x83, 0xC4, 0x28, 0x31, 0xC0, 0xC3]); // add rsp, 0x28; xor eax, eax; ret
-        let out = if !self.p.write_bytes(mem, &code) {
-            Err("couldn't write the call stub".to_string())
-        } else {
-            let thread = unsafe { CreateRemoteThread(h, std::ptr::null(), 0, Some(std::mem::transmute(mem as usize)), std::ptr::null(), 0, std::ptr::null_mut()) };
-            if thread.is_null() {
-                Err(format!("couldn't start the call ({})", std::io::Error::last_os_error()))
-            } else {
-                let waited = unsafe { WaitForSingleObject(thread, 3000) };
-                unsafe { CloseHandle(thread) };
-                if waited != 0 {
-                    return Err("the game didn't finish the call in time".into());
-                }
-                self.p.read::<u64>(result).ok_or_else(|| "couldn't read the result".into())
-            }
-        };
-        unsafe { VirtualFreeEx(h, mem as _, 0, MEM_RELEASE) };
-        out
+        // Mono only allows calls from threads it knows about.
+        let attach = (self.domain != 0).then(|| Attach { attach: self.exports["mono_thread_attach"], detach: self.exports["mono_thread_detach"], domain: self.domain });
+        remote::call(&self.p, f, args, attach)
     }
 
-    /// A class from the game's code, e.g. ("", "Player").
+    /// Images of every loaded assembly, found with mono_assembly_foreach and a tiny callback that
+    /// collects the assemblies into a buffer.
+    fn other_images(&mut self) -> &[u64] {
+        if self.others.is_none() {
+            let mut out = Vec::new();
+            if let (Some(code), Some(list)) = (Buf::exec(&self.p, 64), Buf::new(&self.p, 8 * 1025)) {
+                // rcx = assembly, rdx = list: if list.count < 1024 { list.items[count++] = assembly }
+                let cb = [0x48, 0x8B, 0x02, 0x48, 0x3D, 0x00, 0x04, 0x00, 0x00, 0x73, 0x0C, 0x48, 0x89, 0x4C, 0xC2, 0x08, 0x48, 0xFF, 0xC0, 0x48, 0x89, 0x02, 0xC3, 0xC3];
+                if self.p.write_bytes(code.at, &cb) && self.call("mono_assembly_foreach", &[Arg::N(code.at), Arg::N(list.at)]).is_ok() {
+                    let n = self.p.read::<u64>(list.at).unwrap_or(0).min(1024);
+                    for i in 0..n {
+                        let Some(asm) = self.p.ptr(list.at + 8 + i * 8) else { continue };
+                        if let Ok(img) = self.call("mono_assembly_get_image", &[Arg::N(asm)]) {
+                            if img != 0 && img != self.image {
+                                out.push(img);
+                            }
+                        }
+                    }
+                }
+            }
+            self.others = Some(out);
+        }
+        self.others.as_deref().unwrap_or_default()
+    }
+
+    /// A class from the game's code, e.g. ("", "Player"). Assembly-CSharp first, then every other
+    /// loaded assembly (Unity's own classes, plugins).
     pub fn class(&mut self, ns: &str, name: &str) -> Option<u64> {
         let key = format!("{ns}.{name}");
         if let Some(&c) = self.classes.get(&key) {
-            return Some(c);
+            return c;
         }
-        let c = self.call("mono_class_from_name", &[Arg::N(self.image), Arg::S(ns), Arg::S(name)]).ok().filter(|&c| c != 0)?;
+        let find = |m: &Mono, img: u64| m.call("mono_class_from_name", &[Arg::N(img), Arg::S(ns), Arg::S(name)]).ok().filter(|&c| c != 0);
+        let mut c = find(self, self.image);
+        if c.is_none() {
+            let imgs = self.other_images().to_vec();
+            c = imgs.into_iter().find_map(|img| find(self, img));
+        }
         self.classes.insert(key, c);
-        Some(c)
+        c
     }
 
     /// Byte offset of an instance field within an object (includes the object header).
@@ -143,80 +103,81 @@ impl Mono {
         off
     }
 
+    /// A field's offset, type code (MonoTypeEnum) and whether it is static.
+    pub fn field_info(&mut self, class: u64, name: &str) -> Option<(u32, u8, bool)> {
+        let f = self.call("mono_class_get_field_from_name", &[Arg::N(class), Arg::S(name)]).ok().filter(|&f| f != 0)?;
+        let off = self.call("mono_field_get_offset", &[Arg::N(f)]).ok()? as u32;
+        let ty = self.call("mono_field_get_type", &[Arg::N(f)]).ok().filter(|&t| t != 0)?;
+        let code = self.call("mono_type_get_type", &[Arg::N(ty)]).ok()? as u8;
+        let flags = self.call("mono_field_get_flags", &[Arg::N(f)]).unwrap_or(0);
+        Some((off, code, flags & 0x10 != 0))
+    }
+
+    /// The class of a live object (its vtable's first word).
+    pub fn class_of(&self, obj: u64) -> Option<u64> {
+        self.p.ptr(self.p.ptr(obj)?)
+    }
+
+    /// Calls a static or instance method by name with one float argument (setters) or none
+    /// (getters). Returns the boxed result's first 8 bytes for getters.
+    pub fn invoke(&mut self, class: u64, obj: u64, method: &str, arg: Option<f32>) -> Option<u64> {
+        let m = self.call("mono_class_get_method_from_name", &[Arg::N(class), Arg::S(method), Arg::N(arg.is_some() as u64)]).ok().filter(|&m| m != 0)?;
+        let buf = Buf::new(&self.p, 32)?;
+        let params = match arg {
+            Some(v) => {
+                self.p.write(buf.at + 16, v);
+                self.p.write(buf.at, buf.at + 16);
+                buf.at
+            }
+            None => 0,
+        };
+        // Passing a slot for the exception makes the runtime catch it instead of crashing the game.
+        let r = self.call("mono_runtime_invoke", &[Arg::N(m), Arg::N(obj), Arg::N(params), Arg::N(buf.at + 24)]).ok()?;
+        if self.p.read::<u64>(buf.at + 24).unwrap_or(0) != 0 {
+            return None;
+        }
+        Some(if r != 0 { self.p.read::<u64>(r + 0x10).unwrap_or(0) } else { 0 })
+    }
+
     /// The class's vtable in the game's domain (also the first word of every instance).
     pub fn vtable(&self, class: u64) -> Option<u64> {
         self.call("mono_class_vtable", &[Arg::N(self.domain), Arg::N(class)]).ok().filter(|&v| v != 0)
     }
 
+    /// Where a class's static fields live.
+    pub fn static_data(&mut self, class: u64) -> Option<u64> {
+        if let Some(&d) = self.statics.get(&class) {
+            return Some(d);
+        }
+        let vt = self.vtable(class)?;
+        let d = self.call("mono_vtable_get_static_field_data", &[Arg::N(vt)]).ok().filter(|&d| d != 0)?;
+        self.statics.insert(class, d);
+        Some(d)
+    }
+
     /// Address of a static field.
     pub fn static_addr(&mut self, class: u64, name: &str) -> Option<u64> {
         let off = self.field(class, name)? as u64;
-        let data = match self.statics.get(&class) {
-            Some(&d) => d,
-            None => {
-                let vt = self.vtable(class)?;
-                let d = self.call("mono_vtable_get_static_field_data", &[Arg::N(vt)]).ok().filter(|&d| d != 0)?;
-                self.statics.insert(class, d);
-                d
-            }
-        };
-        Some(data + off)
+        Some(self.static_data(class)? + off)
     }
 
     /// Every live object of `class`, found by its vtable pointer in the game's heap memory.
     pub fn instances(&self, class: u64, limit: usize) -> Vec<u64> {
-        let Some(vt) = self.vtable(class) else { return vec![] };
-        let mut out = Vec::new();
-        for (base, size) in heap_regions(&self.p) {
-            let mut buf = vec![0u8; size];
-            if !self.p.read_into(base, &mut buf) {
-                continue;
-            }
-            for (i, w) in buf.chunks_exact(8).enumerate() {
-                if u64::from_le_bytes(w.try_into().unwrap()) == vt {
-                    out.push(base + i as u64 * 8);
-                    if out.len() >= limit {
-                        return out;
-                    }
-                }
-            }
-        }
-        out
+        self.instances_of(&[class], limit).pop().unwrap_or_default()
     }
 
     /// Instances of several classes in one pass over the heap (each class up to `limit`).
     pub fn instances_of(&self, classes: &[u64], limit: usize) -> Vec<Vec<u64>> {
-        let vts: Vec<Option<u64>> = classes.iter().map(|&c| self.vtable(c)).collect();
-        let mut out = vec![Vec::new(); classes.len()];
-        // Nearly every word is outside the range the vtables span: one compare skips it.
-        let (lo, hi) = vts.iter().flatten().fold((u64::MAX, 0), |(lo, hi), &v| (lo.min(v), hi.max(v)));
-        for (base, size) in heap_regions(&self.p) {
-            let mut buf = vec![0u8; size];
-            if !self.p.read_into(base, &mut buf) {
-                continue;
-            }
-            for (i, w) in buf.chunks_exact(8).enumerate() {
-                let w = u64::from_le_bytes(w.try_into().unwrap());
-                if w < lo || w > hi {
-                    continue;
-                }
-                for (k, vt) in vts.iter().enumerate() {
-                    if *vt == Some(w) && out[k].len() < limit {
-                        out[k].push(base + i as u64 * 8);
-                    }
-                }
-            }
-        }
-        out
+        let vts: Vec<u64> = classes.iter().map(|&c| self.vtable(c).unwrap_or(0)).collect();
+        remote::find_words(&self.p, &vts, limit)
     }
 
     /// Dev aid: every field of a class as (name, offset, type name).
     pub fn fields_of(&self, class: u64) -> Vec<(String, u32, String)> {
-        let h = self.p.raw_handle();
-        let iter = unsafe { VirtualAllocEx(h, std::ptr::null(), 16, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) } as u64;
+        let Some(iter) = Buf::new(&self.p, 16) else { return vec![] };
         let mut out = Vec::new();
         for _ in 0..500 {
-            let Ok(f) = self.call("mono_class_get_fields", &[Arg::N(class), Arg::N(iter)]) else { break };
+            let Ok(f) = self.call("mono_class_get_fields", &[Arg::N(class), Arg::N(iter.at)]) else { break };
             if f == 0 {
                 break;
             }
@@ -227,28 +188,39 @@ impl Mono {
                 .map(|s| self.cstr(s)).unwrap_or_default();
             out.push((name, off, ty));
         }
-        unsafe { VirtualFreeEx(h, iter as _, 0, MEM_RELEASE) };
         out
     }
 
     /// Dev aid: the constants of an enum class, as (name, value).
     pub fn enum_values(&self, class: u64) -> Vec<(String, i64)> {
         let Some(vt) = self.vtable(class) else { return vec![] };
-        let h = self.p.raw_handle();
-        let buf = unsafe { VirtualAllocEx(h, std::ptr::null(), 16, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) } as u64;
+        let Some(buf) = Buf::new(&self.p, 16) else { return vec![] };
         let mut out = Vec::new();
         for (name, _, _) in self.fields_of(class) {
             if name == "value__" {
                 continue;
             }
             let Ok(f) = self.call("mono_class_get_field_from_name", &[Arg::N(class), Arg::S(&name)]) else { continue };
-            self.p.write(buf, 0u64);
-            if self.call("mono_field_static_get_value", &[Arg::N(vt), Arg::N(f), Arg::N(buf)]).is_ok() {
-                out.push((name, self.p.read::<i32>(buf).unwrap_or(0) as i64));
+            self.p.write(buf.at, 0u64);
+            if self.call("mono_field_static_get_value", &[Arg::N(vt), Arg::N(f), Arg::N(buf.at)]).is_ok() {
+                out.push((name, self.p.read::<i32>(buf.at).unwrap_or(0) as i64));
             }
         }
-        unsafe { VirtualFreeEx(h, buf as _, 0, MEM_RELEASE) };
         out
+    }
+
+    /// Dev aid: every class of the game's own code (Assembly-CSharp), as names.
+    pub fn game_classes(&self) -> Vec<String> {
+        // Metadata table 2 is TypeDef; class tokens are 0x02000000 + row.
+        let n = self.call("mono_image_get_table_rows", &[Arg::N(self.image), Arg::N(2)]).unwrap_or(0).min(50_000);
+        (1..=n).filter_map(|i| self.call("mono_class_get", &[Arg::N(self.image), Arg::N(0x0200_0000 | i)]).ok().filter(|&c| c != 0)).map(|c| self.class_name(c)).collect()
+    }
+
+    /// Dev aid: the name of a class.
+    pub fn class_name(&self, class: u64) -> String {
+        let ns = self.call("mono_class_get_namespace", &[Arg::N(class)]).ok().map(|s| self.cstr(s)).unwrap_or_default();
+        let name = self.call("mono_class_get_name", &[Arg::N(class)]).ok().map(|s| self.cstr(s)).unwrap_or_default();
+        if ns.is_empty() { name } else { format!("{ns}.{name}") }
     }
 
     /// A managed System.String (length at +0x10, UTF-16 characters from +0x14).
@@ -260,47 +232,8 @@ impl Mono {
     }
 
     pub fn cstr(&self, addr: u64) -> String {
-        let mut b = [0u8; 256];
-        self.p.read_into(addr, &mut b);
-        String::from_utf8_lossy(&b[..b.iter().position(|&c| c == 0).unwrap_or(256)]).to_string()
+        remote::cstr(&self.p, addr)
     }
-}
-
-/// Exported functions of the module loaded at `base`: name -> address.
-fn exports(p: &Proc, base: u64) -> HashMap<String, u64> {
-    let mut out = HashMap::new();
-    let Some(pe) = p.read::<u32>(base + 0x3C).map(|o| base + o as u64) else { return out };
-    let Some(dir) = p.read::<u32>(pe + 0x88).filter(|&d| d != 0).map(|d| base + d as u64) else { return out };
-    let n = p.read::<u32>(dir + 0x18).unwrap_or(0) as u64;
-    let [funcs, names, ords] = [0x1C, 0x20, 0x24].map(|o| base + p.read::<u32>(dir + o).unwrap_or(0) as u64);
-    for i in 0..n.min(20000) {
-        let (Some(name_rva), Some(ord)) = (p.read::<u32>(names + i * 4), p.read::<u16>(ords + i * 2)) else { continue };
-        let Some(rva) = p.read::<u32>(funcs + ord as u64 * 4) else { continue };
-        let mut b = [0u8; 96];
-        p.read_into(base + name_rva as u64, &mut b);
-        let name = String::from_utf8_lossy(&b[..b.iter().position(|&c| c == 0).unwrap_or(96)]).to_string();
-        out.insert(name, base + rva as u64);
-    }
-    out
-}
-
-/// Committed, private, read-write memory: where Mono's heap lives.
-fn heap_regions(p: &Proc) -> Vec<(u64, usize)> {
-    let mut out = Vec::new();
-    let mut addr = 0x10000u64;
-    let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
-    while addr < 0x7FFF_FFFF_0000 {
-        let got = unsafe { VirtualQueryEx(p.raw_handle(), addr as _, &mut info, std::mem::size_of::<MEMORY_BASIC_INFORMATION>()) };
-        if got == 0 {
-            break;
-        }
-        let (base, size) = (info.BaseAddress as u64, info.RegionSize as u64);
-        if info.State == MEM_COMMIT && info.Type == MEM_PRIVATE && info.Protect == PAGE_READWRITE && size < (512 << 20) {
-            out.push((base, size as usize));
-        }
-        addr = base + size;
-    }
-    out
 }
 
 impl Mono {
