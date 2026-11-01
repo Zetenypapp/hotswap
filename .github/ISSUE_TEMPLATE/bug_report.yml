@@ -1,0 +1,55 @@
+name: 🐛 Bug report
+description: Something in HotSwap doesn't work, or a mod doesn't do what it says.
+title: "Bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Tip: **Settings → Report a bug** in HotSwap fills in your version and game for you.
+        Found a **security** problem? Please don't post it here: use [private reporting](https://github.com/Zetenypapp/hotswap/security/advisories/new) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      placeholder: Turned on Infinite Health, but I still take damage.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1. 
+        2. 
+        3. 
+  - type: input
+    id: version
+    attributes:
+      label: HotSwap version
+      description: Settings → About and updates.
+      placeholder: "0.3.10"
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game and mod
+      description: Which game (and its version, if you know it) and which mod, if it's about a mod.
+      placeholder: "Subnautica, Infinite Oxygen"
+  - type: input
+    id: status
+    attributes:
+      label: Status line
+      description: What HotSwap's status says on the game page (e.g. "Connected" or "Waiting for the game to load").
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Settings → Export logs, then drag the zip here. Check it for anything personal first.

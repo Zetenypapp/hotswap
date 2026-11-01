@@ -1,0 +1,38 @@
+name: 🎮 Game request
+description: Ask for mods for a game.
+title: "Game request: "
+labels: ["game request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        HotSwap only mods **single-player** games, and never games with anti-cheat in multiplayer.
+        Tip: **Request mods** on a game's page in HotSwap fills in the game for you.
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      placeholder: "Stardew Valley"
+    validations:
+      required: true
+  - type: input
+    id: store
+    attributes:
+      label: Store link
+      description: Steam, Epic or GOG page.
+      placeholder: "https://store.steampowered.com/app/413150"
+  - type: textarea
+    id: mods
+    attributes:
+      label: Mods you'd like
+      value: |
+        - 
+    validations:
+      required: true
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Single-player
+      options:
+        - label: I'll only use these mods in single-player, never online.
+          required: true

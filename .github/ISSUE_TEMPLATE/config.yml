@@ -1,0 +1,6 @@
+# Blank issues stay on: HotSwap's "Report a bug" and "Request mods" buttons open pre-filled issues.
+blank_issues_enabled: true
+contact_links:
+  - name: 🔒 Report a security problem
+    url: https://github.com/Zetenypapp/hotswap/security/advisories/new
+    about: Please report security problems privately, not as a public issue.

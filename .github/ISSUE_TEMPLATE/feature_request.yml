@@ -1,0 +1,21 @@
+name: ✨ Feature idea
+description: Suggest something new for HotSwap itself.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: What would you like HotSwap to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What problem would it solve, or what would it make easier?
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Screenshots, examples from other apps, how it could look.
