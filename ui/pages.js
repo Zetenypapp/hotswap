@@ -113,6 +113,7 @@ function renderSettings() {
         <span class="boost-honest">Quick clean asks background apps to hand back memory they aren’t using. Handy now and then; apps reload what they need when you switch back.</span></div></div>
       ${boostStatusHtml(BOOST_STATUS)}
       ${Object.keys(state.boostGames || {}).length ? `<div class="set-row"><div class="txt"><b>Gears per game</b><span>${Object.entries(state.boostGames).map(([id, n]) => `<button class="bchip" data-gamegear="${esc(id)}" title="Use the gear for every game again">${esc(findGame(id)?.name || id)}: ${BOOST_GEARS[n].name} ×</button>`).join(' ')}</span></div></div>` : ''}
+      <div class="set-row"><div class="txt"><b>Protect recording apps</b><span>OBS, Streamlabs, XSplit, Medal, NVIDIA ShadowPlay, AMD ReLive, Bandicam, Twitch Studio and ShareX are never closed, frozen, slowed or cleaned, and high game priority stays at above normal while one runs, so streams and recordings don’t drop frames. Turn off to treat them like any app.</span></div>${sw('setBoostProtect', state.boostProtect !== false)}</div>
       <div class="set-row"><div class="txt"><b>Easy on battery</b><span>When a laptop runs on its battery, Game Boost stays at Eco.</span></div>${sw('setBoostBattery', state.boostBattery !== false)}</div>
       ${true ? `<div class="set-row"><div class="txt"><b>Apps to close</b><span>${state.boostClose.length
         ? state.boostClose.map(n => `<button class="bchip" data-boostdrop="${esc(n)}" title="Remove">${esc(n.replace(/\.exe$/, ''))} ×</button>`).join(' ')

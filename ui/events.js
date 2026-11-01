@@ -133,12 +133,13 @@ document.addEventListener('click', e => {
     }
     case 'setBoostReopen': state.boostReopen = !state.boostReopen; save(); syncBoost(); render(); break;
     case 'boostCleanBtn': boostClean(); break;
+    case 'setBoostProtect': state.boostProtect = state.boostProtect === false; BOOST_APPS = null; save(); syncBoost(); render(); break;
     case 'setBoostBattery': state.boostBattery = state.boostBattery === false; save(); syncBoost(); render(); break;
     case 'boostPick': case 'ecoPick': case 'freezePick': {
       const want = t.id === 'ecoPick' ? 'eco' : t.id === 'freezePick' ? 'freeze' : 'close';
       if (BOOST_APPS && BOOST_PICK === want) { BOOST_APPS = null; render(); break; }
       BOOST_PICK = want; BOOST_APPS = []; render();
-      invoke?.('boost_apps').then(a => { if (BOOST_APPS) { BOOST_APPS = a; render(); } }).catch(console.error);
+      invoke?.('boost_apps', { protect: state.boostProtect !== false }).then(a => { if (BOOST_APPS) { BOOST_APPS = a; render(); } }).catch(console.error);
       break;
     }
     case 'setLowMem': state.lowMemory = !state.lowMemory; save(); render(); toast('Low memory mode ' + (state.lowMemory ? 'on' : 'off'), 'restart HotSwap to apply'); break;

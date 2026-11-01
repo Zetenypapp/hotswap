@@ -45,7 +45,7 @@ fn one() -> f64 {
     1.0
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Ty {
     Bool,
     I8,
@@ -144,8 +144,13 @@ pub trait Reader {
     fn instances(&mut self, classes: &[u64]) -> Vec<Vec<u64>>;
     /// Element slots of the array or list a slot refers to.
     fn elements(&mut self, slot: u64, ty: Ty) -> Vec<u64>;
-    /// Reads or writes a property (Unity: get_X/set_X). `obj` 0 for static ones.
-    fn prop(&mut self, _class: u64, _obj: u64, _name: &str, _set: Option<f32>) -> Option<f32> {
+    /// Reads or writes a number property (Unity: get_X/set_X), a float or (`int`) an int. `obj` 0
+    /// for static ones.
+    fn prop(&mut self, _class: u64, _obj: u64, _name: &str, _set: Option<f32>, _int: bool) -> Option<f32> {
+        None
+    }
+    /// The object a property returns (Unity: get_X), e.g. Camera.main.
+    fn prop_obj(&mut self, _class: u64, _obj: u64, _name: &str) -> Option<u64> {
         None
     }
     /// Dev aid: what a class looks like, or the game's classes.
@@ -197,11 +202,18 @@ macro_rules! managed_reader {
                 let Some(arr) = arr else { return vec![] };
                 (0..n.min(4096)).map(|i| arr + 0x20 + i * 8).collect()
             }
-            fn prop(&mut self, class: u64, obj: u64, name: &str, set: Option<f32>) -> Option<f32> {
+            fn prop(&mut self, class: u64, obj: u64, name: &str, set: Option<f32>, int: bool) -> Option<f32> {
                 match set {
-                    Some(v) => self.invoke(class, obj, &format!("set_{name}"), Some(v)).map(|_| v),
-                    None => self.invoke(class, obj, &format!("get_{name}"), None).map(|r| f32::from_bits(r as u32)),
+                    Some(v) => self.invoke_raw(class, obj, &format!("set_{name}"), Some(if int { v as i32 as u32 } else { v.to_bits() })).map(|_| v),
+                    None => {
+                        let r = self.invoke_raw(class, obj, &format!("get_{name}"), None)?;
+                        let bits = if r != 0 { self.p.read::<u32>(r + 0x10)? } else { 0 };
+                        Some(if int { bits as i32 as f32 } else { f32::from_bits(bits) })
+                    }
                 }
+            }
+            fn prop_obj(&mut self, class: u64, obj: u64, name: &str) -> Option<u64> {
+                self.invoke_raw(class, obj, &format!("get_{name}"), None).filter(|&o| o != 0)
             }
             fn dump(&mut self, class: Option<&str>) -> String {
                 let Some(name) = class else { return self.game_classes().join("\n") };
@@ -307,6 +319,25 @@ impl Reader for UeReader {
     }
 }
 
+/// Dev aid (`hotswap --engine-test <engine> <exe> <path> <value>`): writes a value through a path
+/// (a field or `name()` property) in a running game and reads it back.
+pub fn test_path(engine: &str, pid: u32, path: &str, value: f64, ty: Option<&str>) -> String {
+    let r = match attach(engine, pid) { Ok(r) => r, Err(e) => return format!("attach failed: {e}") };
+    let mut s = Session::new(r);
+    let ty = ty.and_then(Ty::parse);
+    let Some(res) = s.resolve(path, ty) else { return format!("nothing at {path}") };
+    let mut out = format!("{} target(s)
+", res.targets.len());
+    for t in res.targets.into_iter().take(4) {
+        s.resolved.insert(path.to_string(), Resolved { targets: vec![t], roots: vec![], at: Instant::now() });
+        let before = s.read(t);
+        s.write(t, value);
+        out += &format!("  {t:?}: {before:?} -> {:?}
+", s.read(t));
+    }
+    out
+}
+
 /// Attaches the reader for an engine name from the library scan.
 pub fn attach(engine: &str, pid: u32) -> Result<Box<dyn Reader + Send>, String> {
     match engine {
@@ -368,7 +399,7 @@ impl Live {
 }
 
 /// Where a spec's value lives right now.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum Target {
     Mem(u64, Ty),
     /// A property: class, object (0 for static), index into `Session::prop_names`.
@@ -391,6 +422,8 @@ pub struct Session {
     found: HashMap<u64, (Vec<(u64, u64)>, Instant)>,
     fields: HashMap<(u64, String), Option<(u64, Ty, bool)>>,
     prop_names: Vec<String>,
+    /// When each property mod last ran.
+    prop_at: HashMap<String, Instant>,
     /// Paths that didn't resolve, logged once.
     missing: std::collections::HashSet<String>,
     /// Where the `guard` values live (found once, then only read).
@@ -401,7 +434,7 @@ pub struct Session {
 
 impl Session {
     pub fn new(r: Box<dyn Reader + Send>) -> Session {
-        Session { r, resolved: HashMap::new(), orig: HashMap::new(), found: HashMap::new(), fields: HashMap::new(), prop_names: Vec::new(), missing: Default::default(), guards: HashMap::new(), note: None }
+        Session { r, resolved: HashMap::new(), orig: HashMap::new(), found: HashMap::new(), fields: HashMap::new(), prop_names: Vec::new(), prop_at: HashMap::new(), missing: Default::default(), guards: HashMap::new(), note: None }
     }
 
     /// Live objects of a class, as (object, its own class). Searching is slow, so the result is
@@ -427,9 +460,11 @@ impl Session {
         self.fields[&key].map(|(off, ty, is_static)| Field { off, ty, is_static })
     }
 
-    fn prop(&mut self, class: u64, obj: u64, name: &str) -> Target {
-        let i = self.prop_names.iter().position(|n| n == name).unwrap_or_else(|| {
-            self.prop_names.push(name.to_string());
+    fn prop(&mut self, class: u64, obj: u64, name: &str, ty: Option<Ty>) -> Target {
+        // Ints are marked in the name: the property call has to pass an int, not a float.
+        let name = if matches!(ty, Some(Ty::I32)) { format!("{name}|i") } else { name.to_string() };
+        let i = self.prop_names.iter().position(|n| *n == name).unwrap_or_else(|| {
+            self.prop_names.push(name.clone());
             self.prop_names.len() - 1
         });
         Target::Prop(class, obj, i)
@@ -444,9 +479,26 @@ impl Session {
         let mut roots = Vec::new();
         // Slots: addresses of values, with their type.
         let mut slots: Vec<(u64, Ty)> = Vec::new();
+        // Objects a property returned, to go on from (instead of slots).
+        let mut objs: Option<Vec<u64>> = None;
         for (i, part) in parts.iter().enumerate() {
             let (name, each) = part.strip_suffix("[]").map_or((*part, false), |n| (n, true));
             let last = i + 1 == parts.len();
+            // `name()` is a property: get_name/set_name instead of a field.
+            if let Some(name) = name.strip_suffix("()") {
+                let from: Vec<(u64, u64)> = if i == 0 {
+                    vec![(class, 0)]
+                } else {
+                    let cur = objs.take().unwrap_or_else(|| std::mem::take(&mut slots).into_iter().filter_map(|(s, _)| self.r.p().ptr(s)).collect());
+                    cur.into_iter().filter_map(|o| Some((self.r.class_of(o)?, o))).collect()
+                };
+                if last {
+                    let targets = from.into_iter().map(|(c, o)| self.prop(c, o, name, ty)).collect();
+                    return Some(Resolved { targets, roots, at: Instant::now() });
+                }
+                objs = Some(from.into_iter().filter_map(|(c, o)| self.r.prop_obj(c, o, name)).collect());
+                continue;
+            }
             if i == 0 {
                 match self.field(class, name) {
                     Some(f) if f.is_static => slots.push((self.r.static_base(class)? + f.off, f.ty)),
@@ -457,13 +509,13 @@ impl Session {
                         }
                     }
                     // A static property, e.g. Time.timeScale.
-                    None if last => return Some(Resolved { targets: vec![self.prop(class, 0, name)], roots, at: Instant::now() }),
+                    None if last => return Some(Resolved { targets: vec![self.prop(class, 0, name, ty)], roots, at: Instant::now() }),
                     None => return None,
                 }
             } else {
                 let mut next = Vec::new();
-                for (slot, _) in std::mem::take(&mut slots) {
-                    let Some(obj) = self.r.p().ptr(slot) else { continue };
+                let cur = objs.take().unwrap_or_else(|| std::mem::take(&mut slots).into_iter().filter_map(|(s, _)| self.r.p().ptr(s)).collect());
+                for obj in cur {
                     let Some(c) = self.r.class_of(obj) else { continue };
                     // No such field on this object (e.g. a melee weapon has no ammo): skip it.
                     if let Some(f) = self.field(c, name) {
@@ -521,8 +573,9 @@ impl Session {
                 Ty::Ptr | Ty::Array => return None,
             },
             Target::Prop(c, o, i) => {
-                let name = self.prop_names[i].clone();
-                self.r.prop(c, o, &name, None)? as f64
+                let n = self.prop_names[i].clone();
+                let (name, int) = n.strip_suffix("|i").map_or((n.as_str(), false), |s| (s, true));
+                self.r.prop(c, o, name, None, int)? as f64
             }
         })
     }
@@ -554,8 +607,9 @@ impl Session {
                 };
             }
             Target::Prop(c, o, i) => {
-                let name = self.prop_names[i].clone();
-                self.r.prop(c, o, &name, Some(v as f32));
+                let n = self.prop_names[i].clone();
+                let (name, int) = n.strip_suffix("|i").map_or((n.as_str(), false), |s| (s, true));
+                self.r.prop(c, o, name, Some(v as f32), int);
             }
         }
     }
@@ -563,9 +617,17 @@ impl Session {
     /// Applies one mod's specs. `on`: toggle state or slider value; None when the mod is off/unused.
     fn apply(&mut self, id: &str, specs: &[Spec], value: f64) {
         for (k, s) in specs.iter().enumerate() {
-            let targets = self.targets(s, &s.at.clone());
             let slider = matches!(s.op.as_str(), "scale" | "value");
             let on = if slider { value != s.def } else { value != 0.0 };
+            // Property paths call into the game: while on, at most once a second.
+            if on && s.at.contains("()") {
+                let key = format!("{id}#{k}");
+                if self.prop_at.get(&key).is_some_and(|t| t.elapsed() < Duration::from_secs(1)) {
+                    continue;
+                }
+                self.prop_at.insert(key, Instant::now());
+            }
+            let targets = self.targets(s, &s.at.clone());
             let siblings = match (&s.op[..], &s.from) {
                 ("fill", Some(from)) => {
                     let sib = format!("{}.{from}", s.at.rsplit_once('.').map_or("", |x| x.0));

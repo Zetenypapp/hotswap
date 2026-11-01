@@ -118,9 +118,9 @@ impl Mono {
         self.p.ptr(self.p.ptr(obj)?)
     }
 
-    /// Calls a static or instance method by name with one float argument (setters) or none
-    /// (getters). Returns the boxed result's first 8 bytes for getters.
-    pub fn invoke(&mut self, class: u64, obj: u64, method: &str, arg: Option<f32>) -> Option<u64> {
+    /// Calls a method with one 4-byte argument (a float's or an int's bits) or none, and returns what
+    /// it returned: an object, or a boxed value (its data at +0x10).
+    pub fn invoke_raw(&mut self, class: u64, obj: u64, method: &str, arg: Option<u32>) -> Option<u64> {
         let m = self.call("mono_class_get_method_from_name", &[Arg::N(class), Arg::S(method), Arg::N(arg.is_some() as u64)]).ok().filter(|&m| m != 0)?;
         let buf = Buf::new(&self.p, 32)?;
         let params = match arg {
@@ -136,7 +136,7 @@ impl Mono {
         if self.p.read::<u64>(buf.at + 24).unwrap_or(0) != 0 {
             return None;
         }
-        Some(if r != 0 { self.p.read::<u64>(r + 0x10).unwrap_or(0) } else { 0 })
+        Some(r)
     }
 
     /// The class's vtable in the game's domain (also the first word of every instance).

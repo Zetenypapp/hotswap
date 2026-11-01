@@ -68,6 +68,8 @@ pub struct Config {
     per_game: std::collections::HashMap<String, u8>,
     /// On battery, Game Boost stays at Eco.
     battery_eco: bool,
+    /// Recording and streaming apps are left alone (RECORDERS).
+    protect_recorders: bool,
 }
 
 impl Config {
@@ -138,6 +140,8 @@ struct Active {
     frozen: Vec<(u32, PathBuf)>,
     /// The battery state the gear was last picked with.
     battery: bool,
+    /// High priority held at above normal because a recording app runs.
+    capped: bool,
     extras: Option<Extras>,
     /// The Advanced settings the extras were applied from.
     adv: Option<Adv>,
@@ -168,7 +172,7 @@ impl Active {
         }
         s.push(format!("Gear: {}{}", GEARS[self.level as usize], if self.battery && self.level == 1 { " (on battery)" } else { "" }));
         if self.prio > 0 {
-            s.push(format!("Game priority: {}", if self.prio == 2 { "high" } else { "above normal" }));
+            s.push(format!("Game priority: {}{}", if self.prio == 2 { "high" } else { "above normal" }, if self.capped { " (a recording app is running)" } else { "" }));
         }
         match self.plan {
             1 => s.push("Power plan: High performance".into()),
@@ -220,6 +224,17 @@ const GEARS: [&str; 6] = ["Off", "Eco", "Sport", "Turbo", "Redline", "Custom"];
 /// Windows' built-in (normally hidden) Ultimate Performance plan template.
 const ULTIMATE_TEMPLATE: &str = "e9a42b02-d5df-448d-aa00-03f14749eb61";
 const BROWSERS: &[&str] = &["chrome.exe", "msedge.exe", "firefox.exe", "opera.exe", "brave.exe", "vivaldi.exe"];
+/// Recording and streaming apps, left alone while "Protect recording apps" is on (the default): a
+/// dropped frame in a stream or recording costs more than the boost gains.
+pub const RECORDERS: &[&str] = &[
+    "obs64.exe", "obs32.exe", "obs-browser-page.exe", "obs-ffmpeg-mux.exe", "streamlabs obs.exe", "streamlabs desktop.exe",
+    "xsplit.core.exe", "xsplitbroadcaster.exe", "medal.exe", "medalencoder.exe", "nvcontainer.exe", "nvsphelper64.exe", "nvidia share.exe",
+    "nvidia overlay.exe", "amdrsserv.exe", "amdow.exe", "bdcam.exe", "twitch studio.exe", "sharex.exe",
+];
+
+fn recorder(name: &str) -> bool {
+    RECORDERS.contains(&name.to_lowercase().as_str())
+}
 
 /// Apps that must never be closed: Windows itself, Steam (games need it), HotSwap.
 const NEVER: &[&str] = &[
@@ -928,7 +943,7 @@ impl Boost {
             }
             std::thread::sleep(Duration::from_millis(500));
         }
-        let mut a = Active { game: game.clone(), pids, level: 0, prio: 0, plan: 0, power_before: None, added_plan: None, apps_closed: false, apps_frozen: false, closed: vec![], frozen: vec![], battery: on_battery(), extras: None, adv: None };
+        let mut a = Active { game: game.clone(), pids, level: 0, prio: 0, plan: 0, power_before: None, added_plan: None, apps_closed: false, apps_frozen: false, closed: vec![], frozen: vec![], battery: on_battery(), capped: false, extras: None, adv: None };
         let lines = self.reconcile(app, &mut a, false);
         crate::logs::write("app", &format!("game boost {} for {game}: {}", GEARS[a.level as usize], lines.join("; ")));
         let _ = app.emit("boost", Report { started: true, level: a.level, lines, status: a.status() });
@@ -977,7 +992,13 @@ impl Boost {
         let mut lines = Vec::new();
 
         // Priority.
-        let prio = if level == 0 { 0 } else { match adv.priority.as_str() { "normal" => 0, "high" => 2, _ => 1 } };
+        let mut prio = if level == 0 { 0 } else { match adv.priority.as_str() { "normal" => 0, "high" => 2, _ => 1 } };
+        // High priority can starve a recording or stream of CPU: above normal while one runs.
+        a.capped = false;
+        if prio == 2 && cfg.protect_recorders && processes().processes().values().any(|p| recorder(&p.name().to_string_lossy())) {
+            prio = 1;
+            a.capped = true;
+        }
         if prio != a.prio {
             if a.pids.iter().fold(false, |any, &p| set_priority(p, prio) || any) && prio > 0 {
                 lines.push(format!("The game runs at {} priority", if prio == 2 { "high" } else { "above normal" }));
@@ -1036,7 +1057,7 @@ impl Boost {
         let sys = if (close && !a.apps_closed) || (level > 0 && adv.freeze_apps && !a.apps_frozen) { Some(processes()) } else { None };
         if close && !a.apps_closed {
             let sys = sys.as_ref().unwrap();
-            let names: Vec<String> = cfg.close.iter().map(|n| n.to_lowercase()).filter(|n| !NEVER.contains(&n.as_str())).collect();
+            let names: Vec<String> = cfg.close.iter().map(|n| n.to_lowercase()).filter(|n| !NEVER.contains(&n.as_str()) && !(cfg.protect_recorders && recorder(n))).collect();
             let (mut freed, mut done) = (0u64, Vec::new());
             for name in &names {
                 let procs: Vec<_> = sys.processes().values().filter(|p| p.name().to_string_lossy().to_lowercase() == *name && !a.pids.contains(&p.pid().as_u32())).collect();
@@ -1070,7 +1091,7 @@ impl Boost {
         let freezing = level > 0 && adv.freeze_apps;
         if freezing && !a.apps_frozen {
             let sys = sys.as_ref().unwrap();
-            let freeze: Vec<String> = cfg.freeze.iter().map(|n| n.to_lowercase()).filter(|n| !NEVER.contains(&n.as_str())).collect();
+            let freeze: Vec<String> = cfg.freeze.iter().map(|n| n.to_lowercase()).filter(|n| !NEVER.contains(&n.as_str()) && !(cfg.protect_recorders && recorder(n))).collect();
             let mut frozen_names = Vec::new();
             for p in sys.processes().values() {
                 let name = p.name().to_string_lossy().to_lowercase();
@@ -1107,7 +1128,11 @@ impl Boost {
                 }
             }
             if let Some(w) = &want {
-                let (mut e, l) = Extras::apply(app, w, &a.pids);
+                let mut w = w.clone();
+                if cfg.protect_recorders {
+                    w.eco_apps.retain(|n| !recorder(n));
+                }
+                let (mut e, l) = Extras::apply(app, &w, &a.pids);
                 e.eco_refresh(&a.pids);
                 lines.extend(l);
                 a.extras = Some(e);
@@ -1129,8 +1154,9 @@ pub struct App {
 
 /// Running apps the user could close or slow down while playing, biggest first (one row per program).
 #[tauri::command]
-pub(crate) async fn boost_apps() -> Vec<App> {
-    tauri::async_runtime::spawn_blocking(|| {
+pub(crate) async fn boost_apps(protect: Option<bool>) -> Vec<App> {
+    let protect = protect.unwrap_or(true);
+    tauri::async_runtime::spawn_blocking(move || {
         let sys = processes();
         let mut by: std::collections::HashMap<String, u64> = Default::default();
         for p in sys.processes().values() {
@@ -1140,7 +1166,7 @@ pub(crate) async fn boost_apps() -> Vec<App> {
                 continue;
             }
             let name = p.name().to_string_lossy().to_lowercase();
-            if NEVER.contains(&name.as_str()) || !name.ends_with(".exe") {
+            if NEVER.contains(&name.as_str()) || !name.ends_with(".exe") || (protect && recorder(&name)) {
                 continue;
             }
             *by.entry(name).or_default() += p.memory();
@@ -1166,6 +1192,7 @@ pub struct Cleaned {
 #[tauri::command]
 pub(crate) async fn boost_clean(boost: tauri::State<'_, Boost>) -> Result<Cleaned, String> {
     let game: Vec<u32> = boost.active.lock().unwrap().as_ref().map(|a| a.pids.clone()).unwrap_or_default();
+    let protect = boost.cfg.lock().unwrap().protect_recorders;
     tauri::async_runtime::spawn_blocking(move || {
         #[link(name = "kernel32")]
         extern "system" {
@@ -1178,7 +1205,7 @@ pub(crate) async fn boost_clean(boost: tauri::State<'_, Boost>) -> Result<Cleane
         for p in sys.processes().values() {
             let name = p.name().to_string_lossy().to_lowercase();
             let pid = p.pid().as_u32();
-            if game.contains(&pid) || NEVER.contains(&name.as_str()) || p.exe().is_some_and(|e| e.to_string_lossy().to_lowercase().starts_with(r"c:\windows\")) {
+            if game.contains(&pid) || NEVER.contains(&name.as_str()) || (protect && recorder(&name)) || p.exe().is_some_and(|e| e.to_string_lossy().to_lowercase().starts_with(r"c:\windows\")) {
                 continue;
             }
             #[cfg(windows)]

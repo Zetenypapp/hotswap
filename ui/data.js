@@ -167,10 +167,15 @@ const ENGINE_NAMES = { 'unity-mono': 'Unity', 'unity-il2cpp': 'Unity', unreal: '
 const SPEC_ENGINES = ['unity-mono', 'unity-il2cpp', 'unreal', 'electron', 'nwjs', 'rpgmaker-mv', 'rpgmaker-mz', 'renpy', 'godot', 'gta'];
 const ENGINE_CATS = {
   'unity-mono': [
-    { name: 'Game', mods: [S('Game Speed', 10, 500, 10, 100, 'Percent of normal speed, for everything in the game.', { at: 'UnityEngine/Time.timeScale', value: true, mul: 0.01 })] },
+    { name: 'Game', mods: [S('Game Speed', 10, 500, 10, 100, 'Percent of normal speed, for everything in the game.', { at: 'UnityEngine/Time.timeScale()', value: true, mul: 0.01 })] },
+    { name: 'Display', mods: [
+      T('Unlock FPS', 'No frame rate cap and no VSync from the game, so it runs as fast as your PC can.', [
+        { at: 'UnityEngine/QualitySettings.vSyncCount()', set: 0, ty: 'i32' }, { at: 'UnityEngine/Application.targetFrameRate()', set: 1000, ty: 'i32' }]),
+      S('Field of View', 50, 150, 5, 100, 'Percent of the game’s own field of view, for the main camera.', { at: 'UnityEngine/Camera.main().fieldOfView()', scale: true })] },
   ],
   unreal: [
     { name: 'Game', mods: [S('Game Speed', 10, 500, 10, 100, 'Percent of normal speed, for everything in the game.', { at: 'WorldSettings.TimeDilation', value: true, mul: 0.01 })] },
+    { name: 'Display', mods: [S('Field of View', 0, 130, 5, 0, 'Degrees, for the player’s camera. 0 is the game’s own.', { at: 'PlayerCameraManager.LockedFOV', value: true })] },
   ],
 };
 // RPG Maker MV and MZ share their game objects, so these work in any of their games.

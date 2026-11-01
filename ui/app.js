@@ -60,7 +60,7 @@ const DEFAULTS = {
   view: 'home', game: null, playing: null, fav: {}, closed: {}, notes: {}, log: [],
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
   showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, sounds: true, overlay: true, paused: {},
-  boostLevel: 0, boostClose: [], boostFreeze: [], boostReopen: true, boostAdv: null, boostGames: {}, boostGears: {}, boostEdit: 1, boostBattery: true, boostEcoApps: [],
+  boostLevel: 0, boostClose: [], boostFreeze: [], boostReopen: true, boostAdv: null, boostGames: {}, boostGears: {}, boostEdit: 1, boostBattery: true, boostEcoApps: [], boostProtect: true,
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
   pinned: {}, off: {}, navOrder: null, navHidden: {}, sidePins: {}, sideInfo: null, catOrder: {}, hiddenMods: {}, modNames: {}, rowSize: 'comfortable', sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, dcPopups: 'always', fgFriendly: false, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
 };
@@ -286,7 +286,7 @@ async function boostClean() {
 function syncBoost() {
   // Each gear's settings, with "your own apps" filled in from the one shared list.
   const gears = [0, 1, 2, 3, 4, 5].map(n => { const g = boostGearCfg(n); return { ...g, eco_apps: g.eco_mine ? state.boostEcoApps || [] : [] }; });
-  invoke?.('boost_set', { cfg: { level: state.boostLevel || 0, close: state.boostClose || [], freeze: state.boostFreeze || [], reopen: !!state.boostReopen, gears, per_game: state.boostGames || {}, battery_eco: state.boostBattery !== false } }).catch(console.error);
+  invoke?.('boost_set', { cfg: { level: state.boostLevel || 0, close: state.boostClose || [], freeze: state.boostFreeze || [], reopen: !!state.boostReopen, gears, per_game: state.boostGames || {}, battery_eco: state.boostBattery !== false, protect_recorders: state.boostProtect !== false } }).catch(console.error);
 }
 // A gear's settings: its preset, with the user's changes on top (Custom starts from the old
 // single Advanced set, if there was one).

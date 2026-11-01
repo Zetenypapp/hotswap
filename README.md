@@ -7,180 +7,40 @@ HotSwap is a free, open-source, ad-free mod app for **single-player** PC games o
 > 💡 **Inspired by ArtCraft.**
 > 🤖 **Made by AI.** HotSwap was designed and written by Claude (Anthropic's AI) in Claude Code, directed by [@Zetenypapp](https://github.com/Zetenypapp).
 
-> 🎮 **Game support right now: Satisfactory, Subnautica, Subnautica 2, R.E.P.O., Kerbal Space Program, Subnautica: Below Zero, Oxygen Not Included and Mon Bazou.** These are the games with working mod settings so far. Every other game shows up in your library with art, playtime and launching, but its mod list is either empty or marked **Soon**.
+> 📖 **Every game, mod and feature in detail: [FEATURES.md](FEATURES.md)**
 
 ![Satisfactory mod page](docs/game.png)
 
-## 🏭 Satisfactory mods
+## 🎮 Games
 
-All of these work live while you play. HotSwap connects to the running game, and the side panel shows **Connected. Mods are live in the game.**
+- **Live mods:** Satisfactory, Subnautica, Subnautica: Below Zero, Subnautica 2, R.E.P.O., Kerbal Space Program, Oxygen Not Included and Mon Bazou.
+- **Experimental** (new, not tested in game yet): Euro Truck Simulator 2, American Truck Simulator, Stormworks, Unturned (singleplayer only), GTA V story mode and Mr.Mine.
+- **Engine mods** for any single-player **Unity, Unreal, Godot, RPG Maker or Ren'Py** game, like Game Speed, Unlock FPS and Field of View.
 
-| | Mod | What it does |
-|---|---|---|
-| 🧍 | **Infinite Health** | You can't die from damage (falling off the map still kills you) |
-| 🧍 | **Unlimited Jetpack Fuel** | The jetpack never runs dry |
-| 🧍 | **No Fall Damage** | Land from any height |
-| 🎒 | **Infinite Items** | Inventory stacks never go down, used-up items come back |
-| 🎒 | **Easy Crafting** | Building and workbench crafting need no materials |
-| 🏃 | **Walking Speed / Jump Height / Gravity** | Sliders from 10% to 1000% (gravity down to 0 = float) |
-| 🏃 | **Game Speed / Super Speed** | Speed up or slow down the whole game |
-| 🏗️ | **Free Production** | Machines get their ingredients delivered automatically (outputs still need belts) |
-| 🏗️ | **Turbo Production** | Every machine runs at 500% clock speed |
-| 🏗️ | **No Power Required / No Fuel Needed** | Factories and generators run for free |
+Every other game still shows up in your library with art, playtime and launching. [See every game's mods →](FEATURES.md#-games)
 
-Everything happens in the game's memory only. Nothing is written to your save file: restart the game and it's all back to normal. Still, **keep a backup save** while experimenting.
+## ✨ What's inside
 
-## 🚀 Kerbal Space Program mods
-
-Unlimited Fuel, Unlimited Monopropellant, Unlimited Flight Resources, Invincible Craft, No Overheating, Unlimited Funds, Unlimited Research Points, Max Reputation, Any Contract, Add Funds / Science / Reputation, Part Clipping, Free Attachment, Unlimited Inventory, Gravity and Show Biomes. Most of them flip KSP's own Alt+F12 cheats; the refills work on the vessel you're flying.
-
-## 👻 R.E.P.O. mods
-
-Infinite Health (the game's own god mode), Infinite Stamina, Infinite Jumps, Movement Speed, Grab Strength, Throw Strength, Infinite Battery, Complete Extractions, and an **Enemy Radar** over your screen (experimental). For single-player and private lobbies with friends who know you're using it.
-
-## 🐠 Subnautica mods
-
-Infinite Health, Infinite Oxygen, No Hunger, No Thirst, Swim Speed, Walk Speed, Free Crafting, Unlock All Blueprints, Instant Building, Instant Scanning, Fast Growing, Infinite Energy, No Crush Depth and Passive Creatures. Most of them switch the game's own console cheats. Subnautica runs on Unity, and HotSwap looks up its classes and fields by asking the game's Mono runtime.
-
-## ❄️ Subnautica: Below Zero mods
-
-Infinite Health, Infinite Oxygen, No Hunger, No Thirst, No Freezing, Swim Speed, Walk Speed, Free Crafting, Unlock All Blueprints, Fast Growing, Infinite Energy, No Crush Depth and Passive Creatures. Most of them switch the game's own custom game mode options and console cheats.
-
-## 🧪 Oxygen Not Included mods
-
-Instant Build, Sandbox Tools, Printing Pod Always Ready, Max Game Speed, No Stress, No Hunger, Infinite Breath, No Fatigue, No Bladder, Full Health, Instant Research and Finish Research Queue. Instant Build and Sandbox Tools switch the game's own debug and sandbox modes.
-
-## 🚗 Mon Bazou mods
-
-No Hunger, No Thirst, No Sleep, No Anxiety, Unlimited Money, Add $10,000, Walk Speed, Jump Height, Infinite Fuel, No Derby Damage, Freeze Time and Always Day.
-
-## 🚁 Stormworks mods (experimental)
-
-Infinite Money, Add $100,000, Add 100 Research Points, Infinite Fuel, Infinite Batteries, Infinite Ammo, No Vehicle Damage, No Engine Overheating, No Player Damage, No Clip, Map Teleport, Unlock All Components, Unlock All Islands, Clear Fog of War, Clear Weather, No Sharks and No Megalodon. They work through the game's own addon system (no memory editing): HotSwap adds a HotSwap addon, which you turn on when you create a world. Not tested in game yet.
-
-## 🚚 Euro Truck Simulator 2 and American Truck Simulator mods (experimental)
-
-No Damage, Infinite Fuel, No Fatigue, Repair Truck and Trailer, Refuel, Infinite Money, Add €100,000 (or $), Add 10,000 XP and Level Up, live while you drive. No hard-coded offsets: HotSwap reads the game's own save-file metadata from the exe you have, so updates are followed automatically. Not tested in game yet.
-
-## 🧟 Unturned mods (experimental, singleplayer only)
-
-Infinite Health, No Hunger, No Thirst, Infinite Stamina, No Infection, Infinite Oxygen, Infinite Ammo, No Weapon Decay and Add 1,000 Experience. Unturned's servers use VAC and BattlEye, so the mods only run in singleplayer: HotSwap checks twice a second that the game is its own server with no anti-cheat active, turns everything off the moment you join a server, and stops touching the game until it restarts if an anti-cheat loads. Not tested in game yet.
-
-## 🚓 GTA V story mode mods (experimental, Legacy and Enhanced)
-
-God Mode, Never Wanted, Fast Run, Fast Swim, Super Jump, Heal and Armor, Infinite Ammo, Vehicle God Mode, Repair Vehicle, Spawn Sports Car, Spawn Helicopter, Add $1,000,000, Teleport to Waypoint, time and weather. They use the game's own script commands through [Script Hook V](https://www.dev-c.com/gtav/scripthookv/) (install it once; the game page has a short guide) and HotSwap's own plugin (`gta-asi`). Story mode only: BattlEye has to be off (`-nobattleye`), which keeps the game out of GTA Online, and the plugin does nothing in an online session. Not tested in game yet.
-
-## ⛏️ Mr.Mine mods (experimental)
-
-Infinite Money and Double Money, live. Start Mr.Mine with HotSwap's Play button: HotSwap opens the game's debugging port and changes the game's own JavaScript variables.
-
-## 🧰 Engine mods (experimental)
-
-Single-player games without their own mod list still get mods if HotSwap knows their engine. The mods use the engine's own names, so they keep working after game updates:
-
-- **Unity** (Mono and IL2CPP), **Unreal Engine** 4.25 to 5.x and **Godot**: Game Speed.
-- **RPG Maker MV and MZ**: Infinite HP, Infinite MP, Level Up Party, Infinite Gold, Add 10,000 Gold, Defeat All Enemies, No Random Encounters, Walk Through Walls, Move Speed and Save Anywhere. Start the game with HotSwap's Play button.
-- **Ren'Py**: Developer Console, Skip Unseen Text and Rollback Anywhere.
-
-For Ren'Py and Godot, HotSwap adds a small script to the game, so the game needs one restart. Engine mods are new and not tested on many games yet.
-
-## 🌊 Subnautica 2 mods
-
-| Mod | What it does |
-|---|---|
-| **Infinite Health / Oxygen** | Never run out |
-| **No Hunger / No Thirst** | Food and water stay full |
-| **No Temperature Damage** | Heat and cold do no damage |
-| **Free Dash** | Dashing costs no oxygen |
-| **Swim Speed / Walk Speed** | 10% to 500% |
-| **Free Crafting / Instant Crafting** | No materials, no waiting (building too) |
-| **Infinite Energy** | Tools, vehicles and batteries never run out |
-
-Subnautica 2 ships without debug symbols, so HotSwap finds the engine's object and name tables by their layout in memory.
-
-## 🗺️ Live map
-
-Maps → Satisfactory opens a map drawn from your running game:
-
-- 🏔️ **Real terrain**, read from the game's own map texture in your install (never bundled)
-- ⛏️ **Every resource node** by type and purity, plus wells, geysers and deposits
-- 💎 **Collectibles:** power slugs, somersloops, mercer spheres and unopened crash sites
-- 🏭 **Your factory:** buildings, belts, pipes, rails and power lines
-- 📍 **Live position and trail**, pins, and **right-click teleport**
-- 🌐 A **Detailed map** tab with Satisfactory Calculator's interactive map
-
-**Subnautica** gets a map rendered from the game's own terrain files: a satellite-style view of the seabed (or a depth map), your live position and heading, and pins.
+- 🔁 **Live mods with hotkeys:** flip mods while you play, from the app or with keys that work in game, plus profiles and a panic key
+- 🏎️ **Game Boost:** a gearbox for your PC while you play, from Eco to Redline, every gear yours to change ([details](FEATURES.md#️-game-boost))
+- 🧩 **Mod loader:** install community mods from ficsit.app, Thunderstore, Nexus Mods and SpaceDock
+- 🗺️ **Live maps** for Satisfactory and Subnautica, with your position and teleport
+- 📚 **Your whole library** from Steam, Epic and GOG, with news, deals and playtime on Home
+- 🛡️ **Safe by design:** no mods for anti-cheat games, signed updates, a locked-down app ([Security](#️-security))
 
 ## 🎛️ In-game overlay
 
-Press **Insert** in game for a full menu over the game: every mod as a card with its icon, categories, profiles, pause and all-off, usable with the mouse or arrow keys. An optional **HUD** keeps your active mods, session time, CPU, RAM and the clock in a corner.
+Press **Insert** in a game for HotSwap's menu right over it:
 
-The overlay is its own see-through window on top of the game, so nothing is injected and it can't trip anti-cheat. Run games in **borderless or windowed** mode; exclusive fullscreen draws over it.
+- 🎮 **Mods:** every mod as a card, with profiles, pause and all off
+- 💬 **Discord:** your voice call in game: who's talking, mute, deafen, volumes and channels
+- 🏎️ **Game Boost:** shift gears on the rev-counter dial, Quick clean, and change any gear in Advanced
+- 📊 **System stats:** live graphs of your CPU, GPU, memory, temperatures, disk, network and the game itself
 
-## 💬 Discord
-
-- 🟢 **Status on your profile:** "Playing HotSwap" with the game and how many mods are on (turn it off in Settings)
-- 🔊 **Discord voice (beta, opt-in):** who's in your call, who's talking (also on the HUD), real mute, deafen and leave, per-person volume, mic and headphone volume, noise suppression, switching voice channels, and Discord notifications as overlay toasts
-
-Discord only gives voice access to apps it has approved, so Discord voice connects as **Discord's own StreamKit overlay**, the same way open-source overlays like [Discover](https://github.com/trigg/Discover) do. Discord asks you once to authorize "StreamKit", and the token stays on your PC. It's unofficial and may stop working if Discord changes it; everything else keeps working.
-
-## 🧩 Mod loader
-
-Browse, install, switch off and remove community mods from inside HotSwap:
-
-- 🏭 **Satisfactory:** ficsit.app, with dependencies and the mod loader
-- 👻 **R.E.P.O.**, 🐠 **Subnautica** and ❄️ **Below Zero:** one-click installs from Thunderstore, with BepInEx and dependencies set up automatically, or switch to Nexus Mods
-- 🚗 **Mon Bazou:** Nexus Mods, with BepInEx set up automatically
-- 🚀 **Kerbal Space Program:** one-click installs from SpaceDock into GameData
-- 🌊 **Subnautica 2:** Nexus Mods (download on Nexus, HotSwap installs the file)
-
-## 🏎️ Game Boost
-
-A gearbox for your PC while you play: shift between **Eco, Sport, Turbo, Redline** and your own **Custom** gear on a rev-counter dial, in Settings or in the in-game overlay. Every gear is a set of real changes you can edit, applied live and put back when the game closes (or, after a crash, when HotSwap starts next):
-
-- **Game:** CPU priority, power plan (High performance, or Windows' hidden Ultimate Performance plan, added for the game and removed after), never throttled by Windows, the fast graphics card on laptops
-- **Display and keys:** the game's monitor at its highest refresh rate, Windows key blocked in game, no Sticky Keys popup
-- **Windows:** Game Mode, no background recording, no mouse acceleration, no transparency, no Xbox Game Bar
-- **Background apps:** close or freeze the apps you pick (reopened and resumed after), or put them in Efficiency mode like Task Manager's leaf, so their memory goes first when the game needs more; pause Wallpaper Engine
-- **Smart:** a gear remembered per game, Eco on battery, and a live list of what Game Boost is doing
-- **Quick clean:** a one-off button that asks background apps to hand back memory they aren't using
-
-No "RAM cleaning" on its own: Windows already gives games free memory instantly, and emptying it makes games load slower.
-
-## ✨ App features
-
-- 📦 **Mod lists between releases:** new games and fixes arrive from the repo's signed `catalog/mods.json`, checked against HotSwap's update key, without an app update
-- 🎮 **Your real library:** finds installed Steam, Epic and GOG games, with artwork read from Steam's local cache
-- 🧰 **Games vs software:** tools like OBS or 3DMark are sorted out using Steam's own app labels
-- 🛡️ **Anti-cheat aware:** games with VAC, Easy Anti-Cheat, BattlEye or EA Javelin get no mods, ever
-- ▶️ **Real Play button:** launches through the game's store and detects when it's running, however you started it
-- ⌨️ **In-game hotkeys:** rebindable, with clash warnings, plus a panic key that turns every mod off
-- ⏻ **Power and stop:** pause all mods or close the game from the sidebar
-- 🗂️ **Profiles:** save mod setups per game and switch in one click, or share one with a friend as a code
-- 📌 **Pinned mods:** keep your favorites at the top, with a live dot when they're working in game
-- 🪟 **Mini mode:** a small always-on-top window with just the running game's mods
-- 📰 **Live Home:** developer news for your games, Steam deals (via CheapShark), top sellers and new releases
-- ⏱️ **Playtime and sessions:** Steam hours plus time played with HotSwap
-- 🔍 **Ctrl+K palette:** jump to any game, page, mod or action
-- 📍 **Teleport hotkeys:** save your position and jump back to it
-- 🔊 **Sounds and toasts** when mods change, with an icon per mod, in the corner you pick, plus a hotkey cheat sheet (hold Ctrl+F1)
-- 🗂️ **Sidebar split:** games with HotSwap mods on top, the rest of your library below
-- 🔄 **Auto-updates:** signed updates from GitHub releases, installed with one click
-- 🎨 **Accent colors, tray icon, start with Windows**
+Plus a small **HUD** in a corner, toasts when mods change, and a hotkey cheat sheet (hold Ctrl+F1). The overlay is a see-through window on top of the game, so nothing is injected; use **borderless or windowed** mode. [More about the overlay →](FEATURES.md#️-in-game-overlay)
 
 ![Home](docs/home.png)
 ![Library](docs/library.png)
-
-## ⚙️ How the mods work
-
-HotSwap is a trainer, like a friendlier Cheat Engine:
-
-1. 🔎 **Finds the engine's tables by name.** Unreal Engine games like Satisfactory ship debug symbol files. HotSwap reads them to find the list of every live object and every name in the game.
-2. 🧭 **Looks values up by name, not by hardcoded offsets.** For example "the player's `CharacterMovement` → `MaxWalkSpeed`". That's why it keeps working after game updates.
-3. ✍️ **Writes the values you pick**, twice a second, so they stick through respawns.
-For other engines, HotSwap asks the engine the same way: Unity's Mono and IL2CPP runtimes for classes and fields by name, Chromium's DevTools protocol for Electron, NW.js and RPG Maker games, and a small script inside Ren'Py and Godot games. A new game's mods are then just a few lines of data (see `spec` in `ui/data.js`).
-
-4. 💉 **Calls game functions when needed.** For things like adding items, it runs the game's own `AddStack` through Unreal's `ProcessEvent`, so the game reacts properly.
 
 ## 🛠️ Built with
 

@@ -547,6 +547,17 @@ fn main() {
         println!("{}", boost::test_display(&exe));
         return;
     }
+    // Dev aid: `hotswap --engine-test <engine> <exe name part> <path> <value> [type]` writes through a path.
+    if let Some(i) = std::env::args().position(|a| a == "--engine-test") {
+        let a: Vec<String> = std::env::args().collect();
+        let exe = a.get(i + 2).cloned().unwrap_or_default().to_lowercase();
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let Some(pid) = sys.processes().values().find(|p| p.name().to_string_lossy().to_lowercase().contains(&exe)).map(|p| p.pid().as_u32()) else { return println!("not running") };
+        let v = a.get(i + 4).and_then(|v| v.parse().ok()).unwrap_or(0.0);
+        println!("{}", engines::test_path(&a[i + 1], pid, &a[i + 3], v, a.get(i + 5).map(|s| s.as_str())));
+        return;
+    }
     // Dev aid: `hotswap --engines` prints the engine of every installed game.
     if std::env::args().any(|a| a == "--engines") {
         for g in steam::scan().games {
