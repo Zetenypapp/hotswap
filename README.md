@@ -32,10 +32,16 @@ Every other game still shows up in your library with art, playtime and launching
 
 Press **Insert** in a game for HotSwap's menu right over it:
 
+![The overlay's mod menu over Satisfactory](docs/overlay-mods.jpg)
+
 - 🎮 **Mods:** every mod as a card, with profiles, pause and all off
 - 💬 **Discord:** your voice call in game: who's talking, mute, deafen, volumes and channels
 - 🏎️ **Game Boost:** shift gears on the rev-counter dial, Quick clean, and change any gear in Advanced
 - 📊 **System stats:** live graphs of your CPU, GPU, memory, temperatures, disk, network and the game itself
+
+| 💬 Discord | 📊 System stats | 🏎️ Game Boost |
+|---|---|---|
+| ![Discord voice in the overlay](docs/overlay-discord.jpg) | ![System stats in the overlay](docs/overlay-system.jpg) | ![Game Boost in the overlay](docs/overlay-boost.jpg) |
 
 Plus a small **HUD** in a corner, toasts when mods change, and a hotkey cheat sheet (hold Ctrl+F1). The overlay is a see-through window on top of the game, so nothing is injected; use **borderless or windowed** mode. [More about the overlay →](FEATURES.md#️-in-game-overlay)
 

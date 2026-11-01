@@ -120,8 +120,14 @@ The overlay is its own see-through window on top of your game: nothing is inject
 
 Press **Insert** (or your own key) in a game for a full menu over it. The tabs along the top:
 
+![The overlay's mod menu over Satisfactory](docs/overlay-mods.jpg)
+
 - 🎮 **Mods:** every mod as a card with its icon, by category, with profiles, **Pause** and **All off**. Use the mouse or the arrow keys, Tab for categories.
+![Discord voice in the overlay](docs/overlay-discord.jpg)
+
 - 💬 **Discord:** your voice call, if Discord voice is on: who's in it and who's talking, mute, deafen, leave, per-person volume, your mic and headphone volume, noise suppression, and switching voice channels.
+![System stats in the overlay](docs/overlay-system.jpg)
+
 - 📊 **System:** live graphs of your PC while you play. Pick what to see on HotSwap's Overlay page:
   - **CPU:** usage, temperature, power
   - **Memory:** RAM, and video memory
@@ -130,6 +136,8 @@ Press **Insert** (or your own key) in a game for a full menu over it. The tabs a
   - **The game itself:** its CPU, memory and GPU use
   - Each as a line, area or bar graph, number only, in small, medium or large cards, over the time window you pick
 - 🏎️ **Game Boost:** the rev-counter dial to shift gears live, Quick clean, what Game Boost is doing right now, and the **Advanced** tab to change any gear's settings without leaving the game.
+
+![Game Boost in the overlay](docs/overlay-boost.jpg)
 
 ### Also on screen
 
@@ -146,7 +154,11 @@ A gearbox for your PC while you play: shift between **Eco, Sport, Turbo, Redline
 
 ### Gears
 
-Every gear is a set of real changes, and every gear is yours to change: in **Advanced**, pick a gear with the 5-way switch and turn each setting on or off for it. The starting points:
+Every gear is a set of real changes, and every gear is yours to change: in **Advanced**, pick a gear with the 5-way switch and turn each setting on or off for it.
+
+![Editing a gear in the overlay's Advanced tab](docs/overlay-advanced.jpg)
+
+The starting points:
 
 | Gear | What it does out of the box |
 |---|---|
