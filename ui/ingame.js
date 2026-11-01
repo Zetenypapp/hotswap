@@ -33,7 +33,7 @@ function pushMenu() {
   const g = findGame(runningId());
   const mods = g && modsOf(g).length;
   if (!mods && !dcMenuOk()) { toggleMenu(false); return; }
-  const data = { ...(mods ? menuData(g) : dcMenuData()), noDc: !feat('discord'), noSys: !feat('stats') }, sig = JSON.stringify(data);
+  const data = { ...(mods ? menuData(g) : dcMenuData()), noDc: !feat('discord'), noSys: !feat('stats'), boost: boostGear(), boostGame: !!runningId(), boostStatus: BOOST_STATUS, boostGears: [0, 1, 2, 3, 4, 5].map(boostGearCfg), boostEdit: state.boostEdit || 1, accent: state.accent }, sig = JSON.stringify(data);
   if (sig === lastMenu) return;
   lastMenu = sig;
   overlaySend({ kind: 'menu', open: true, data });
@@ -42,7 +42,7 @@ function pushMenu() {
 // the overlay is a separate window and never touches the game).
 function dcMenuData() {
   const r = RUNNING && findGame(RUNNING);
-  return { discordOnly: true, game: r ? r.name : 'Discord', menuKey: comboLabel(state.menuKey), cats: [], profiles: [], count: 0 };
+  return { discordOnly: true, game: r ? r.name : '', menuKey: comboLabel(state.menuKey), cats: [], profiles: [], count: 0 };
 }
 // `test` opens it from Settings without a game running (with the game HotSwap shows).
 // The menu for games without mods has Discord and System tabs, so it needs one of them on.
@@ -60,6 +60,10 @@ function toggleMenu(open = !menuOpen, test = false) {
   } else overlaySend({ kind: 'menu', open: false });
 }
 function onOverlayInput(i) {
+  if (i.type === 'boost') { setBoostLevel(i.level, true); return; }
+  if (i.type === 'boostClean') { boostClean(); return; }
+  if (i.type === 'boostAdv') { setBoostAdv(i.key, i.value, i.gear); return; }
+  if (i.type === 'boostReset') { resetBoostGear(i.gear); return; }
   const g = findGame(runningId());
   if (i.type === 'close' || !g || !modsOf(g).length) { if (i.type === 'close') toggleMenu(false); return; }
   const m = modsOf(g).find(x => x.id === i.id);

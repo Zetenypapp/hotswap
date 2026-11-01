@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Clone, Default)]
 pub struct Watch {
@@ -56,6 +56,9 @@ impl Watch {
                 };
                 if changed {
                     let _ = app.emit("game-running", &now);
+                    // Game Boost starts or ends on its own thread (it waits for the game's process).
+                    let (app, me, now) = (app.clone(), me.clone(), now.clone());
+                    thread::spawn(move || app.state::<crate::boost::Boost>().game_changed(&app, now, |id| me.pids_in(id)));
                 }
                 thread::sleep(Duration::from_secs(2));
             }
@@ -80,6 +83,17 @@ impl Watch {
             .map(|(pid, _)| *pid)
     }
 
+    /// Every process running from the game's install folder (games can have several).
+    pub fn pids_in(&self, id: &str) -> Vec<u32> {
+        let Some((_, dir)) = self.targets.lock().unwrap().iter().find(|(gid, _)| gid == id).cloned() else { return vec![] };
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing().with_exe(UpdateKind::Always));
+        sys.processes().values()
+            .filter(|p| p.exe().is_some_and(|e| e.to_string_lossy().to_lowercase().starts_with(&dir)))
+            .map(|p| p.pid().as_u32())
+            .collect()
+    }
+
     /// Ends every process running from the game's install folder. Returns how many were ended.
     pub fn kill(&self, id: &str) -> usize {
         let Some((_, dir)) = self.targets.lock().unwrap().iter().find(|(gid, _)| gid == id).cloned() else { return 0 };
@@ -97,17 +111,27 @@ impl Watch {
         if targets.is_empty() {
             return None;
         }
-        if let Some(id) = steam_running_app() {
-            if targets.iter().any(|(gid, _)| *gid == id) {
-                return Some(id);
-            }
-        }
         sys.refresh_processes_specifics(
             ProcessesToUpdate::All,
             true,
-            ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet),
+            ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet).with_cmd(UpdateKind::OnlyIfNotSet),
         );
-        for process in sys.processes().values() {
+        // Helper processes don't make a game "running": Chromium/Electron child processes (they can
+        // outlive a crashed game) and crash reporters.
+        let is_game = |p: &sysinfo::Process| {
+            !p.cmd().iter().any(|a| a.to_string_lossy().starts_with("--type="))
+                && !p.name().to_string_lossy().to_lowercase().contains("crashpad")
+        };
+        // Steam's word first, but only while something from the game's folder really runs: Steam
+        // keeps reporting a game for a while after it crashed or was ended.
+        if let Some(id) = steam_running_app() {
+            if let Some((_, dir)) = targets.iter().find(|(gid, _)| *gid == id) {
+                if sys.processes().values().any(|p| is_game(p) && p.exe().is_some_and(|e| e.to_string_lossy().to_lowercase().starts_with(dir.as_str()))) {
+                    return Some(id);
+                }
+            }
+        }
+        for process in sys.processes().values().filter(|p| is_game(p)) {
             let Some(exe) = process.exe() else { continue };
             let exe = exe.to_string_lossy().to_lowercase();
             if let Some((id, _)) = targets.iter().find(|(_, dir)| exe.starts_with(dir.as_str())) {

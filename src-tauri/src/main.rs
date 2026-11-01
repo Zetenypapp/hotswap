@@ -7,7 +7,9 @@ mod appinfo;
 mod cmd_discord;
 mod cmd_maps;
 mod cmd_mods;
+mod boost;
 mod bridge;
+mod catalog;
 mod cdp;
 mod discord;
 mod engines;
@@ -530,6 +532,19 @@ fn main() {
             println!("tick {:?}", s.tick(&specs, Some(&on), &acts));
             println!("{:?}", s.eval(&a[i + 1]));
         }
+        return;
+    }
+    // Dev aid: `hotswap --catalog-verify <file>` checks a mod list against <file>.sig with the app's update key.
+    if let Some(f) = std::env::args().skip_while(|a| a != "--catalog-verify").nth(1) {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap_or_default();
+        let key = conf["plugins"]["updater"]["pubkey"].as_str().unwrap_or("");
+        let (data, sig) = (fs::read(&f).unwrap_or_default(), fs::read_to_string(format!("{f}.sig")).unwrap_or_default());
+        println!("{:?}", catalog::verify_with(key, &data, &sig));
+        return;
+    }
+    // Dev aid: `hotswap --boost-display <exe name>` tests Game Boost's refresh rate switch on that app.
+    if let Some(exe) = std::env::args().skip_while(|a| a != "--boost-display").nth(1) {
+        println!("{}", boost::test_display(&exe));
         return;
     }
     // Dev aid: `hotswap --engines` prints the engine of every installed game.
@@ -1061,6 +1076,7 @@ fn main() {
         .manage(Hotkeys::default())
         .manage(Launches::default())
         .manage(trainer::Trainer::default())
+        .manage(boost::Boost::default())
         .manage(CloseToTray(AtomicBool::new(true)))
         .manage(Mini::default())
         .manage(stats::Stats::default())
@@ -1098,6 +1114,7 @@ fn main() {
         })
         .setup(move |app| {
             migrate_old_data(app);
+            boost::recover(app.handle());
             app.state::<watch::Watch>().start(app.handle().clone());
             let watch = app.state::<watch::Watch>().inner().clone();
             let watch2 = watch.clone();
@@ -1114,7 +1131,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            load_data, save_data, scan_library, running_game, launch_game, set_hotkeys, fetch_home, fetch_source, log_ui, export_logs, close_game, trainer_set, setup_check, trainer_action, set_close_to_tray, get_autostart, set_autostart, cmd_maps::map_show, cmd_maps::map_hide, cmd_maps::map_world, cmd_maps::map_background, check_update, install_update, app_version, overlay::overlay_notify, overlay::overlay_close, overlay::overlay_menu, overlay::overlay_input, overlay::overlay_ready, overlay::overlay_fit, cmd_mods::mods_release, cmd_mods::ts_search, cmd_mods::ts_list, cmd_mods::ts_install, cmd_mods::ts_install_file, cmd_mods::ts_set_enabled, cmd_mods::ts_remove, cmd_discord::voice_start, cmd_discord::voice_options, cmd_discord::voice_stop, cmd_discord::voice_state, cmd_discord::voice_send, system_stats, system_stats_full, cmd_discord::discord_presence, overlay::radar_show, set_mini, cmd_mods::fmods_list, cmd_mods::fmods_set_enabled, cmd_mods::fmods_remove, cmd_mods::fmods_install, cmd_mods::fmods_downloads, cmd_mods::fmods_pick, cmd_mods::nexus_search, cmd_mods::mods_state, cmd_mods::mods_search, cmd_mods::mods_install, cmd_mods::mods_uninstall, cmd_mods::mods_set_enabled, cmd_mods::mods_updates, cmd_maps::map_player, cmd_maps::map_teleport, cmd_maps::map_pins_load, cmd_maps::map_pins_save
+            load_data, save_data, scan_library, running_game, launch_game, set_hotkeys, fetch_home, fetch_source, log_ui, export_logs, close_game, trainer_set, setup_check, catalog::catalog_remote, boost::boost_apps, boost::boost_set, boost::boost_clean, trainer_action, set_close_to_tray, get_autostart, set_autostart, cmd_maps::map_show, cmd_maps::map_hide, cmd_maps::map_world, cmd_maps::map_background, check_update, install_update, app_version, overlay::overlay_notify, overlay::overlay_close, overlay::overlay_menu, overlay::overlay_input, overlay::overlay_ready, overlay::overlay_fit, cmd_mods::mods_release, cmd_mods::ts_search, cmd_mods::ts_list, cmd_mods::ts_install, cmd_mods::ts_install_file, cmd_mods::ts_set_enabled, cmd_mods::ts_remove, cmd_discord::voice_start, cmd_discord::voice_options, cmd_discord::voice_stop, cmd_discord::voice_state, cmd_discord::voice_send, system_stats, system_stats_full, cmd_discord::discord_presence, overlay::radar_show, set_mini, cmd_mods::fmods_list, cmd_mods::fmods_set_enabled, cmd_mods::fmods_remove, cmd_mods::fmods_install, cmd_mods::fmods_downloads, cmd_mods::fmods_pick, cmd_mods::nexus_search, cmd_mods::mods_state, cmd_mods::mods_search, cmd_mods::mods_install, cmd_mods::mods_uninstall, cmd_mods::mods_set_enabled, cmd_mods::mods_updates, cmd_maps::map_player, cmd_maps::map_teleport, cmd_maps::map_pins_load, cmd_maps::map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running HotSwap");

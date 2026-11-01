@@ -248,6 +248,41 @@ button.key { border: 0; cursor: pointer; }
 
 .row.locked .seg, .row.locked .slider, .row.locked .apply { opacity: .4; }
 .row.locked button[disabled], .row.locked input[disabled] { cursor: not-allowed; }
+.boost-row { display: flex; align-items: center; gap: 18px; padding: 8px 0 12px; }
+.boost-row .txt { display: grid; gap: 4px; }
+.boost-row .txt span { color: var(--soft); }
+.boost-honest { font-size: 12px; opacity: .8; }
+.boost-gauge { width: 190px; flex: none; }
+.boost-gauge [data-gear] { cursor: pointer; transition: opacity .2s; }
+.boost-gauge [data-gear]:hover { opacity: .75 !important; }
+.badv-group { padding: 14px 0 4px; display: grid; gap: 2px; }
+.badv-group b { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
+.badv-group span { font-size: 12px; opacity: .65; }
+.badv-row { display: flex; align-items: center; gap: 14px; padding: 8px 0; border-top: 1px solid rgba(255, 255, 255, .06); }
+.badv-txt { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.badv-txt span { font-size: 12px; opacity: .65; }
+.badv-seg { display: flex; gap: 2px; padding: 2px; border-radius: 10px; background: rgba(255, 255, 255, .07); flex: none; }
+.badv-seg button { border: 0; background: none; color: inherit; padding: 5px 10px; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; opacity: .7; }
+.badv-seg button.on { background: var(--accent, #f3b73f); color: #111; opacity: 1; }
+.badv-sw { width: 42px; height: 24px; border-radius: 12px; border: 0; background: rgba(255, 255, 255, .15); position: relative; cursor: pointer; flex: none; transition: background .15s; }
+.badv-sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .15s; }
+.badv-sw.on { background: var(--accent, #f3b73f); }
+.badv-sw.on::after { left: 21px; }
+.badv-edit { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 0 4px; }
+.badv-edit > span { font-size: 12px; opacity: .7; }
+.badv-seg.big button { padding: 7px 14px; font-size: 13px; }
+.badv-reset { margin-left: auto; border: 0; background: none; color: inherit; opacity: .6; cursor: pointer; font: inherit; font-size: 12px; text-decoration: underline; }
+.badv-reset:hover { opacity: 1; }
+.badv { margin-top: 6px; }
+.badv summary { cursor: pointer; font-weight: 700; padding: 8px 0; color: var(--soft); }
+.badv-note { margin: 0 0 4px; font-size: 12px; color: var(--soft); }
+.boost-status { margin: 0 0 8px; padding: 10px 14px 10px 30px; border-radius: 12px; background: var(--glass-2); display: grid; gap: 3px; font-size: 13px; }
+.boost-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; padding: 4px 0 12px; }
+.boost-apps label { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; background: var(--glass-2); cursor: pointer; font-weight: 600; }
+.boost-apps label small { margin-left: auto; color: var(--soft); font-weight: 500; }
+.boost-apps input { accent-color: var(--accent); }
+.bchip { padding: 2px 9px; border-radius: 999px; border: 0; background: var(--glass-2); font-weight: 600; font-size: 12px; cursor: pointer; }
+.bchip:hover { background: var(--danger); }
 .setup { margin-bottom: 14px; padding: 14px 18px; border-radius: 14px; background: var(--surface); backdrop-filter: blur(18px); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
 .setup h3 { margin: 0 0 6px; font-size: 16px; }
 .setup p { margin: 0 0 8px; color: var(--soft); }

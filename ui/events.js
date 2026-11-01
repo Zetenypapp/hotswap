@@ -4,6 +4,41 @@ const findMod = id => modsOf(game()).find(m => m.id === id);
 let wipeArmed = false;
 
 document.addEventListener('click', e => {
+  if (e.target.closest('#boostAdvToggle')) { state.boostAdvOpen = !e.target.closest('details').open; save(); return; }
+  const bedit = e.target.closest('[data-bedit]');
+  if (bedit) { state.boostEdit = +bedit.dataset.bedit; save(); render(); return; }
+  const breset = e.target.closest('[data-breset]');
+  if (breset) { resetBoostGear(+breset.dataset.breset); return; }
+  const badv = e.target.closest('[data-badv]');
+  if (badv) { setBoostAdv(badv.dataset.badv, badv.dataset.val); return; }
+  const ecoApp = e.target.closest('[data-ecoapp]');
+  if (ecoApp) {
+    const n = ecoApp.dataset.ecoapp, list = state.boostEcoApps;
+    state.boostEcoApps = ecoApp.checked ? [...new Set([...list, n])] : list.filter(x => x !== n);
+    save(); syncBoost(); render(); return;
+  }
+  const freezeApp = e.target.closest('[data-freezeapp]');
+  if (freezeApp) {
+    const n = freezeApp.dataset.freezeapp;
+    state.boostFreeze = freezeApp.checked ? [...new Set([...state.boostFreeze, n])] : state.boostFreeze.filter(x => x !== n);
+    save(); syncBoost(); render(); return;
+  }
+  const freezeDrop = e.target.closest('[data-freezedrop]');
+  if (freezeDrop) { state.boostFreeze = state.boostFreeze.filter(x => x !== freezeDrop.dataset.freezedrop); save(); syncBoost(); render(); return; }
+  const gameGear = e.target.closest('[data-gamegear]');
+  if (gameGear) { const { [gameGear.dataset.gamegear]: _, ...rest } = state.boostGames; state.boostGames = rest; save(); syncBoost(); render(); return; }
+  const ecoDrop = e.target.closest('[data-ecodrop]');
+  if (ecoDrop) { state.boostEcoApps = state.boostEcoApps.filter(x => x !== ecoDrop.dataset.ecodrop); save(); syncBoost(); render(); return; }
+  const gear = e.target.closest('[data-gear]');
+  if (gear) { setBoostLevel(+gear.dataset.gear); return; }
+  const boostApp = e.target.closest('[data-boostapp]');
+  if (boostApp) {
+    const n = boostApp.dataset.boostapp;
+    state.boostClose = boostApp.checked ? [...new Set([...state.boostClose, n])] : state.boostClose.filter(x => x !== n);
+    save(); syncBoost(); render(); return;
+  }
+  const boostDrop = e.target.closest('[data-boostdrop]');
+  if (boostDrop) { state.boostClose = state.boostClose.filter(x => x !== boostDrop.dataset.boostdrop); save(); syncBoost(); render(); return; }
   if (e.target.closest('[data-setupcheck]')) { const g = game(); if (g) { delete setupDone[g.id]; renderMods(); } return; }
   const a = e.target.closest('a[target="_blank"]');
   if (a && invoke) { e.preventDefault(); invoke('plugin:opener|open_url', { url: a.href }).catch(console.error); return; }
@@ -95,6 +130,16 @@ document.addEventListener('click', e => {
       const on = !dcVoiceOn();
       try { localStorage.setItem('hs.dc.voice', on ? '1' : '0'); } catch {}
       VOICE = null; invoke?.(on ? 'voice_start' : 'voice_stop').catch(() => {}); render(); break;
+    }
+    case 'setBoostReopen': state.boostReopen = !state.boostReopen; save(); syncBoost(); render(); break;
+    case 'boostCleanBtn': boostClean(); break;
+    case 'setBoostBattery': state.boostBattery = state.boostBattery === false; save(); syncBoost(); render(); break;
+    case 'boostPick': case 'ecoPick': case 'freezePick': {
+      const want = t.id === 'ecoPick' ? 'eco' : t.id === 'freezePick' ? 'freeze' : 'close';
+      if (BOOST_APPS && BOOST_PICK === want) { BOOST_APPS = null; render(); break; }
+      BOOST_PICK = want; BOOST_APPS = []; render();
+      invoke?.('boost_apps').then(a => { if (BOOST_APPS) { BOOST_APPS = a; render(); } }).catch(console.error);
+      break;
     }
     case 'setLowMem': state.lowMemory = !state.lowMemory; save(); render(); toast('Low memory mode ' + (state.lowMemory ? 'on' : 'off'), 'restart HotSwap to apply'); break;
     case 'testMenu': toggleMenu(true, true); break;

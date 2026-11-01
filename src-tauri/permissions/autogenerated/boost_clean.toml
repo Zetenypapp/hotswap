@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-boost-clean"
+description = "Enables the boost_clean command without any pre-configured scope."
+commands.allow = ["boost_clean"]
+
+[[permission]]
+identifier = "deny-boost-clean"
+description = "Denies the boost_clean command without any pre-configured scope."
+commands.deny = ["boost_clean"]

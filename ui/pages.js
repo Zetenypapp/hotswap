@@ -107,6 +107,31 @@ function renderSettings() {
       <div class="set-row"><div class="txt"><b>Start with Windows</b><span>HotSwap opens quietly in the tray when you sign in, so hotkeys are ready when you start a game.</span></div>${sw('setAutostart', AUTOSTART)}</div>
       <div class="set-row"><div class="txt"><b>Close to tray</b><span>The close button hides HotSwap in the tray instead of quitting. Quit from the tray icon's menu.</span></div>${sw('setTray', state.closeToTray)}</div>
     </div>` : ''}
+    ${invoke ? `<div class="set-group"><h2>Game Boost</h2>
+      <div class="boost-row">${boostGauge(state.boostLevel, state.accent)}<div class="txt"><b>${BOOST_GEARS[state.boostLevel].name}</b><span>${state.boostLevel ? boostSummary(boostGearCfg(state.boostLevel)) : 'Game Boost does nothing.'} Click the dial to shift, or pick Custom. This is the gear for every game; shift in the overlay menu while you play to remember a gear for that game. Everything goes back when the game closes.</span>
+        <div class="setup-actions">${boostCustomBtn(state.boostLevel)}<button class="btn" id="boostCleanBtn">Quick clean</button></div>
+        <span class="boost-honest">Quick clean asks background apps to hand back memory they aren’t using. Handy now and then; apps reload what they need when you switch back.</span></div></div>
+      ${boostStatusHtml(BOOST_STATUS)}
+      ${Object.keys(state.boostGames || {}).length ? `<div class="set-row"><div class="txt"><b>Gears per game</b><span>${Object.entries(state.boostGames).map(([id, n]) => `<button class="bchip" data-gamegear="${esc(id)}" title="Use the gear for every game again">${esc(findGame(id)?.name || id)}: ${BOOST_GEARS[n].name} ×</button>`).join(' ')}</span></div></div>` : ''}
+      <div class="set-row"><div class="txt"><b>Easy on battery</b><span>When a laptop runs on its battery, Game Boost stays at Eco.</span></div>${sw('setBoostBattery', state.boostBattery !== false)}</div>
+      ${true ? `<div class="set-row"><div class="txt"><b>Apps to close</b><span>${state.boostClose.length
+        ? state.boostClose.map(n => `<button class="bchip" data-boostdrop="${esc(n)}" title="Remove">${esc(n.replace(/\.exe$/, ''))} ×</button>`).join(' ')
+        : 'None yet. Browsers, launchers, and chat or RGB apps you don’t need in game are good picks.'} They get a normal close, so they can save first.</span></div><button class="btn" id="boostPick">${BOOST_APPS && BOOST_PICK === 'close' ? 'Done' : 'Choose apps'}</button></div>
+      ${BOOST_APPS && BOOST_PICK === 'close' ? `<div class="boost-apps">${BOOST_APPS.length ? BOOST_APPS.map(a => `<label><input type="checkbox" data-boostapp="${esc(a.name)}"${state.boostClose.includes(a.name) ? ' checked' : ''}><span>${esc(a.name.replace(/\.exe$/, ''))}</span><small>${a.mb.toLocaleString()} MB</small></label>`).join('') : '<p class="empty">Looking at what’s running…</p>'}</div>` : ''}
+      <div class="set-row"><div class="txt"><b>Apps to freeze</b><span>${state.boostFreeze.length
+        ? state.boostFreeze.map(n => `<button class="bchip" data-freezedrop="${esc(n)}" title="Remove">${esc(n.replace(/\.exe$/, ''))} ×</button>`).join(' ')
+        : 'None yet. Frozen apps are paused completely and keep everything they had open. Good for launchers, not for apps you use while playing.'}</span></div><button class="btn" id="freezePick">${BOOST_APPS && BOOST_PICK === 'freeze' ? 'Done' : 'Choose apps'}</button></div>
+      ${BOOST_APPS && BOOST_PICK === 'freeze' ? `<div class="boost-apps">${BOOST_APPS.length ? BOOST_APPS.map(a => `<label><input type="checkbox" data-freezeapp="${esc(a.name)}"${state.boostFreeze.includes(a.name) ? ' checked' : ''}><span>${esc(a.name.replace(/\.exe$/, ''))}</span><small>${a.mb.toLocaleString()} MB</small></label>`).join('') : '<p class="empty">Looking at what’s running…</p>'}</div>` : ''}
+      <div class="set-row"><div class="txt"><b>Reopen them after</b><span>Starts the closed apps again when you quit the game or shift down.</span></div>${sw('setBoostReopen', state.boostReopen)}</div>` : ''}
+      <details class="badv"${state.boostAdvOpen ? ' open' : ''}><summary id="boostAdvToggle">Advanced</summary>
+        <p class="badv-note">Every gear is yours to change: pick one, then switch what it does. Also in the overlay menu while you play.</p>
+        ${boostEditor(state.boostEdit || 1, boostGearCfg(state.boostEdit || 1))}
+        <div class="badv-row"><div class="badv-txt"><b>Your own apps for Efficiency mode</b><span>${state.boostEcoApps.length
+          ? state.boostEcoApps.map(n => `<button class="bchip" data-ecodrop="${esc(n)}" title="Remove">${esc(n.replace(/\.exe$/, ''))} ×</button>`).join(' ')
+          : 'More apps to put in Efficiency mode while you play.'}</span></div><button class="btn" id="ecoPick">${BOOST_APPS && BOOST_PICK === 'eco' ? 'Done' : 'Choose apps'}</button></div>
+        ${BOOST_APPS && BOOST_PICK === 'eco' ? `<div class="boost-apps">${BOOST_APPS.length ? BOOST_APPS.map(a => `<label><input type="checkbox" data-ecoapp="${esc(a.name)}"${state.boostEcoApps.includes(a.name) ? ' checked' : ''}><span>${esc(a.name.replace(/\.exe$/, ''))}</span><small>${a.mb.toLocaleString()} MB</small></label>`).join('') : '<p class="empty">Looking at what’s running…</p>'}</div>` : ''}
+      </details>
+    </div>` : ''}
     <div class="set-group"><h2>Library</h2>
       <div class="set-row"><div class="txt"><b>Steam install</b><span>${esc(STEAM.root || 'Not found.')}</span></div><button class="btn" id="rescanBtn">Rescan</button></div>
       <div class="set-row"><div class="txt"><b>Other stores</b><span>${(() => {

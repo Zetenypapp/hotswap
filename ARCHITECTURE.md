@@ -45,6 +45,8 @@ A map of every file and what it does. HotSwap has two halves:
 | `mono.rs` | Reads and changes Unity (Mono) games by asking the game's own runtime where things are. |
 | `il2cpp.rs` | The same for Unity games built with IL2CPP (GameAssembly.dll's exported API). |
 | `remote.rs` | Runs a function inside the game on a short-lived thread (used by the Mono and IL2CPP readers), and heap search helpers. |
+| `boost.rs` | Game Boost: gears of real system changes (priority, power plans, Efficiency mode, freezing, refresh rate, Windows settings) applied while a game runs and undone after, with crash recovery; Quick clean. |
+| `catalog.rs` | Downloads the signed mod list (catalog/mods.json), checks it against the update key, drops anything that would run code. |
 | `engines.rs` | Mods described as data (`spec` in ui/data.js) on any engine HotSwap reads by name; engine detection for the library scan. |
 | `cdp.rs` | Electron, NW.js and RPG Maker MV/MZ games over Chromium's DevTools protocol (HotSwap starts them with the debugging port open). |
 | `bridge.rs` | Ren'Py, Godot and GTA V: a script or plugin added to the game (assets/hotswap.rpy, assets/hotswap_godot.gd, gta-asi) asks HotSwap for mods over local UDP. |

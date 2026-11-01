@@ -27,6 +27,12 @@ pub(crate) async fn overlay_window(app: &AppHandle) -> Result<tauri::WebviewWind
     if let Some(win) = app.get_webview_window("overlay") {
         return Ok(win);
     }
+    // Two callers at once (say a note and the menu) must not both create it.
+    static CREATING: std::sync::OnceLock<tauri::async_runtime::Mutex<()>> = std::sync::OnceLock::new();
+    let _creating = CREATING.get_or_init(|| tauri::async_runtime::Mutex::new(())).lock().await;
+    if let Some(win) = app.get_webview_window("overlay") {
+        return Ok(win);
+    }
     let m = app.primary_monitor().ok().flatten().ok_or("no monitor")?;
     let s = m.scale_factor();
     let (x, y) = (m.position().x as f64 / s, m.position().y as f64 / s);

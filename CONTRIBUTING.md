@@ -50,6 +50,7 @@ Most new games need **no Rust at all**. If the game runs on an engine HotSwap ca
   `hotswap --engine-dump unity-mono <exe name> [Namespace/Class]`
   (also `unity-il2cpp` and `unreal`). Without a class, it lists the game's classes; with one, it lists its fields, offsets and types.
 - **Mark new games `experimental: true`** until someone has tested every mod in the game.
+- Mods can also ship between releases through `catalog/mods.json` (same shape as the catalog, mods as plain objects). Only the maintainer can publish it: it has to be signed with HotSwap's update key, and the app drops anything that would run code.
 - Games on their own engine need a Rust module like `ets2.rs` or `stormworks.rs`. Open an issue first so we can talk about the approach.
 
 ## Code style

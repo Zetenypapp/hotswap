@@ -1,6 +1,6 @@
 [package]
 name = "hotswap"
-version = "0.3.10"
+version = "0.4.0"
 description = "HotSwap desktop app"
 license = "GPL-3.0-or-later"
 edition = "2021"
@@ -30,12 +30,13 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 tauri-plugin-dialog = "2"
 sevenz-rust = "0.6"
 tungstenite = "0.24"
+minisign-verify = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
 windows-core = "0.62"
 winreg = "0.52"
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_Diagnostics_Debug", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Memory", "Win32_Security", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Performance", "Win32_System_LibraryLoader"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_Diagnostics_Debug", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Memory", "Win32_Security", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Performance", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi", "Win32_UI_Accessibility"] }
 
 [profile.dev]
 # Address math on pointers read from another process must wrap, not panic, on junk values.

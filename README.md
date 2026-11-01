@@ -134,8 +134,22 @@ Browse, install, switch off and remove community mods from inside HotSwap:
 - 🚀 **Kerbal Space Program:** one-click installs from SpaceDock into GameData
 - 🌊 **Subnautica 2:** Nexus Mods (download on Nexus, HotSwap installs the file)
 
+## 🏎️ Game Boost
+
+A gearbox for your PC while you play: shift between **Eco, Sport, Turbo, Redline** and your own **Custom** gear on a rev-counter dial, in Settings or in the in-game overlay. Every gear is a set of real changes you can edit, applied live and put back when the game closes (or, after a crash, when HotSwap starts next):
+
+- **Game:** CPU priority, power plan (High performance, or Windows' hidden Ultimate Performance plan, added for the game and removed after), never throttled by Windows, the fast graphics card on laptops
+- **Display and keys:** the game's monitor at its highest refresh rate, Windows key blocked in game, no Sticky Keys popup
+- **Windows:** Game Mode, no background recording, no mouse acceleration, no transparency, no Xbox Game Bar
+- **Background apps:** close or freeze the apps you pick (reopened and resumed after), or put them in Efficiency mode like Task Manager's leaf, so their memory goes first when the game needs more; pause Wallpaper Engine
+- **Smart:** a gear remembered per game, Eco on battery, and a live list of what Game Boost is doing
+- **Quick clean:** a one-off button that asks background apps to hand back memory they aren't using
+
+No "RAM cleaning" on its own: Windows already gives games free memory instantly, and emptying it makes games load slower.
+
 ## ✨ App features
 
+- 📦 **Mod lists between releases:** new games and fixes arrive from the repo's signed `catalog/mods.json`, checked against HotSwap's update key, without an app update
 - 🎮 **Your real library:** finds installed Steam, Epic and GOG games, with artwork read from Steam's local cache
 - 🧰 **Games vs software:** tools like OBS or 3DMark are sorted out using Steam's own app labels
 - 🛡️ **Anti-cheat aware:** games with VAC, Easy Anti-Cheat, BattlEye or EA Javelin get no mods, ever

@@ -39,6 +39,7 @@ const ACCENTS = [
   { name: 'Sky', c: '#5cb8ff', ink: '#04121d' },
   { name: 'Rose', c: '#ff7a93', ink: '#1f060b' },
   { name: 'Violet', c: '#a493ff', ink: '#0f0a24' },
+  { name: 'Red', c: '#ff4545', ink: '#1f0404' },
 ];
 
 /* ---------- Hotkey combos ----------
@@ -59,6 +60,7 @@ const DEFAULTS = {
   view: 'home', game: null, playing: null, fav: {}, closed: {}, notes: {}, log: [],
   cat: 'all', libFilter: 'all', sortAZ: false, panel: true, accent: '#f3b73f', showCounts: true, hotkeys: true,
   showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, sounds: true, overlay: true, paused: {},
+  boostLevel: 0, boostClose: [], boostFreeze: [], boostReopen: true, boostAdv: null, boostGames: {}, boostGears: {}, boostEdit: 1, boostBattery: true, boostEcoApps: [],
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
   pinned: {}, off: {}, navOrder: null, navHidden: {}, sidePins: {}, sideInfo: null, catOrder: {}, hiddenMods: {}, modNames: {}, rowSize: 'comfortable', sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, dcPopups: 'always', fgFriendly: false, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
 };
@@ -148,11 +150,34 @@ function buildGame(raw) {
   return g;
 }
 
+// Mod lists published between releases (catalog.rs): signed with HotSwap's update key, data only.
+// They add games and replace a game's list; `live` marks more mods as working.
+let REMOTE_VER = 0, LAST_SCAN = null;
+function applyRemote(r) {
+  if (!r || (r.version || 0) <= REMOTE_VER) return false;
+  REMOTE_VER = r.version || 0;
+  for (const [id, g] of Object.entries(r.games || {})) CATALOG[id] = g;
+  for (const [id, ids] of Object.entries(r.live || {})) LIVE[id] = [...new Set([...(LIVE[id] || []), ...ids])];
+  for (const [e, cats] of Object.entries(r.engines || {})) ENGINE_CATS[e] = cats;
+  return true;
+}
+// The saved list, before the library is built (no network).
+async function loadRemoteCatalog() {
+  if (invoke) applyRemote(await invoke('catalog_remote', { refresh: false }).catch(() => null));
+}
+// The newest list online; rebuilds the library if it changed.
+async function refreshRemoteCatalog() {
+  if (!invoke || !applyRemote(await invoke('catalog_remote', { refresh: true }).catch(() => null)) || !LAST_SCAN) return;
+  LIB = LAST_SCAN.games.map(buildGame);
+  render();
+}
+
 async function scanLibrary() {
   if (invoke) {
     try {
       const scan = await invoke('scan_library');
       STEAM = { root: scan.root, libraries: scan.libraries };
+      LAST_SCAN = scan;
       LIB = scan.games.map(buildGame);
       return;
     } catch (err) { console.error('Steam scan failed', err); }
@@ -246,6 +271,51 @@ function syncHotkeys() {
   invoke('set_hotkeys', { keys }).then(failed => {
     if (failed.length) toast(`Couldn't use ${failed.map(comboLabel).join(', ')}`, 'another app has it');
   }).catch(console.error);
+}
+
+// Game Boost (boost.rs): the settings go to the backend, which applies them when a game starts.
+let BOOST_APPS = null; // running apps to pick from, while the picker is open
+let BOOST_PICK = 'close'; // what the picker adds to: 'close', 'freeze' or 'eco'
+async function boostClean() {
+  if (!invoke) return;
+  toast('Quick clean', 'asking background apps for memory…');
+  const r = await invoke('boost_clean').catch(e => ({ error: String(e) }));
+  if (r.error) toast('Quick clean failed', r.error);
+  else toast('Quick clean', r.freed_mb > 0 ? `${r.freed_mb.toLocaleString()} MB freed from ${r.apps} apps` : 'Nothing to free right now');
+}
+function syncBoost() {
+  // Each gear's settings, with "your own apps" filled in from the one shared list.
+  const gears = [0, 1, 2, 3, 4, 5].map(n => { const g = boostGearCfg(n); return { ...g, eco_apps: g.eco_mine ? state.boostEcoApps || [] : [] }; });
+  invoke?.('boost_set', { cfg: { level: state.boostLevel || 0, close: state.boostClose || [], freeze: state.boostFreeze || [], reopen: !!state.boostReopen, gears, per_game: state.boostGames || {}, battery_eco: state.boostBattery !== false } }).catch(console.error);
+}
+// A gear's settings: its preset, with the user's changes on top (Custom starts from the old
+// single Advanced set, if there was one).
+const boostGearCfg = n => ({ ...BOOST_BASE, ...(BOOST_PRESETS[n] || {}), ...(n === 5 && !state.boostGears?.[5] ? state.boostAdv || {} : {}), ...(state.boostGears?.[n] || {}) });
+// A setting of the gear being edited (or `gear`): a switch flips, a choice takes `value`.
+function setBoostAdv(key, value, gear) {
+  const n = gear || state.boostEdit || 1;
+  const cur = boostGearCfg(n);
+  state.boostGears = { ...state.boostGears, [n]: { ...(state.boostGears?.[n] || {}), [key]: value ?? !cur[key] } };
+  save(); syncBoost(); render();
+  if (typeof pushMenu === 'function') pushMenu();
+}
+function resetBoostGear(n) {
+  const { [n]: _, ...rest } = state.boostGears || {};
+  state.boostGears = rest;
+  save(); syncBoost(); render();
+  if (typeof pushMenu === 'function') pushMenu();
+}
+let BOOST_STATUS = []; // what the running boost does right now (boost.rs status lines)
+// The gear for the running game: its own one if remembered, else the default.
+const boostGear = () => { const g = runningId(); return g && state.boostGames?.[g] != null ? state.boostGames[g] : state.boostLevel; };
+// `forGame`: from the overlay while a game runs, the gear is remembered for that game.
+function setBoostLevel(n, forGame) {
+  n = Math.max(0, Math.min(5, n | 0));
+  const g = forGame && runningId();
+  if (g) state.boostGames = { ...state.boostGames, [g]: n };
+  else state.boostLevel = n;
+  save(); syncBoost(); render();
+  if (typeof pushMenu === 'function') pushMenu();
 }
 
 // A mod's spec(s) in the shape the trainer takes: { at, op, v, def, mul, ty, from }.
