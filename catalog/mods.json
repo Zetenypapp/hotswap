@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "about": "Mod lists published between HotSwap releases. Same shape as CATALOG/LIVE/ENGINE_CATS in ui/data.js (mods as objects: {type, name, info, spec, min, max, step, def}). Bump version, then sign: cargo tauri signer sign -f <hotswap.key> -p \"\" catalog/mods.json. Mods that run code (js) are dropped by the app.",
+  "games": {},
+  "live": {},
+  "engines": {}
+}
