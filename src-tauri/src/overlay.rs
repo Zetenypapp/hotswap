@@ -53,6 +53,7 @@ pub(crate) async fn overlay_window(app: &AppHandle) -> Result<tauri::WebviewWind
         .build()
         .map_err(|e| e.to_string())?;
     let _ = win.set_ignore_cursor_events(true);
+    tool_window(&win, true);
     // Wait until the page listens (it calls overlay_ready), so the first note or menu isn't lost.
     for _ in 0..100 {
         if OVERLAY_READY.load(Ordering::Relaxed) {
@@ -61,6 +62,22 @@ pub(crate) async fn overlay_window(app: &AppHandle) -> Result<tauri::WebviewWind
         tokio_sleep(50).await;
     }
     Ok(win)
+}
+
+/// Marks an overlay window as a tool window, so Windows doesn't count it as an app window: an app
+/// window appearing over a fullscreen game makes the taskbar check again and it can stay up.
+/// `no_activate` also keeps clicks from giving it focus (off while the menu needs the keyboard).
+pub(crate) fn tool_window(win: &tauri::WebviewWindow, no_activate: bool) {
+    #[cfg(windows)]
+    if let Ok(hwnd) = win.hwnd() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW};
+        unsafe {
+            let h = hwnd.0 as _;
+            let mut ex = (GetWindowLongPtrW(h, GWL_EXSTYLE) as u32 | WS_EX_TOOLWINDOW) & !WS_EX_APPWINDOW;
+            ex = if no_activate { ex | WS_EX_NOACTIVATE } else { ex & !WS_EX_NOACTIVATE };
+            SetWindowLongPtrW(h, GWL_EXSTYLE, ex as _);
+        }
+    }
 }
 
 pub(crate) static OVERLAY_READY: AtomicBool = AtomicBool::new(false);
@@ -166,11 +183,13 @@ pub(crate) async fn overlay_menu(app: AppHandle, open: bool) -> Result<(), Strin
             overlay_fit(app.clone(), 0.0, 0.0, m.size().width as f64 / sc, m.size().height as f64 / sc - 1.0);
         }
         let _ = win.set_ignore_cursor_events(false);
+        tool_window(&win, false);
         let _ = win.show();
         let _ = win.set_focus();
     } else {
         OVERLAY_MENU.store(false, Ordering::Relaxed);
         let _ = win.set_ignore_cursor_events(true);
+        tool_window(&win, true);
         let keep = OVERLAY_KEEP.load(Ordering::Relaxed);
         // Hide first, so the overlay can't keep the focus the game needs back.
         if !keep {
@@ -258,6 +277,7 @@ pub(crate) async fn radar_show(app: AppHandle, show: bool, corner: Option<String
         .build()
         .map_err(|e| e.to_string())?;
     let _ = win.set_ignore_cursor_events(true);
+    tool_window(&win, true);
     Ok(())
 }
 
