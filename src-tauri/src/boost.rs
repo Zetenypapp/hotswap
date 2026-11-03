@@ -84,16 +84,38 @@ impl Config {
     }
 }
 
-/// True when a laptop runs on its battery.
-fn on_battery() -> bool {
-    #[repr(C)]
-    struct PowerStatus { ac: u8, flags: u8, percent: u8, saver: u8, life: u32, full: u32 }
+#[repr(C)]
+struct PowerStatus { ac: u8, flags: u8, percent: u8, saver: u8, life: u32, full: u32 }
+
+fn power_status() -> Option<PowerStatus> {
     #[link(name = "kernel32")]
     extern "system" {
         fn GetSystemPowerStatus(s: *mut PowerStatus) -> i32;
     }
     let mut s = PowerStatus { ac: 255, flags: 0, percent: 0, saver: 0, life: 0, full: 0 };
-    unsafe { GetSystemPowerStatus(&mut s) != 0 && s.ac == 0 }
+    (unsafe { GetSystemPowerStatus(&mut s) } != 0).then_some(s)
+}
+
+/// True when a laptop runs on its battery.
+fn on_battery() -> bool {
+    power_status().is_some_and(|s| s.ac == 0)
+}
+
+#[derive(Serialize)]
+pub struct Hardware {
+    ram_gb: f32,
+    /// The PC has a battery (a laptop or handheld).
+    battery: bool,
+}
+
+/// What the Boost page's suggestions go on: memory, and whether the PC has a battery.
+#[tauri::command]
+pub(crate) fn boost_hw() -> Hardware {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    // Battery flag 128: no system battery; 255: unknown.
+    let battery = power_status().is_some_and(|s| s.flags != 128 && s.flags != 255);
+    Hardware { ram_gb: sys.total_memory() as f32 / (1u64 << 30) as f32, battery }
 }
 
 /// Windows settings changed by the Advanced extras, to put back.

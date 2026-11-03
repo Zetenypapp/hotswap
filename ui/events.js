@@ -29,6 +29,11 @@ document.addEventListener('click', e => {
   if (gameGear) { const { [gameGear.dataset.gamegear]: _, ...rest } = state.boostGames; state.boostGames = rest; save(); syncBoost(); render(); return; }
   const ecoDrop = e.target.closest('[data-ecodrop]');
   if (ecoDrop) { state.boostEcoApps = state.boostEcoApps.filter(x => x !== ecoDrop.dataset.ecodrop); save(); syncBoost(); render(); return; }
+  // Boost page suggestions: do one, or stop suggesting it.
+  const sug = e.target.closest('[data-sug]');
+  if (sug) { BOOST_SUG_ACTS[sug.dataset.sug]?.(); return; }
+  const sugX = e.target.closest('[data-sugx]');
+  if (sugX) { state.boostSugHidden = { ...state.boostSugHidden, [sugX.dataset.sugx]: true }; save(); render(); return; }
   const gear = e.target.closest('[data-gear]');
   if (gear) { setBoostLevel(+gear.dataset.gear); return; }
   const boostApp = e.target.closest('[data-boostapp]');
@@ -120,6 +125,7 @@ document.addEventListener('click', e => {
     case 'menuBind': startCapture(null, MENU, 'up'); break;
     case 'setHud': state.hud = !state.hud; save(); render(); syncHud(true); break;
     case 'setMenuFocus': state.menuFocus = !state.menuFocus; save(); render(); break;
+    case 'setPadMenu': state.padMenu = !state.padMenu; save(); render(); break;
     case 'setHudStats': state.hudStats = !state.hudStats; save(); render(); syncHud(true); break;
     case 'setDiscord': state.discord = !state.discord; save(); render(); break;
     case 'setFgFriendly': state.fgFriendly = !state.fgFriendly; save(); syncHud(true); pushStatsCfg(true); render(); break;
@@ -167,6 +173,7 @@ document.addEventListener('click', e => {
     case 'setAutoUpdate': state.autoUpdate = !state.autoUpdate; save(); render(); break;
     case 'setSounds': state.sounds = !state.sounds; save(); render(); if (state.sounds) chime(true); break;
     case 'setOverlay': state.overlay = !state.overlay; if (!state.overlay) { if (menuOpen) toggleMenu(false); hudOn = false; invoke?.('overlay_close'); } save(); render(); break;
+    case 'fpsAllow': invoke('fps_allow').then(() => toast('FPS counter allowed', 'Sign out of Windows and back in once to finish.')).catch(err => toast('FPS counter not allowed', String(err))); break;
     case 'testOverlay': overlaySend({ title: 'HotSwap overlay', value: 'On', on: true, game: 'This is how mod changes look in game' }); chime(true); break;
     case 'checkUpdateBtn': checkUpdate(true); break;
     case 'updateBtn': case 'updatePill': installUpdate(); break;

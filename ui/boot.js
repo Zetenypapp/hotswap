@@ -41,6 +41,8 @@ document.addEventListener('securitypolicyviolation', e => invoke?.('log_ui', { m
     listen?.('trainer-status', e => { TRAINER = e.payload; if (state.view === 'game') { renderMods(); renderPanel(); } if (state.mini) renderMini(); pushMenu(); });
     listen?.('hotkey-up', e => { if (e.payload === state.sheetKey) showSheet(false); });
     listen?.('overlay-input', e => onOverlayInput(e.payload || {}));
+    // A controller's View + Menu (pad.rs).
+    listen?.('pad-menu', () => { if (state.padMenu !== false) toggleMenu(); });
     onRunning(await invoke('running_game').catch(() => null));
   } else if (state.playing && !findGame(state.playing)) state.playing = null;
   nav.stack = [{ view: state.view, game: state.game }]; nav.i = 0;

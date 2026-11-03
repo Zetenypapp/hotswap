@@ -672,6 +672,21 @@
   // A menu key, from the keyboard or (when the game stays in front) from HotSwap's key hook.
   function menuKey(k, shift) {
     if (!menu) return false;
+    // The tabs along the top, in order (LT and RT on a controller).
+    if (k === 'ViewNext' || k === 'ViewPrev') {
+      const views = [!menu.discordOnly && 'mods', !menu.noDc && 'discord', !menu.noSys && 'system', !menu.noBoost && 'boost'].filter(Boolean);
+      view = views[(views.indexOf(view) + (k === 'ViewNext' ? 1 : -1) + views.length) % views.length];
+      try { localStorage.setItem('hs.ov.view', view); } catch {}
+      renderMenu();
+      return true;
+    }
+    // Boost: left and right shift down and up.
+    if (view === 'boost' && boostTab === 'gears' && (k === 'ArrowLeft' || k === 'ArrowRight')) {
+      menu.boost = Math.max(0, Math.min(5, (menu.boost || 0) + (k === 'ArrowRight' ? 1 : -1)));
+      send({ type: 'boost', level: menu.boost });
+      renderMenu();
+      return true;
+    }
     if (view !== 'mods') { if (k === 'Escape') send({ type: 'close' }); return false; }
     const n = visibleMods().length;
     if (k === 'Escape') send({ type: 'close' });

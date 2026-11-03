@@ -29,7 +29,17 @@ const STAT_METRICS = [
   { id: 'game_cpu', name: 'Game CPU', group: 'Running game', get: s => s.game?.cpu, max: 100, fmt: v => `${Math.round(v)}%`, na: NO_GAME },
   { id: 'game_ram', name: 'Game memory', group: 'Running game', get: s => s.game?.ram, fmt: v => `${statGb(v)} GB`, na: NO_GAME },
   { id: 'game_gpu', name: 'Game GPU', group: 'Running game', get: s => s.game?.gpu, max: 100, fmt: v => `${Math.round(v)}%`, na: NO_GAME },
+  { id: 'game_fps', name: 'Game FPS', group: 'Running game', get: s => s.game?.fps?.fps, fmt: v => `${Math.round(v)}`, na: s => noFps(s) },
+  { id: 'game_low', name: '1% low FPS', group: 'Running game', get: s => s.game?.fps?.low, fmt: v => `${Math.round(v)}`, na: s => noFps(s) },
+  { id: 'game_ms', name: 'Frame time', group: 'Running game', get: s => s.game?.fps?.ms, fmt: v => `${v.toFixed(1)} ms`, na: s => noFps(s) },
 ];
+// Why there's no frame rate (fps.rs): no game, Windows' one-time OK missing, or no frames yet.
+function noFps(s) {
+  if (!s?.game) return NO_GAME;
+  if (s.fps_status === 'denied') return 'Windows needs a one-time OK first: Settings → Hotkeys and overlay → FPS counter.';
+  if (s.fps_status === 'failed') return 'Windows wouldn’t start the frame counter.';
+  return 'Waiting for frames. Shows once the game draws (Vulkan and OpenGL games too).';
+}
 const STAT_BY_ID = Object.fromEntries(STAT_METRICS.map(m => [m.id, m]));
 const STAT_COLORS = ['', '#3ddc84', '#4da3ff', '#b57bff', '#ff6b9a', '#ff9f43', '#ffd84d', '#2ee6d6', '#f2f4f7'];
 const STAT_COLOR_NAMES = ['Accent', 'Green', 'Blue', 'Purple', 'Pink', 'Orange', 'Yellow', 'Teal', 'White'];
@@ -37,17 +47,20 @@ const STAT_STYLES = [['line', 'Line'], ['area', 'Area'], ['bars', 'Bars'], ['ste
 
 const STAT_DEFAULT = {
   order: STAT_METRICS.map(m => m.id),
-  tab: ['cpu', 'ram', 'gpu', 'gpu_temp', 'gpu_power', 'vram', 'net_down', 'game_cpu', 'game_ram'],
+  tab: ['game_fps', 'cpu', 'ram', 'gpu', 'gpu_temp', 'gpu_power', 'vram', 'net_down', 'game_cpu', 'game_ram'],
   hud: [],
   widget: ['cpu', 'gpu', 'gpu_temp', 'game_ram'],
   colors: {}, styles: {}, sizes: {},
   style: 'area', window: 60, rate: 1000, units: 'c',
   widgetOn: false, widgetWhen: 'games', widgetCorner: 'top-right', widgetSize: 'm', widgetOpacity: 90,
 };
-// The user's settings over the defaults (new stats in an update join the end of their order).
+// The user's settings over the defaults (new stats in an update join the end of their order, and
+// the System tab if they're on it by default, as Game FPS is).
 function statConfig(saved) {
   const c = { ...STAT_DEFAULT, ...(saved || {}) };
-  c.order = [...c.order.filter(id => STAT_BY_ID[id]), ...STAT_DEFAULT.order.filter(id => !c.order.includes(id))];
+  const fresh = STAT_DEFAULT.order.filter(id => !c.order.includes(id));
+  if (saved?.order) c.tab = [...c.tab, ...fresh.filter(id => STAT_DEFAULT.tab.includes(id) && !c.tab.includes(id))];
+  c.order = [...c.order.filter(id => STAT_BY_ID[id]), ...fresh];
   return c;
 }
 
@@ -105,7 +118,8 @@ function statCard(m, s, cfg, size, extraClass = '') {
   const style = cfg.styles[m.id] || cfg.style;
   const top = m.max || (m.maxOf && s && m.maxOf(s)) || null;
   const { vals, slots } = statSlice(m.id, cfg.window, cfg.rate);
-  const body = v == null && m.na && !vals.some(x => x != null) ? `<div class="na">${m.na}</div>` : statGraph(vals, slots, top, style, cfg.colors[m.id]);
+  const na = typeof m.na === 'function' ? m.na(s) : m.na;
+  const body = v == null && na && !vals.some(x => x != null) ? `<div class="na">${na}</div>` : statGraph(vals, slots, top, style, cfg.colors[m.id]);
   const sub = m.sub && s ? m.sub(s) : '';
   return `<div class="sys-card s-${size || 'm'}${extraClass}" style="${cfg.colors[m.id] ? `--c:${cfg.colors[m.id]}` : ''}"><div class="top"><b>${m.name}</b><span>${statText(m, v, cfg.units)}</span></div>${sub ? `<small class="sub">${sub}</small>` : ''}${body}</div>`;
 }

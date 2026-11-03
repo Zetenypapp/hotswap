@@ -22,6 +22,8 @@ pub struct Game {
     ram: u64,
     /// Percent.
     gpu: Option<f32>,
+    /// Frame rate, 1% low and frame time (fps.rs).
+    fps: Option<crate::fps::Fps>,
 }
 
 #[derive(Serialize, Default)]
@@ -45,6 +47,8 @@ pub struct Snapshot {
     net_down: u64,
     net_up: u64,
     game: Option<Game>,
+    /// The frame rate counter: "ok", "starting", "denied" or "failed" (fps.rs); empty without a game.
+    fps_status: &'static str,
     /// Where CPU temperature and power came from, or why they're missing.
     cpu_sensors: &'static str,
 }
@@ -137,7 +141,8 @@ impl Stats {
             i.sys.refresh_processes_specifics(sysinfo::ProcessesToUpdate::Some(&[p]), true, sysinfo::ProcessRefreshKind::nothing().with_cpu().with_memory());
             if let Some(proc_) = i.sys.process(p) {
                 let cores = i.sys.cpus().len().max(1) as f32;
-                s.game = Some(Game { cpu: proc_.cpu_usage() / cores, ram: proc_.memory(), gpu: None });
+                s.game = Some(Game { cpu: proc_.cpu_usage() / cores, ram: proc_.memory(), gpu: None, fps: crate::fps::read(pid) });
+                s.fps_status = crate::fps::status();
             }
         }
         #[cfg(windows)]

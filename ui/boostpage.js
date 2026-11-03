@@ -15,6 +15,43 @@ function boostAppList(kind, list, pickId, attr, dropAttr, empty) {
   </div>`;
 }
 
+// Suggestions: a gear for this PC, and apps worth handling, from what's running now (refreshed at
+// most every 30 seconds while the page shows). Each one does its thing in a click, or goes away.
+let BOOST_SUG = null, BOOST_SUG_AT = 0;
+const BOOST_SUG_ACTS = {};
+const SUG_BROWSERS = ['chrome.exe', 'msedge.exe', 'firefox.exe', 'opera.exe', 'brave.exe', 'vivaldi.exe'];
+const SUG_SYNC = { 'onedrive.exe': 'OneDrive', 'dropbox.exe': 'Dropbox', 'googledrivefs.exe': 'Google Drive', 'ms-teams.exe': 'Microsoft Teams', 'creative cloud.exe': 'Adobe Creative Cloud' };
+const SUG_KEEP = ['discord.exe', 'steam.exe', 'steamwebhelper.exe', 'spotify.exe'];
+function loadBoostSug() {
+  if (!invoke || Date.now() - BOOST_SUG_AT < 30000) return;
+  BOOST_SUG_AT = Date.now();
+  Promise.all([invoke('boost_hw'), invoke('boost_apps', { protect: state.boostProtect !== false })])
+    .then(([hw, apps]) => { BOOST_SUG = { hw, apps }; if (state.view === 'boost') render(); }).catch(console.error);
+}
+const sugGb = mb => mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
+function boostSuggestions(level, cfg) {
+  if (!BOOST_SUG) return [];
+  const { hw, apps } = BOOST_SUG, out = [], hidden = state.boostSugHidden || {};
+  const listed = n => [...state.boostClose, ...state.boostFreeze, ...state.boostEcoApps].includes(n);
+  const add = (id, text, why, btn, act) => { if (!hidden[id]) { out.push({ id, text, why, btn, act }); BOOST_SUG_ACTS[id] = act; } };
+  // A gear for this PC.
+  if (level === 0) add('gear-sport', 'Try Sport', 'High performance power and Windows Game Mode, nothing closed. A safe start on any PC.', 'Shift to Sport', () => setBoostLevel(2));
+  else if (hw.ram_gb <= 12.5 && level < 3) add('gear-turbo', 'Try Turbo', `This PC has ${Math.round(hw.ram_gb)} GB of memory, so closing, freezing and slowing background apps frees the most for the game.`, 'Shift to Turbo', () => setBoostLevel(3));
+  if (hw.battery && state.boostBattery === false && level >= 2) add('battery', 'Turn on Easy on battery', 'This PC has a battery. On it, Boost stays at Eco instead of draining it faster.', 'Turn on', () => { state.boostBattery = true; save(); syncBoost(); render(); });
+  // Browsers, in Efficiency mode while you play.
+  const browsers = apps.filter(a => SUG_BROWSERS.includes(a.name));
+  const bmb = browsers.reduce((t, a) => t + a.mb, 0);
+  if (level && !cfg.eco_browsers && bmb >= 500) add('eco-browsers', `Slow down ${browsers.map(a => a.name.replace(/\.exe$/, '')).join(' and ')} while you play`, `Using ${sugGb(bmb)} right now. Efficiency mode in ${BOOST_GEARS[level].name} keeps them working, with less CPU and memory.`, 'Turn on', () => setBoostAdv('eco_browsers', true, level));
+  // Sync apps, closed while you play.
+  for (const a of apps.filter(a => SUG_SYNC[a.name] && !listed(a.name)).slice(0, 2)) {
+    add(`close-${a.name}`, `Close ${SUG_SYNC[a.name]} while you play`, `Sync apps can upload and download in the middle of a game. Closed by gears that close apps${cfg.close_apps ? '' : ` (Turbo and Redline; ${BOOST_GEARS[level].name} doesn’t)`}, and reopened after.`, 'Add', () => { state.boostClose = [...new Set([...state.boostClose, a.name])]; save(); syncBoost(); render(); });
+  }
+  // The biggest other app.
+  const big = apps.find(a => a.mb >= 800 && !SUG_BROWSERS.includes(a.name) && !SUG_SYNC[a.name] && !SUG_KEEP.includes(a.name) && !listed(a.name));
+  if (big) add(`eco-${big.name}`, `Slow down ${big.name.replace(/\.exe$/, '')} while you play`, `It’s using ${sugGb(big.mb)}. Efficiency mode keeps it running with less CPU and memory, in gears with “Your own apps” on (Redline).`, 'Add', () => { state.boostEcoApps = [...new Set([...state.boostEcoApps, big.name])]; save(); syncBoost(); render(); });
+  return out.slice(0, 4);
+}
+
 function renderBoost() {
   setAmbient(null);
   const sw = (id, on) => `<button class="switch" role="switch" id="${id}" aria-checked="${!!on}"></button>`;
@@ -26,6 +63,8 @@ function renderBoost() {
   const kicker = live ? `<span class="bdot live"></span>Live in ${esc(run.name)}${perGame ? ' · its own gear' : ''}`
     : level ? `<span class="bdot"></span>Ready · kicks in when a game starts` : `<span class="bdot off"></span>Off`;
   const stat = (k, v) => `<div class="bstat"><span>${k}</span><b>${v}</b></div>`;
+  loadBoostSug();
+  const sugs = boostSuggestions(level, cfg);
 
   $('boostBody').innerHTML = `
   <section class="bhero${live ? ' live' : ''}" style="--g:${gearColor(level)}">
@@ -51,6 +90,9 @@ function renderBoost() {
       <span class="bgear-top"><span class="bgear-mark">${gearMark(n)}</span><span class="bgear-bars">${[1, 2, 3, 4].map(b => `<i class="${n && n !== 5 && b <= n ? 'on' : ''}"></i>`).join('')}</span></span>
       <b>${BOOST_GEARS[n].name}</b><span>${n ? `${boostCount(g)} settings` : 'Nothing'}${state.boostGears?.[n] ? ' · edited' : ''}</span></button>`;
   }).join('')}</div>
+  ${sugs.length ? `<section class="bcard"><h2>Suggestions</h2><div class="bsug">${sugs.map(s => `<div class="bsug-row"><span class="bsug-i"></span><div class="txt"><b>${esc(s.text)}</b><span>${esc(s.why)}</span></div>
+    ${s.id.startsWith('gear-') ? `<button class="btn sm accent" data-gear="${s.id === 'gear-sport' ? 2 : 3}">${s.btn}</button>` : `<button class="btn sm accent" data-sug="${esc(s.id)}">${s.btn}</button>`}
+    <button class="bsug-x" data-sugx="${esc(s.id)}" title="Don’t suggest this again" aria-label="Don’t suggest this again">×</button></div>`).join('')}</div></section>` : ''}
   <p class="bnote">Click a gear or the dial to shift. ${run ? `Shifting now sets the gear for ${esc(run.name)} only.` : 'This is the gear for every game; shift in the overlay while you play to give a game its own.'} Everything goes back when the game closes.</p>
 
   <div class="bgrid">

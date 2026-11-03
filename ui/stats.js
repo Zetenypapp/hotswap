@@ -16,6 +16,19 @@ function statsWidgetShown() {
 // The overlay window stays up while the widget is on (see overlaySend in ingame.js).
 function statsKeep() { return statsWidgetShown(); }
 
+// The FPS counter's state for Settings (fps.rs): asked once when Settings first shows it.
+let FPS_STATUS = null;
+function fpsRowText() {
+  if (FPS_STATUS === null && invoke) {
+    FPS_STATUS = 'checking';
+    invoke('fps_status').then(s => { FPS_STATUS = s; render(); }).catch(() => { FPS_STATUS = 'failed'; });
+  }
+  const what = 'Counts the frames any game shows (DirectX, Vulkan or OpenGL) from Windows’ own graphics events, like Xbox Game Bar, without touching the game. Add Game FPS, 1% low and Frame time on the Overlay page.';
+  if (FPS_STATUS === 'denied') return `${what} Windows needs a one-time OK first: click Allow, say yes to the admin prompt, then sign out and back in once.`;
+  if (FPS_STATUS === 'failed') return `${what} Windows wouldn’t start it on this PC.`;
+  return what;
+}
+
 // Sends the settings to the overlay when they or the running game change.
 let lastStatsCfg = '';
 function pushStatsCfg(force) {

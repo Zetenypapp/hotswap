@@ -136,6 +136,8 @@ function renderSettings() {
       ${state.hud ? `<div class="set-row"><div class="txt"><b>HUD position</b><span>Where the HUD sits.</span></div>${cornerPicker('hcorner', state.hudCorner)}</div>
       <div class="set-row"><div class="txt"><b>CPU and RAM on the HUD</b><span>Your PC's total use, updated every second.</span></div>${sw('setHudStats', state.hudStats)}</div>` : ''}
       <div class="set-row"><div class="txt"><b>Keep the game in front</b><span>The menu opens without taking over, so the game keeps running at full speed behind it. Clicks and the menu’s keys (arrows, Enter, Space, Tab, Esc) go to the menu. Only for games that show a mouse cursor: in shooters and other games that lock the mouse, you can’t point at the menu.</span></div>${sw('setMenuFocus', state.menuFocus)}</div>
+      <div class="set-row"><div class="txt"><b>Controller</b><span>Press View and Menu together to open or close the menu. In it, the D-pad or left stick moves, A picks, B closes, LB and RB switch categories, and LT and RT switch tabs. The game may still see the presses too.</span></div>${sw('setPadMenu', state.padMenu !== false)}</div>
+      <div class="set-row"><div class="txt"><b>FPS counter</b><span>${fpsRowText()}</span></div>${FPS_STATUS === 'denied' ? '<button class="btn" id="fpsAllow">Allow</button>' : ''}</div>
       <div class="set-row"><div class="txt"><b>Radar position</b><span>Where the enemy radar sits, in games that have one.</span></div>${cornerPicker('rcorner', state.radarCorner)}</div>` : ''}
     </div>` : ''}
 `,
