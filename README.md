@@ -14,7 +14,7 @@ HotSwap is a free, open-source, ad-free mod app for **single-player** PC games o
 ## 🎮 Games
 
 - **Live mods:** Satisfactory, Subnautica, Subnautica: Below Zero, Subnautica 2, R.E.P.O., Kerbal Space Program, Oxygen Not Included and Mon Bazou.
-- **Experimental** (new, not tested in game yet): Euro Truck Simulator 2, American Truck Simulator, Stormworks, Unturned (singleplayer only), GTA V story mode and Mr.Mine.
+- **Experimental** (new, not tested in game yet): Euro Truck Simulator 2, American Truck Simulator, Stormworks, Unturned (singleplayer only), GTA V story mode, Mr.Mine, Internet Cafe Simulator 2, Streamer Life Simulator, Bakery Simulator, My Garage, Farming Simulator 19 and 22, Supermarket Together, Embr and Firefighting Simulator: The Squad (the last six also when you host, for friends who know).
 - **Engine mods** for any single-player **Unity, Unreal, Godot, RPG Maker or Ren'Py** game, like Game Speed, Unlock FPS and Field of View.
 
 Every other game still shows up in your library with art, playtime and launching. [See every game's mods →](FEATURES.md#-games)

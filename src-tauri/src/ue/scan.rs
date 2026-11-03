@@ -5,6 +5,18 @@ use super::mem::Proc;
 
 /// (name, address, size) of each section of the module loaded at `base`.
 pub fn sections(p: &Proc, base: u64) -> Vec<(String, u64, u64)> {
+    sections_with_flags(p, base).into_iter().map(|(n, a, s, _)| (n, a, s)).collect()
+}
+
+/// Where the tables can be: writable sections. Usually ".data", but protected games (Denuvo)
+/// rename and reshuffle their sections; huge ones (protection code) are skipped.
+fn data_sections(p: &Proc, base: u64) -> Vec<(u64, u64)> {
+    const WRITE: u32 = 0x8000_0000;
+    sections_with_flags(p, base).into_iter().filter(|(_, _, size, flags)| flags & WRITE != 0 && *size > 0 && *size < 128 << 20).map(|(_, a, s, _)| (a, s)).collect()
+}
+
+/// (name, address, size, characteristics) of each section.
+fn sections_with_flags(p: &Proc, base: u64) -> Vec<(String, u64, u64, u32)> {
     let Some(pe) = p.read::<u32>(base + 0x3C) else { return vec![] };
     let pe = base + pe as u64;
     let (Some(n), Some(opt)) = (p.read::<u16>(pe + 6), p.read::<u16>(pe + 20)) else { return vec![] };
@@ -16,7 +28,8 @@ pub fn sections(p: &Proc, base: u64) -> Vec<(String, u64, u64)> {
             p.read_into(s, &mut name).then_some(())?;
             let size = p.read::<u32>(s + 8)? as u64;
             let va = p.read::<u32>(s + 12)? as u64;
-            Some((String::from_utf8_lossy(&name).trim_end_matches('\0').to_string(), base + va, size))
+            let flags = p.read::<u32>(s + 36)?;
+            Some((String::from_utf8_lossy(&name).trim_end_matches('\0').to_string(), base + va, size, flags))
         })
         .collect()
 }
@@ -41,13 +54,31 @@ fn heap_ptr(v: u64) -> bool {
     v > 0x10000 && v < 0x7FFF_FFFF_FFFF && v % 8 == 0
 }
 
+/// Candidates for UE 4.22 and older, whose names are in TNameEntryArray: GNames is a pointer in the
+/// module's data to a table of chunk pointers. Returns the table addresses (checked by the caller).
+pub fn find_name_arrays(p: &Proc, base: u64) -> Vec<u64> {
+    let mut out = Vec::new();
+    for (addr, size) in data_sections(p, base) {
+        let d = read_section(p, addr, size);
+        for o in (0..d.len().saturating_sub(8)).step_by(8) {
+            let v = u64_at(&d, o);
+            // The table's first chunk holds entry pointers; entry 0 is "None" at +0xC.
+            if heap_ptr(v) && !out.contains(&v) {
+                let entry0 = p.ptr(v).and_then(|chunk| p.ptr(chunk));
+                let mut name = [0u8; 5];
+                if entry0.is_some_and(|e| heap_ptr(e) && p.read_into(e + 0xC, &mut name)) && &name == b"None\0" {
+                    out.push(v);
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Candidate addresses of GUObjectArray (FUObjectArray) and of the FName pool, best first.
 pub fn find_tables(p: &Proc, base: u64) -> (Vec<u64>, Vec<u64>) {
     let (mut objects, mut names) = (Vec::new(), Vec::new());
-    for (name, addr, size) in sections(p, base) {
-        if name != ".data" || size == 0 {
-            continue;
-        }
+    for (addr, size) in data_sections(p, base) {
         let d = read_section(p, addr, size);
         let mut o = 0;
         while o + 0x40 <= d.len() {

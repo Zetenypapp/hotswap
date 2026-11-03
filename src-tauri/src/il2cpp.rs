@@ -157,6 +157,26 @@ impl Il2Cpp {
         Some(r)
     }
 
+    /// Calls a static method taking a string key and, for setters, a float, as PlayerPrefs.GetFloat(key)
+    /// and SetFloat(key, value) do. Returns what invoke_raw returns.
+    pub fn invoke_key(&mut self, class: u64, method: &str, key: &str, value: Option<f32>) -> Option<u64> {
+        let argc = 1 + value.is_some() as u64;
+        let m = self.call("il2cpp_class_get_method_from_name", &[Arg::N(class), Arg::S(method), Arg::N(argc)]).ok().filter(|&m| m != 0)?;
+        let s = self.call("il2cpp_string_new", &[Arg::S(key)]).ok().filter(|&s| s != 0)?;
+        // params: [the string, a pointer to the float], the float, then the exception slot.
+        let buf = Buf::new(&self.p, 32)?;
+        self.p.write(buf.at, s);
+        if let Some(v) = value {
+            self.p.write(buf.at + 16, v.to_bits());
+            self.p.write(buf.at + 8, buf.at + 16);
+        }
+        let r = self.call("il2cpp_runtime_invoke", &[Arg::N(m), Arg::N(0), Arg::N(buf.at), Arg::N(buf.at + 24)]).ok()?;
+        if self.p.read::<u64>(buf.at + 24).unwrap_or(0) != 0 {
+            return None;
+        }
+        Some(r)
+    }
+
     /// Dev aid: every field of a class as (name, offset, type name).
     pub fn fields_of(&self, class: u64) -> Vec<(String, u32, String)> {
         let Some(iter) = Buf::new(&self.p, 16) else { return vec![] };

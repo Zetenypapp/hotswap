@@ -139,6 +139,26 @@ impl Mono {
         Some(r)
     }
 
+    /// Calls a static method taking a string key and, for setters, a float, as PlayerPrefs.GetFloat(key)
+    /// and SetFloat(key, value) do. Returns what invoke_raw returns.
+    pub fn invoke_key(&mut self, class: u64, method: &str, key: &str, value: Option<f32>) -> Option<u64> {
+        let argc = 1 + value.is_some() as u64;
+        let m = self.call("mono_class_get_method_from_name", &[Arg::N(class), Arg::S(method), Arg::N(argc)]).ok().filter(|&m| m != 0)?;
+        let s = self.call("mono_string_new", &[Arg::N(self.domain), Arg::S(key)]).ok().filter(|&s| s != 0)?;
+        // params: [the string, a pointer to the float], the float, then the exception slot.
+        let buf = Buf::new(&self.p, 32)?;
+        self.p.write(buf.at, s);
+        if let Some(v) = value {
+            self.p.write(buf.at + 16, v.to_bits());
+            self.p.write(buf.at + 8, buf.at + 16);
+        }
+        let r = self.call("mono_runtime_invoke", &[Arg::N(m), Arg::N(0), Arg::N(buf.at), Arg::N(buf.at + 24)]).ok()?;
+        if self.p.read::<u64>(buf.at + 24).unwrap_or(0) != 0 {
+            return None;
+        }
+        Some(r)
+    }
+
     /// The class's vtable in the game's domain (also the first word of every instance).
     pub fn vtable(&self, class: u64) -> Option<u64> {
         self.call("mono_class_vtable", &[Arg::N(self.domain), Arg::N(class)]).ok().filter(|&v| v != 0)

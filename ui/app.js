@@ -140,7 +140,7 @@ function buildGame(raw) {
     software: raw.kind === 'software', steamType: raw.steamType || null, engine: raw.engine || null,
     // Games whose anti-cheat only runs online can have singleplayer-only mods (`offline` in the catalog).
     anticheat: c?.offline ? [] : raw.anticheat || [], offline: c?.offline ? c.offline : null, onlineAnticheat: c?.offline ? raw.anticheat || [] : [],
-    offlineNote: c?.offlineNote || null, setup: c?.setup || null,
+    offlineNote: c?.offlineNote || null, hostOnly: !!c?.hostOnly, setup: c?.setup || null,
     genre: c?.genre || '', solo: !!c?.solo, experimental: !!c?.experimental, color: hue(raw.id || appId),
     // Anti-cheat games never get mods, even if the catalog has some.
     cats: raw.anticheat?.length && !c?.offline ? [] : c?.cats || [],
@@ -363,7 +363,7 @@ function syncTrainer() {
   if (Object.keys(specs).length) {
     args.engine = g.engine; args.specs = specs;
     // Singleplayer-only games: what must hold for the mods to run.
-    if (Array.isArray(g.offline)) args.guard = g.offline.map(o => ({ at: o.at, op: 'is', v: o.is, def: 0, mul: 1, ty: null, from: null, act: false }));
+    if (Array.isArray(g.offline)) args.guard = g.offline.map(o => ({ at: o.at, op: 'is', v: o.is, def: 0, mul: 1, ty: null, from: null, act: false, any: !!o.any, note: g.hostOnly ? 'Host only: mods are off while you’re in someone else’s game.' : null }));
   }
   const sig = JSON.stringify(args);
   if (sig === lastTrainer) return;

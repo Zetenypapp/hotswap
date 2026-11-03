@@ -7,7 +7,10 @@
 //! is one, otherwise the field on every live object of that class. Each further field is read
 //! through the object the previous one points to; `field[]` goes through every element of an
 //! array or list. A last part that isn't a field is tried as a property (Unity, e.g.
-//! `UnityEngine/Time.timeScale`).
+//! `UnityEngine/Time.timeScale`). `PlayerPrefs:key` is a float the game keeps in Unity's PlayerPrefs
+//! instead of an object (it calls PlayerPrefs.GetFloat/SetFloat in the game). `@0xC` steps into a
+//! struct stored in place, e.g. an Unreal attribute's CurrentValue: `AttributeSet.Health.@0xC`
+//! (a float unless the spec says `ty`).
 
 use crate::{il2cpp::Il2Cpp, mono::Mono, trainer::log, ue::objects::Ue};
 use serde::{Deserialize, Serialize};
@@ -39,6 +42,12 @@ pub struct Spec {
     /// Part of an action (applied once when the button is pressed).
     #[serde(default)]
     pub act: bool,
+    /// Guards only: the status line while the guard keeps mods off (e.g. "Host only: ...").
+    #[serde(default)]
+    pub note: Option<String>,
+    /// Guards only: one of the `any` checks passing is enough (e.g. "not in multiplayer" or "the host").
+    #[serde(default)]
+    pub any: bool,
 }
 
 fn one() -> f64 {
@@ -153,6 +162,10 @@ pub trait Reader {
     fn prop_obj(&mut self, _class: u64, _obj: u64, _name: &str) -> Option<u64> {
         None
     }
+    /// Reads or writes a float in Unity's PlayerPrefs.
+    fn pref(&mut self, _key: &str, _set: Option<f32>) -> Option<f32> {
+        None
+    }
     /// Dev aid: what a class looks like, or the game's classes.
     fn dump(&mut self, class: Option<&str>) -> String;
 }
@@ -214,6 +227,16 @@ macro_rules! managed_reader {
             }
             fn prop_obj(&mut self, class: u64, obj: u64, name: &str) -> Option<u64> {
                 self.invoke_raw(class, obj, &format!("get_{name}"), None).filter(|&o| o != 0)
+            }
+            fn pref(&mut self, key: &str, set: Option<f32>) -> Option<f32> {
+                let c = <$t>::class(self, "UnityEngine", "PlayerPrefs")?;
+                match set {
+                    Some(v) => self.invoke_key(c, "SetFloat", key, Some(v)).map(|_| v),
+                    None => {
+                        let r = self.invoke_key(c, "GetFloat", key, None).filter(|&r| r != 0)?;
+                        Some(f32::from_bits(self.p.read::<u32>(r + 0x10)?))
+                    }
+                }
             }
             fn dump(&mut self, class: Option<&str>) -> String {
                 let Some(name) = class else { return self.game_classes().join("\n") };
@@ -404,6 +427,8 @@ enum Target {
     Mem(u64, Ty),
     /// A property: class, object (0 for static), index into `Session::prop_names`.
     Prop(u64, u64, usize),
+    /// A PlayerPrefs float: index into `Session::prop_names` for its key.
+    Pref(usize),
 }
 
 struct Resolved {
@@ -472,6 +497,13 @@ impl Session {
 
     /// Finds every place a path points to.
     fn resolve(&mut self, path: &str, ty: Option<Ty>) -> Option<Resolved> {
+        if let Some(key) = path.strip_prefix("PlayerPrefs:") {
+            let t = match self.prop(0, 0, key, None) {
+                Target::Prop(_, _, i) => Target::Pref(i),
+                t => t,
+            };
+            return Some(Resolved { targets: vec![t], roots: vec![], at: Instant::now() });
+        }
         let (ns, rest) = path.rsplit_once('/').unwrap_or(("", path));
         let mut parts = rest.split('.');
         let class = self.r.class(ns, parts.next()?)?;
@@ -512,6 +544,9 @@ impl Session {
                     None if last => return Some(Resolved { targets: vec![self.prop(class, 0, name, ty)], roots, at: Instant::now() }),
                     None => return None,
                 }
+            } else if let Some(off) = name.strip_prefix("@0x").and_then(|h| u64::from_str_radix(h, 16).ok()) {
+                // Into a struct in place: the same memory, further in.
+                slots = std::mem::take(&mut slots).into_iter().map(|(s, _)| (s + off, ty.unwrap_or(Ty::F32))).collect();
             } else {
                 let mut next = Vec::new();
                 let cur = objs.take().unwrap_or_else(|| std::mem::take(&mut slots).into_iter().filter_map(|(s, _)| self.r.p().ptr(s)).collect());
@@ -577,6 +612,10 @@ impl Session {
                 let (name, int) = n.strip_suffix("|i").map_or((n.as_str(), false), |s| (s, true));
                 self.r.prop(c, o, name, None, int)? as f64
             }
+            Target::Pref(i) => {
+                let key = self.prop_names[i].clone();
+                self.r.pref(&key, None)? as f64
+            }
         })
     }
 
@@ -611,6 +650,10 @@ impl Session {
                 let (name, int) = n.strip_suffix("|i").map_or((n.as_str(), false), |s| (s, true));
                 self.r.prop(c, o, name, Some(v as f32), int);
             }
+            Target::Pref(i) => {
+                let key = self.prop_names[i].clone();
+                self.r.pref(&key, Some(v as f32));
+            }
         }
     }
 
@@ -619,8 +662,8 @@ impl Session {
         for (k, s) in specs.iter().enumerate() {
             let slider = matches!(s.op.as_str(), "scale" | "value");
             let on = if slider { value != s.def } else { value != 0.0 };
-            // Property paths call into the game: while on, at most once a second.
-            if on && s.at.contains("()") {
+            // Property and PlayerPrefs paths call into the game: while on, at most once a second.
+            if on && (s.at.contains("()") || s.at.starts_with("PlayerPrefs:")) {
                 let key = format!("{id}#{k}");
                 if self.prop_at.get(&key).is_some_and(|t| t.elapsed() < Duration::from_secs(1)) {
                     continue;
@@ -672,19 +715,23 @@ impl Session {
     }
 
     /// True if every guard value is what it must be (`op` "is", value `v`), e.g. "the game is in
-    /// singleplayer". Only the first check looks anything up; after that it is plain reads.
+    /// singleplayer", and at least one of the `any` ones is. Only the first check looks anything up;
+    /// after that it is plain reads.
     fn allowed(&mut self, guard: &[Spec]) -> bool {
-        guard.iter().all(|g| {
-            if !self.guards.contains_key(&g.at) {
-                let found = self.resolve(&g.at, g.ty.as_deref().and_then(Ty::parse)).map(|r| r.targets).unwrap_or_default();
-                if found.is_empty() {
-                    return false;
-                }
-                self.guards.insert(g.at.clone(), found);
+        let (any, all): (Vec<&Spec>, Vec<&Spec>) = guard.iter().partition(|g| g.any);
+        all.iter().all(|g| self.guard_ok(g)) && (any.is_empty() || any.iter().any(|g| self.guard_ok(g)))
+    }
+
+    fn guard_ok(&mut self, g: &Spec) -> bool {
+        if !self.guards.contains_key(&g.at) {
+            let found = self.resolve(&g.at, g.ty.as_deref().and_then(Ty::parse)).map(|r| r.targets).unwrap_or_default();
+            if found.is_empty() {
+                return false;
             }
-            let ts = self.guards[&g.at].clone();
-            ts.iter().all(|&t| matches!(t, Target::Mem(..)) && self.read(t) == Some(g.v))
-        })
+            self.guards.insert(g.at.clone(), found);
+        }
+        let ts = self.guards[&g.at].clone();
+        ts.iter().all(|&t| matches!(t, Target::Mem(..)) && self.read(t) == Some(g.v))
     }
 
     pub fn tick(&mut self, specs: &HashMap<String, Vec<Spec>>, values: Option<&HashMap<String, f64>>, actions: &[String], guard: &[Spec]) -> Result<bool, String> {
@@ -697,7 +744,7 @@ impl Session {
             if self.note.is_none() {
                 log("engine mods: guard closed, mods off");
             }
-            self.note = Some("Singleplayer only: mods are off until you play offline.".into());
+            self.note = Some(guard.iter().find_map(|g| g.note.clone()).unwrap_or_else(|| "Singleplayer only: mods are off until you play offline.".into()));
             self.orig.clear();
             self.resolved.clear();
             self.found.clear();

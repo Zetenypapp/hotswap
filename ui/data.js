@@ -22,6 +22,13 @@ const GTA_CATS = [
     A('Set Time to Midnight', '', { native: 'time:0' }), A('Clear Weather', '', { native: 'weather:CLEAR' })] },
 ];
 
+// Farming Simulator 19 and 22 (the HotSwap mod in the game, farming.rs).
+const FS_NOTE = 'Single-player and games you host only: turn on the HotSwap mod in the mod list when you start or load a save. In someone else’s game it does nothing. Friends joining your game need the HotSwap mod too.';
+const FS_CATS = [
+  { name: 'Money', mods: [T('Infinite Money', 'Your farm’s money stays at $1,000,000 or more.'), A('Add $100,000', 'To your farm.')] },
+  { name: 'Vehicles', mods: [T('Infinite Fuel', 'The vehicle you drive stays full: diesel, DEF, electric charge or methane.'), A('Refuel Vehicle', 'Fills up the vehicle you drive.'), A('Repair Vehicle', 'Fixes the vehicle you drive.')] },
+];
+
 // One-time setup guides shown on a game's page until done (`setup` in the catalog). `check` asks
 // the app whether it's done.
 const SETUPS = {
@@ -151,6 +158,87 @@ const CATALOG = {
     { name: 'Money', mods: [T('Infinite Money', 'Buying things costs nothing.', { js: 'window.__hsSub = window.__hsSub || subtractMoney; subtractMoney = () => {}', off: 'if (window.__hsSub) subtractMoney = window.__hsSub' }),
       A('Double Money', 'Adds as much money as you have now.', { js: 'addMoney(money)' })] },
   ]},
+  // Internet Cafe Simulator 2: Unity on Mono (engines.rs). Needs start at 100 and 100 is full.
+  1563180: { genre: 'Business sim', experimental: true, cats: [
+    { name: 'Player', mods: [T('Infinite Health', '', { at: 'GameManager.Instance.playerRay.health', min: 100 }),
+      T('No Hunger', '', { at: 'GameManager.Instance.playerRay.statHunger', min: 100 }),
+      T('No Sleepiness', 'You never need to sleep.', { at: 'GameManager.Instance.playerRay.statSleep', min: 100 }),
+      T('Infinite Energy', 'The energy bar stays full.', { at: 'GameManager.Instance.playerRay.statEnergy', min: 100 }),
+      T('Infinite Stamina', 'Run as long as you like.', { at: 'GameManager.Instance.playerRay.energy', min: 100 }),
+      S('Walk Speed', 50, 300, 10, 100, 'Percent of your normal walking and running speed.', [{ at: 'VHS/FirstPersonController.walkSpeed', scale: true }, { at: 'VHS/FirstPersonController.runSpeed', scale: true }]),
+      S('Jump Height', 50, 300, 10, 100, 'Percent of your normal jump.', { at: 'VHS/FirstPersonController.jumpSpeed', scale: true })] },
+    { name: 'Money', mods: [T('Infinite Money', 'Money stays at $999,999 or more.', { at: 'GameManager.Instance.money', min: 999999 }),
+      A('Add $10,000', '', { at: 'GameManager.Instance.money', add: 10000 })] },
+    { name: 'Skills', mods: [A('Add 5 Skill Points', 'Spend them in the skills menu.', { at: 'GameManager.Instance.totalunusedabilitypoint', add: 5, ty: 'i32' })] },
+  ]},
+  // Streamer Life Simulator: Unity on Mono. Needs are 0-100 (toilet fills up, the rest drain); money
+  // is in Unity's PlayerPrefs ("money" is the wallet), not on an object.
+  1261040: { genre: 'Life sim', experimental: true, cats: [
+    { name: 'Player', mods: [T('Infinite Health', '', { at: 'PlayerStats.Instance.health', min: 100 }),
+      T('No Hunger', '', { at: 'PlayerStats.Instance.hunger', min: 100 }),
+      T('Infinite Energy', 'You never need to sleep.', { at: 'PlayerStats.Instance.energy', min: 100 }),
+      T('Always Clean', 'Hygiene stays full.', { at: 'PlayerStats.Instance.hygiene', min: 100 }),
+      T('No Toilet Need', '', { at: 'PlayerStats.Instance.toilet', max: 0 }),
+      S('Walk Speed', 50, 300, 10, 100, 'Percent of your normal walking and running speed.', [{ at: 'VHS/FirstPersonController.walkSpeed', scale: true }, { at: 'VHS/FirstPersonController.runSpeed', scale: true }]),
+      S('Jump Height', 50, 300, 10, 100, 'Percent of your normal jump.', { at: 'VHS/FirstPersonController.jumpSpeed', scale: true })] },
+    { name: 'Money', mods: [T('Infinite Money', 'Your wallet stays at $999,999 or more.', { at: 'PlayerPrefs:money', min: 999999 }),
+      A('Add $10,000', 'To your wallet.', { at: 'PlayerPrefs:money', add: 10000 })] },
+  ]},
+  // Supermarket Together: Unity on Mono with Mirror networking. Co-op, so mods only run for the host
+  // (solo games are hosted too): the guard is Mirror's "this game runs the server".
+  2709570: { genre: 'Store sim', solo: true, experimental: true, hostOnly: true, offline: [{ at: 'Mirror/NetworkServer.<active>k__BackingField', is: 1 }],
+    offlineNote: 'Solo and games you host only: mods turn off by themselves while you’re in someone else’s game. Use them with friends who know.', cats: [
+    { name: 'Money', mods: [T('Infinite Money', 'Store funds stay at $999,999 or more.', { at: 'GameData.Instance.gameFunds', min: 999999 }),
+      A('Add $10,000', '', { at: 'GameData.Instance.gameFunds', add: 10000 })] },
+    { name: 'Franchise', mods: [A('Add 5 Franchise Points', 'Spend them on perks.', { at: 'GameData.Instance.gameFranchisePoints', add: 5, ty: 'i32' })] },
+    { name: 'Time', mods: [T('Freeze Time', 'The clock stops, so the day lasts as long as you like.', { at: 'GameData.Instance.timeOfDay', freeze: true })] },
+  ]},
+  // Embr: Unity on Mono, game code in Scripts.dll, Photon for co-op (PlayFab only for analytics; saves
+  // are local). Mods only run for the host: the guard is the game's own "this game runs the server".
+  1062830: { genre: 'Co-op action', solo: true, experimental: true, hostOnly: true, offline: [{ at: 'Muse.Multiplayer/GameManager.<IsServer>k__BackingField', is: 1 }],
+    offlineNote: 'Solo and crews you host only: mods turn off by themselves while you’re in someone else’s crew. Use them with friends who know.', cats: [
+    { name: 'Player', mods: [T('Infinite Health', 'Your health stays full.', { at: 'EmbrPlayer.LocalEmbrPlayer._health', fill: 'startingHealth' })] },
+    { name: 'Money', mods: [T('Infinite Money', 'Money stays at $999,999 or more.', { at: 'ProgressionData.Instance.Money', min: 999999 }),
+      A('Add $10,000', '', { at: 'ProgressionData.Instance.Money', add: 10000 })] },
+  ]},
+  // My Garage: Unity on Mono with Mirror for co-op. Needs are static on `tools`, 0 to 1 (1 is full).
+  // Mods run when multiplayer is off or this game is the host (either is enough: `any`).
+  1578390: { genre: 'Car mechanic sim', solo: true, experimental: true, hostOnly: true, offline: [
+    { at: 'tools.MPrunning', is: 0, any: true }, { at: 'Mirror/NetworkServer.<active>k__BackingField', is: 1, any: true },
+  ], offlineNote: 'Single-player and games you host only: mods turn off by themselves while you’re in someone else’s game. Use them with friends who know.', cats: [
+    { name: 'Player', mods: [T('Infinite Health', '', { at: 'tools.Health', min: 1 }),
+      T('No Hunger', '', { at: 'tools.Food', min: 1 }),
+      T('No Thirst', '', { at: 'tools.Drink', min: 1 }),
+      T('No Sleepiness', 'You never need to sleep.', { at: 'tools.Sleep', min: 1 }),
+      T('Infinite Stamina', 'Sprint as long as you like.', { at: 'FirstPersonAIO.staminaInternal', fill: 'staminaLevel' }),
+      S('Walk Speed', 50, 300, 10, 100, 'Percent of your normal walking and sprinting speed.', [{ at: 'FirstPersonAIO.walkSpeed', scale: true }, { at: 'FirstPersonAIO.sprintSpeed', scale: true }]),
+      S('Jump Height', 50, 300, 10, 100, 'Percent of your normal jump.', { at: 'FirstPersonAIO.jumpPower', scale: true })] },
+    { name: 'Money', mods: [T('Infinite Money', 'Money stays at $999,999 or more.', { at: 'tools.money', min: 999999 }),
+      A('Add $10,000', '', { at: 'tools.money', add: 10000 })] },
+  ]},
+  // Bakery Simulator: Unreal 4.22 (the old name array and UProperty layout in ue/objects.rs). Money
+  // and XP live on the game instance, which exists from the main menu on.
+  1031120: { genre: 'Business sim', experimental: true, cats: [
+    { name: 'Money', mods: [T('Infinite Money', 'Money stays at $999,999 or more.', { at: 'BP_BakeryGameInstance_C.GI_Capital', min: 999999 }),
+      A('Add $10,000', '', { at: 'BP_BakeryGameInstance_C.GI_Capital', add: 10000 })] },
+    { name: 'Progress', mods: [A('Add 1,000 XP', 'Shows after your next level-up check, e.g. the next finished order.', { at: 'BP_BakeryGameInstance_C.XP', add: 1000, ty: 'i32' })] },
+    { name: 'Player', mods: [S('Walk Speed', 50, 300, 10, 100, 'Percent of your normal walking speed.', { at: 'BP_Baker_C.CharacterMovement.MaxWalkSpeed', scale: true }),
+      S('Jump Height', 50, 300, 10, 100, 'Percent of your normal jump.', { at: 'BP_Baker_C.CharacterMovement.JumpZVelocity', scale: true })] },
+  ]},
+  // Firefighting Simulator - The Squad: Unreal 4.27 (Denuvo Anti-Tamper is DRM, not anti-cheat), co-op
+  // over EOS. Health is a Gameplay Ability System attribute (BaseValue at +0x8, CurrentValue at +0xC).
+  // Mods run for the host only: every player controller has the Authority role (3) there, while a
+  // joined player's own controller is an AutonomousProxy (2).
+  420560: { genre: 'Firefighting sim', solo: true, experimental: true, hostOnly: true, offline: [{ at: 'BP_FGPlayerController_C.Role', is: 3 }],
+    offlineNote: 'Solo and games you host only: mods turn off by themselves while you’re in someone else’s game. Use them with friends who know.', cats: [
+    { name: 'Crew', mods: [T('Infinite Health', 'Health stays full for everyone: you, your crew and the people you rescue.', [{ at: 'FGAttributeSet.Health.@0x8', best: true }, { at: 'FGAttributeSet.Health.@0xC', best: true }]),
+      T('No Smoke Damage', 'Smoke never wears anyone down.', [{ at: 'FGAttributeSet.SmokeHealth.@0x8', best: true }, { at: 'FGAttributeSet.SmokeHealth.@0xC', best: true }]),
+      T('Infinite Air', 'Breathing apparatus tanks never run out.', { at: 'BP_SCBA_C.CurrentAirSupply', fill: 'MaxAirSupply' })] },
+  ]},
+  // Farming Simulator 19 and 22: through a small mod HotSwap adds to the game (farming.rs). It has
+  // to be turned on in the save, and only the server (single-player or the host) changes anything.
+  787860: { genre: 'Farming sim', experimental: true, offline: true, offlineNote: FS_NOTE, cats: FS_CATS },
+  1248130: { genre: 'Farming sim', experimental: true, offline: true, offlineNote: FS_NOTE, cats: FS_CATS },
   // Stormworks: through the game's own addon API (stormworks.rs). The addon has to be on in the world.
   573090: { genre: 'Sandbox', experimental: true, cats: [
     { name: 'Money', mods: [T('Infinite Money', 'The game’s own infinite money setting.'), A('Add $100,000'), A('Add 100 Research Points')] },
@@ -227,6 +315,8 @@ const LIVE = {
   ],
   227300: ['no-damage', 'infinite-fuel', 'no-fatigue', 'repair-truck-and-trailer', 'refuel', 'infinite-money', 'add-100-000', 'add-10-000-xp', 'level-up'],
   270880: ['no-damage', 'infinite-fuel', 'no-fatigue', 'repair-truck-and-trailer', 'refuel', 'infinite-money', 'add-100-000', 'add-10-000-xp', 'level-up'],
+  787860: ['infinite-money', 'add-100-000', 'infinite-fuel', 'refuel-vehicle', 'repair-vehicle'],
+  1248130: ['infinite-money', 'add-100-000', 'infinite-fuel', 'refuel-vehicle', 'repair-vehicle'],
   573090: [
     'infinite-money', 'add-100-000', 'add-100-research-points', 'infinite-fuel', 'infinite-batteries', 'infinite-ammo',
     'no-vehicle-damage', 'no-engine-overheating', 'no-player-damage', 'no-clip', 'map-teleport',

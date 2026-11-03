@@ -93,6 +93,21 @@ God Mode, Never Wanted, Fast Run, Fast Swim, Super Jump, Heal and Armor, Infinit
 
 Infinite Money and Double Money, live. Start Mr.Mine with HotSwap's **Play** button: HotSwap opens the game's debugging port and changes the game's own JavaScript variables.
 
+### 🧪 New and untested (experimental)
+
+Added from the games' own code, but not tried in a game yet. Tried one? Tell us with **Report a bug** in Settings.
+
+- ☕ **Internet Cafe Simulator 2:** Infinite Health, No Hunger, No Sleepiness, Infinite Energy and Stamina, Walk Speed, Jump Height, Infinite Money, Add $10,000, Add 5 Skill Points
+- 🎥 **Streamer Life Simulator:** Infinite Health, No Hunger, Infinite Energy, Always Clean, No Toilet Need, Walk Speed, Jump Height, Infinite Money, Add $10,000
+- 🥐 **Bakery Simulator:** Infinite Money, Add $10,000, Add 1,000 XP, Walk Speed, Jump Height
+- 🔧 **My Garage:** Infinite Health, No Hunger, No Thirst, No Sleepiness, Infinite Stamina, Walk Speed, Jump Height, Infinite Money, Add $10,000
+- 🚜 **Farming Simulator 19 and 22:** Infinite Money, Add $100,000, Infinite Fuel, Refuel and Repair the vehicle you drive. HotSwap adds a small **HotSwap** mod to the game's mods folder when you open the game's page: turn it on in the mod list when you start or load a save.
+- 🛒 **Supermarket Together:** Infinite Money, Add $10,000, Add 5 Franchise Points, Freeze Time
+- 🔥 **Embr:** Infinite Health, Infinite Money, Add $10,000
+- 🚒 **Firefighting Simulator: The Squad:** Infinite Health and No Smoke Damage for the whole crew, Infinite Air
+
+**Host only.** My Garage, Farming Simulator, Supermarket Together, Embr and Firefighting Simulator have co-op. Their mods work in single-player and in games **you host**, and turn off by themselves in someone else's game (the side panel says **Host only**). Use them with friends who know.
+
 ### Everything else
 
 Every other game shows up in your library with art, playtime and launching. Its mod list is empty, marked **Soon**, or filled with [engine mods](#-engine-mods). Want mods for a game? Use **Request mods** on its page.
@@ -124,6 +139,8 @@ Press **Insert** (or your own key) in a game for a full menu over it. The tabs a
 ![The overlay's mod menu over Satisfactory](docs/overlay-mods.jpg)
 
 - 🎮 **Mods:** every mod as a card with its icon, by category, with profiles, **Pause** and **All off**. Use the mouse or the arrow keys, Tab for categories.
+- 🎮 **Controller:** press **View + Menu** to open or close the menu, then the D-pad or stick, **A** to pick, **B** to close, **LB/RB** for categories and **LT/RT** for tabs.
+- 🎯 **Keep the game in front** (Settings → Hotkeys and overlay): the menu opens without taking focus, so the game keeps running at full speed. Best in games that show a mouse cursor.
 ![Discord voice in the overlay](docs/overlay-discord.jpg)
 
 - 💬 **Discord:** your voice call, if Discord voice is on: who's in it and who's talking, mute, deafen, leave, per-person volume, your mic and headphone volume, noise suppression, and switching voice channels.
@@ -134,9 +151,10 @@ Press **Insert** (or your own key) in a game for a full menu over it. The tabs a
   - **Memory:** RAM, and video memory
   - **GPU:** usage, temperature, hotspot, power, clock, fan
   - **Disk:** read and write; **network:** download and upload
-  - **The game itself:** its CPU, memory and GPU use
+  - **The game itself:** its CPU, memory and GPU use, and its **FPS**, 1% low and frame time (from Windows' own graphics events, like Xbox Game Bar: DirectX, Vulkan and OpenGL)
+  - While the menu has focus, the game's numbers are the ones from just before you opened it, since most games slow down behind it
   - Each as a line, area or bar graph, number only, in small, medium or large cards, over the time window you pick
-- 🏎️ **Boost:** the rev-counter dial to shift gears live, Quick clean, what Boost is doing right now, and the **Advanced** tab to change any gear's settings without leaving the game.
+- 🏎️ **Boost:** the same look as the Boost page, with the rev-counter dial and a card for every gear to shift live, Quick clean, what Boost is doing right now, and the **Advanced** tab to change any gear's settings without leaving the game.
 
 ![Boost in the overlay](docs/overlay-boost.jpg)
 
@@ -158,6 +176,8 @@ Boost works with **every game**, multiplayer and anti-cheat games included: it o
 ![The Boost page](docs/boost.jpg)
 
 The Boost page shows everything in one place: the gear and what it changes (priority, power plan, how many settings and apps), the dial, a card for every gear, what Boost is doing right now while a game runs, Quick clean with how much it last freed, the safety switches, your app lists and every gear's settings.
+
+**Suggestions** on the Boost page look at your PC and what's running: a gear to try, Efficiency mode for browsers or big apps, closing sync apps like OneDrive while you play, and Easy on battery for laptops. One click does it; **×** stops suggesting it.
 
 ### Gears
 

@@ -1,6 +1,7 @@
 //! Walks a running Unreal game's object table and name pool. Layouts are the defaults for 64-bit
 //! shipping builds of UE 4.25 to 5.x; `attach` sanity-checks them before anything is used, and the
-//! property layout (it changed in 5.3) is picked by looking at the first property read.
+//! property layout (it changed in 5.3) is picked by looking at the first property read. UE 4.22 and
+//! older (`old`) keep names in an array of entries and properties as objects (UProperty).
 
 use super::{mem::Proc, symbols};
 use std::{collections::HashMap, path::Path};
@@ -16,6 +17,14 @@ const STRUCT_SUPER: u64 = 0x40;
 const STRUCT_CHILD_PROPS: u64 = 0x50;
 // FField / FProperty / FBoolProperty
 const FIELD_CLASS: u64 = 0x08;
+// UE 4.22 and older: UStruct::Children (UFields: properties and functions), UField::Next,
+// UProperty::Offset_Internal and UBoolProperty::ByteOffset (then ByteMask).
+const OLD_CHILDREN: u64 = 0x48;
+const OLD_NEXT: u64 = 0x28;
+const OLD_OFFSET: u64 = 0x44;
+const OLD_BOOL_BYTE: u64 = 0x71;
+/// Entries per chunk of the old name array.
+const OLD_NAME_CHUNK: u64 = 16384;
 
 /// Where FField and FProperty keep their parts: (Next, Name, Offset_Internal, FBoolProperty::ByteOffset).
 /// UE 5.3+ stores the owner in 8 bytes; 4.25 to 5.2 used 16 (a pointer and a flag).
@@ -45,6 +54,11 @@ pub struct Ue {
     pub process_event: u64,
     name_cache: std::sync::Mutex<HashMap<u32, String>>,
     layout: std::sync::OnceLock<FieldLayout>,
+    /// UE 4.22 or older: names in TNameEntryArray, properties as UProperty objects.
+    old: bool,
+    /// How much earlier than usual UStruct's parts are: 0x10 when the build leaves out
+    /// FStructBaseChain (some shipping builds do), else 0.
+    struct_shift: std::sync::OnceLock<u64>,
 }
 
 impl Ue {
@@ -61,6 +75,8 @@ impl Ue {
             p,
             name_cache: Default::default(),
             layout: Default::default(),
+            old: false,
+            struct_shift: Default::default(),
         };
         // FName 0 is always "None"; if not, the layout guesses are wrong for this game.
         match ue.fname(0).as_deref() {
@@ -75,12 +91,24 @@ impl Ue {
         let p = Proc::open(pid)?;
         let (base, _) = p.module(module).ok_or("game module not loaded")?;
         let (objs, names) = super::scan::find_tables(&p, base);
-        let mut ue = Ue { p, objects: 0, names: 0, process_event: 0, name_cache: Default::default(), layout: Default::default() };
-        ue.names = names.into_iter().take(100_000).find(|&n| {
+        let mut ue = Ue { p, objects: 0, names: 0, process_event: 0, name_cache: Default::default(), layout: Default::default(), old: false, struct_shift: Default::default() };
+        let pool = names.into_iter().take(100_000).find(|&n| {
             ue.names = n;
             ue.name_cache.lock().unwrap().clear();
             ue.fname(0).as_deref() == Some("None") && ue.fname(3).as_deref() == Some("ByteProperty")
-        }).ok_or("couldn't find the name table")?;
+        });
+        ue.names = match pool {
+            Some(n) => n,
+            // UE 4.22 and older: the name array (EName order: None, ByteProperty, IntProperty...).
+            None => {
+                ue.old = true;
+                super::scan::find_name_arrays(&ue.p, base).into_iter().find(|&n| {
+                    ue.names = n;
+                    ue.name_cache.lock().unwrap().clear();
+                    ue.fname(0).as_deref() == Some("None") && ue.fname(1).as_deref() == Some("ByteProperty")
+                }).ok_or("couldn't find the name table")?
+            }
+        };
         ue.name_cache.lock().unwrap().clear();
         // The real object table's first object is the CoreUObject package.
         ue.objects = objs.into_iter().find(|&o| {
@@ -94,6 +122,9 @@ impl Ue {
     pub fn fname(&self, index: u32) -> Option<String> {
         if let Some(s) = self.name_cache.lock().unwrap().get(&index) {
             return Some(s.clone());
+        }
+        if self.old {
+            return self.old_fname(index);
         }
         let block = self.p.ptr(self.names + 0x10 + (index as u64 >> 16) * 8)?;
         let entry = block + (index as u64 & 0xFFFF) * 2;
@@ -110,6 +141,24 @@ impl Ue {
             let mut buf = vec![0u8; len];
             self.p.read_into(entry + 2, &mut buf).then_some(())?;
             String::from_utf8_lossy(&buf).into_owned()
+        };
+        self.name_cache.lock().unwrap().insert(index, s.clone());
+        Some(s)
+    }
+
+    /// UE 4.22 and older: chunks of FNameEntry pointers; an entry is its index (bit 0: wide), a
+    /// hash link (packed, at +4), then the text at +0xC, ending in a zero.
+    fn old_fname(&self, index: u32) -> Option<String> {
+        let chunk = self.p.ptr(self.names + (index as u64 / OLD_NAME_CHUNK) * 8)?;
+        let entry = self.p.ptr(chunk + (index as u64 % OLD_NAME_CHUNK) * 8)?;
+        let wide = self.p.read::<i32>(entry)? & 1 == 1;
+        let mut buf = [0u8; 512];
+        self.p.read_into(entry + 0xC, &mut buf).then_some(())?;
+        let s = if wide {
+            let units: Vec<u16> = buf.chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect();
+            String::from_utf16_lossy(&units)
+        } else {
+            String::from_utf8_lossy(&buf[..buf.iter().position(|&b| b == 0)?]).into_owned()
         };
         self.name_cache.lock().unwrap().insert(index, s.clone());
         Some(s)
@@ -170,16 +219,26 @@ impl Ue {
         })
     }
 
+    /// UStruct's layout for this game, from a class whose parent is known: Actor's is Object.
+    fn shift(&self) -> u64 {
+        *self.struct_shift.get_or_init(|| {
+            let Some(actor) = self.find_class("Actor") else { return 0 };
+            let parent = |off: u64| self.p.ptr(actor + off).and_then(|s| self.name_of(s));
+            if parent(STRUCT_SUPER).as_deref() != Some("Object") && parent(STRUCT_SUPER - 0x10).as_deref() == Some("Object") { 0x10 } else { 0 }
+        })
+    }
+
     pub fn super_of(&self, cls: u64) -> Option<u64> {
-        self.p.ptr(cls + STRUCT_SUPER)
+        self.p.ptr(cls + STRUCT_SUPER - self.shift())
     }
 
     /// The property layout, from a property: in 4.25 to 5.2 the word after the owner pointer is the
-    /// owner's "is an object" flag (1); in 5.3+ it is the next property (a pointer, or 0 with a
-    /// readable name right after).
+    /// owner's "is an object" flag (1, in its low byte: the padding after it can hold anything); in
+    /// 5.3+ it is the next property (a pointer, whose low bits are 0, or 0 with a readable name right
+    /// after).
     fn layout(&self, field: u64) -> FieldLayout {
         *self.layout.get_or_init(|| match self.p.read::<u64>(field + 0x18) {
-            Some(1) => LAYOUT_4_25,
+            Some(v) if v & 0xFF == 1 => LAYOUT_4_25,
             Some(0) if self.name_at(field + 0x20).is_none_or(|n| n.is_empty() || n == "None") => LAYOUT_4_25,
             _ => LAYOUT_5_3,
         })
@@ -187,13 +246,16 @@ impl Ue {
 
     /// Every property on `cls` and its parents, nearest class first.
     pub fn props(&self, cls: u64) -> Vec<Prop> {
+        if self.old {
+            return self.old_props(cls);
+        }
         let mut out = Vec::new();
         let mut cur = Some(cls);
         // Hard limits so a wrong layout guess can't loop forever.
         let mut depth = 0;
         while let Some(c) = cur.filter(|_| depth < 32) {
             depth += 1;
-            let mut f = self.p.ptr(c + STRUCT_CHILD_PROPS);
+            let mut f = self.p.ptr(c + STRUCT_CHILD_PROPS - self.shift());
             let mut n = 0;
             while let Some(field) = f.filter(|_| n < 2000) {
                 n += 1;
@@ -208,6 +270,36 @@ impl Ue {
                     owner: self.name_of(c).unwrap_or_default(),
                 });
                 f = self.p.ptr(field + next);
+            }
+            cur = self.super_of(c);
+        }
+        out
+    }
+
+    /// UE 4.22 and older: properties are UProperty objects in the struct's Children list, with the
+    /// functions (skipped). Their kind is their class's name, e.g. "FloatProperty".
+    fn old_props(&self, cls: u64) -> Vec<Prop> {
+        let mut out = Vec::new();
+        let mut cur = Some(cls);
+        let mut depth = 0;
+        while let Some(c) = cur.filter(|_| depth < 32) {
+            depth += 1;
+            let mut f = self.p.ptr(c + OLD_CHILDREN - self.shift());
+            let mut n = 0;
+            while let Some(field) = f.filter(|_| n < 2000) {
+                n += 1;
+                let kind = self.class_of(field).and_then(|k| self.name_of(k)).unwrap_or_default();
+                if kind.ends_with("Property") {
+                    out.push(Prop {
+                        name: self.name_of(field).unwrap_or_default(),
+                        kind,
+                        offset: self.p.read::<i32>(field + OLD_OFFSET).unwrap_or(-1),
+                        bool_byte: self.p.read::<u8>(field + OLD_BOOL_BYTE).unwrap_or(0),
+                        bool_mask: self.p.read::<u8>(field + OLD_BOOL_BYTE + 1).unwrap_or(0),
+                        owner: self.name_of(c).unwrap_or_default(),
+                    });
+                }
+                f = self.p.ptr(field + OLD_NEXT);
             }
             cur = self.super_of(c);
         }

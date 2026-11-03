@@ -18,6 +18,7 @@ mod remote;
 mod epic;
 mod ets2;
 mod extra;
+mod farming;
 mod fps;
 mod gog;
 mod home;
@@ -1052,6 +1053,64 @@ fn main() {
         let Some(cls) = u.find_class(&a[i + 1]) else { println!("class not found"); return };
         for p in u.props(cls).iter().filter(|p| p.name.to_lowercase().contains(&filter)) {
             println!("  {:<40} {:<18} +0x{:<5X} {}", p.name, p.kind, p.offset, p.owner);
+        }
+        return;
+    }
+    // Dev aid: `hotswap --ue-classes <word> [word...]` lists the running Unreal game's classes (C++ and
+    // Blueprint) whose names contain one of the words, to find what a new game's mods should change.
+    if let Some(i) = std::env::args().position(|a| a == "--ue-classes") {
+        let words: Vec<String> = std::env::args().skip(i + 1).map(|w| w.to_lowercase()).collect();
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let Some(p) = sys.processes().values().find(|p| p.name().to_string_lossy().contains("Win64-Shipping")) else { println!("no game"); return };
+        let stem = p.name().to_string_lossy().trim_end_matches(".exe").to_string();
+        // As the engine mods attach: with a search for the object tables if the game's symbols aren't known.
+        let u = match ue::objects::Ue::attach_scan(p.pid().as_u32(), &stem) {
+            Ok(u) => u,
+            Err(e) => return println!("attach failed: {e}"),
+        };
+        let mut seen = std::collections::BTreeSet::new();
+        for i in 0..u.count() {
+            let Some(o) = u.object(i) else { continue };
+            let kind = u.class_of(o).and_then(|c| u.name_of(c)).unwrap_or_default();
+            if !kind.ends_with("Class") || kind.contains("Function") {
+                continue;
+            }
+            let name = u.name_of(o).unwrap_or_default();
+            let lower = name.to_lowercase();
+            if words.iter().any(|w| lower.contains(w)) && !name.starts_with("Default__") {
+                seen.insert(format!("{name} ({kind})"));
+            }
+        }
+        for s in seen.iter().take(300) {
+            println!("{s}");
+        }
+        return;
+    }
+    // Dev aid: `hotswap --fs-install <787860|1248130>` puts the HotSwap mod in Farming Simulator 19's or
+    // 22's mods folder, as opening the game's page does.
+    if let Some(i) = std::env::args().position(|a| a == "--fs-install") {
+        let game = std::env::args().nth(i + 1).unwrap_or_default();
+        println!("{:?}", farming::install(&game));
+        return;
+    }
+    // Dev aid: `hotswap --ue-raw <ClassName>` prints a class's first words, each with the name of
+    // the object it points to, to work out a game's UStruct and FField layout.
+    if let Some(i) = std::env::args().position(|a| a == "--ue-raw") {
+        let name = std::env::args().nth(i + 1).unwrap_or_default();
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let Some(p) = sys.processes().values().find(|p| p.name().to_string_lossy().contains("Win64-Shipping")) else { println!("no game"); return };
+        let stem = p.name().to_string_lossy().trim_end_matches(".exe").to_string();
+        let u = match ue::objects::Ue::attach_scan(p.pid().as_u32(), &stem) { Ok(u) => u, Err(e) => return println!("attach failed: {e}") };
+        let Some(c) = u.find_class(&name) else { return println!("no class {name}") };
+        println!("{name} at 0x{c:X}");
+        for off in (0..0x80u64).step_by(8) {
+            let v = u.p.read::<u64>(c + off).unwrap_or(0);
+            // What it points to: an object's name, or (for a property list) the words of an FField.
+            let obj = u.name_of(v).unwrap_or_default();
+            let field: Vec<String> = (0..6u64).map(|k| format!("{:X}", u.p.read::<u64>(v + k * 8).unwrap_or(0))).collect();
+            println!("  +0x{off:02X} {v:016X} {obj:<30} [{}]", field.join(" "));
         }
         return;
     }

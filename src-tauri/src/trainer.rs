@@ -82,6 +82,7 @@ impl Trainer {
             let mut extra: Option<crate::extra::Session> = None;
             let mut scrap: Option<crate::scrap::Session> = None;
             let mut sw: Option<crate::stormworks::Session> = None;
+            let mut farm: Option<crate::farming::Session> = None;
             let mut ets2: Option<crate::ets2::Session> = None;
             let mut generic: Option<(String, crate::engines::Live, HashMap<String, Vec<crate::engines::Spec>>)> = None;
             // A guarded game (singleplayer only) where an anti-cheat showed up: left alone until it restarts.
@@ -257,6 +258,31 @@ impl Trainer {
                             Some(Ok(true)) => Status { game: game.clone(), connected: true, message: "Connected".into() },
                             Some(Err(e)) => Status { game: game.clone(), connected: false, message: e },
                             Some(Ok(false)) => Status { game: game.clone(), connected: false, message: "Waiting for a world with the HotSwap addon. Turn on HotSwap under Addons when you create a new world (if it isn't listed, restart Stormworks once).".into() },
+                            None => Status { game: game.clone(), connected: false, message: "Waiting for the game to start".into() },
+                        }
+                    }
+                    Some(g @ (crate::farming::FS19 | crate::farming::FS22)) => {
+                        // Looking for the process is the expensive part: at most every 3 seconds.
+                        if last_attach.map_or(true, |t| t.elapsed() > Duration::from_secs(3)) {
+                            last_attach = Some(Instant::now());
+                            match pid_of(g) {
+                                None => {
+                                    farm = None;
+                                    // The game only looks for mods as it starts, so the mod goes in
+                                    // before then (once the game has made its folder).
+                                    let _ = crate::farming::install(g);
+                                }
+                                Some(_) if farm.is_none() => {
+                                    farm = crate::farming::Session::attach(g).map_err(|e| log(&format!("farming attach: {e}"))).ok();
+                                }
+                                _ => {}
+                            }
+                        }
+                        use crate::farming::Seen;
+                        match farm.as_mut().map(|s| s.tick(if paused { None } else { Some(&values) }, &actions)) {
+                            Some(Seen::Host) => Status { game: game.clone(), connected: true, message: "Connected".into() },
+                            Some(Seen::Joined) => Status { game: game.clone(), connected: false, message: "Host only: mods are off while you’re in someone else’s game.".into() },
+                            Some(Seen::No) => Status { game: game.clone(), connected: false, message: "Waiting for a save with the HotSwap mod. Turn on HotSwap in the mod list when you start or load a save (if it isn’t listed, restart the game once).".into() },
                             None => Status { game: game.clone(), connected: false, message: "Waiting for the game to start".into() },
                         }
                     }
