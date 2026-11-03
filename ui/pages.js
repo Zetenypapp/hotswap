@@ -69,69 +69,83 @@ document.addEventListener('click', e => {
   if (mm) { mapMode = mm.dataset.mapmode; renderMaps(); syncMap(); }
 });
 
+// Settings is split into tabs along the top.
+const SET_TABS = [
+  ['features', 'Features', '<path d="M4 6h10M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>', 'Pick a mode, or switch parts of HotSwap on and off.'],
+  ['appearance', 'Appearance', '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18c1.5 0 2-1 2-2s-1-1.5-1-2.5S14 15 15 15h2a4 4 0 0 0 4-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/>', 'Colors and the sidebar.'],
+  ['controls', 'Hotkeys and overlay', '<rect x="2" y="6" width="20" height="12" rx="3"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>', 'Your keys, and what shows over your game.'],
+  ['app', 'App', '<rect x="3" y="4" width="18" height="14" rx="3"/><path d="M8 21h8M12 18v3"/>', 'Startup, Discord status, your library and data.'],
+  ['about', 'About', '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>', 'Version, updates, logs and bug reports.'],
+];
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-settab]');
+  if (!t) return;
+  state.setTab = t.dataset.settab; save(); renderSettings();
+  document.querySelector('#setView .scroll').scrollTop = 0;
+});
+
 function renderSettings() {
   setAmbient(null);
   const sw = (id, on) => `<button class="switch" role="switch" id="${id}" aria-checked="${on}"></button>`;
   const listeningPanic = capture && capture.mid === null;
-  $('setBody').innerHTML = `
-    <h1>Settings</h1>
-    ${featuresSettings()}
-    <div class="set-group"><h2>Appearance</h2>
-      <div class="set-row"><div class="txt"><b>Accent color</b><span>Used for active mods, buttons and highlights.</span></div>
-        <div class="swatches">${ACCENTS.map(a => `<button class="swatch${state.accent === a.c ? ' on' : ''}" style="--c:${a.c}" data-accent="${a.c}" aria-label="${a.name}" title="${a.name}"></button>`).join('')}</div></div>
+  const tab = SET_TABS.some(t => t[0] === state.setTab) ? state.setTab : 'features';
+  const pages = {
+    features: () => featuresSettings(),
+    appearance: () => `
+    <div class="set-group"><h2>Colors</h2>
+      <div class="set-row"><div class="txt"><b>Accent color</b><span>Used for active mods, buttons and highlights everywhere, unless a part has its own below.</span></div>
+        ${swatchRow('', state.accent)}</div>
+      <div class="set-row"><div class="txt"><b>Second color</b><span>The other side of the glow behind every page.</span></div>
+        ${swatchRow('@2', state.accent2 || GLOW2)}</div>
+      <details class="pc-more"${state.pageColorsOpen ? ' open' : ''}><summary id="pageColorsToggle">Colors for each part${Object.keys(state.pageColors || {}).length ? ` <span class="n">${Object.keys(state.pageColors).length} set</span>` : ''}</summary>
+        ${PAGE_COLOR_PARTS.map(([k, name, what]) => `<div class="set-row"><div class="txt"><b>${name}</b><span>${what}</span></div>${swatchRow(k, state.pageColors?.[k])}</div>`).join('')}
+        ${Object.keys(state.pageColors || {}).length ? '<div class="set-row"><div class="txt"><b>Same color everywhere</b><span>Every part goes back to the accent color.</span></div><button class="btn" data-pcreset>Reset</button></div>' : ''}
+      </details>
+    </div>
+    <div class="set-group"><h2>Sidebar</h2>
       <div class="set-row"><div class="txt"><b>Next to games in the sidebar</b><span>More sidebar options under the sliders button next to My games.</span></div><div class="chips">${SIDE_INFO.map(([k, l]) => `<button class="chip${sideInfo() === k ? ' on' : ''}" data-sideinfo="${k}">${l}</button>`).join('')}</div></div>
       <div class="set-row"><div class="txt"><b>Show software in the sidebar</b><span>Tools and apps like OBS or 3DMark go in their own Software section under your games. They're always in Library under Software.</span></div>${sw('setSoftware', state.showSoftware)}</div>
     </div>
+    <div class="set-group"><h2>Page buttons</h2>
+      <div class="set-row"><div class="txt"><b>All page buttons</b><span>Every page in the sidebar, with its icon.</span></div>${textSwatchRow('nav', state.textColors?.nav)}</div>
+      <details class="pc-more"${state.navColorsOpen ? ' open' : ''}><summary id="navColorsToggle">Each page${NAV.some(n => state.textColors?.['nav:' + n.view]) ? ` <span class="n">${NAV.filter(n => state.textColors?.['nav:' + n.view]).length} set</span>` : ''}</summary>
+        ${NAV.map(n => `<div class="set-row"><div class="txt"><b>${esc(n.name)}</b><span>${state.textColors?.['nav:' + n.view] ? '' : 'Same as all page buttons.'}</span></div>${textSwatchRow('nav:' + n.view, state.textColors?.['nav:' + n.view])}</div>`).join('')}
+      </details>
+    </div>
+    <div class="set-group"><h2>Text colors</h2>
+      ${TEXT_PARTS.filter(([k]) => k !== 'nav').map(([k, name, what]) => `<div class="set-row"><div class="txt"><b>${name}</b><span>${what}</span></div>${textSwatchRow(k, state.textColors?.[k])}</div>`).join('')}
+      ${Object.keys(state.textColors || {}).length ? '<div class="set-row"><div class="txt"><b>Default text colors</b><span>All text goes back to normal.</span></div><button class="btn" data-tcreset>Reset</button></div>' : ''}
+    </div>
+`,
+    controls: () => `
     <div class="set-group"><h2>Hotkeys</h2>
       <div class="set-row"><div class="txt"><b>Enable hotkeys</b><span>While a game with mods is running, its hotkeys work everywhere, including inside the game. They're released again when the game closes.</span></div>${sw('setHotkeys', state.hotkeys)}</div>
       <div class="set-row"><div class="txt"><b>Panic key</b><span>Turns off every mod in the running game at once. Click to change it.</span></div>
         <button class="key bindable${listeningPanic ? ' listening' : ''}" id="panicBind">${listeningPanic ? 'Press a key…' : esc(comboLabel(state.panicKey))}</button></div>
-      ${invoke ? `<div class="set-tip"><b>Overlay tip:</b> HotSwap’s overlay is its own window on top of the game, so it never touches the game itself. Set the game’s display mode to <b>Borderless</b> or <b>Windowed</b>; in <b>exclusive fullscreen</b> the game covers the overlay and it won’t show.</div>` : ''}
       ${invoke ? `<div class="set-row"><div class="txt"><b>Cheat sheet key</b><span>Hold it in game to see every mod and its hotkey on the overlay. Click to change.</span></div>
         <button class="key bindable${capture?.mid === SHEET ? ' listening' : ''}${state.sheetKey ? '' : ' unbound'}" id="sheetBind">${capture?.mid === SHEET ? 'Press a key…' : esc(comboLabel(state.sheetKey))}</button></div>` : ''}
       ${invoke ? `<div class="set-row"><div class="txt"><b>Overlay menu key</b><span>Opens a menu over the game where you can flip mods with the mouse or arrow keys. Press it again or Esc to close.</span></div>
         <button class="btn" id="testMenu">Try it</button><button class="key bindable${capture?.mid === MENU ? ' listening' : ''}${state.menuKey ? '' : ' unbound'}" id="menuBind">${capture?.mid === MENU ? 'Press a key…' : esc(comboLabel(state.menuKey))}</button></div>` : ''}
+      <div class="set-row"><div class="txt"><b>Reset all key bindings</b><span>Puts every mod back on its default hotkey.</span></div><button class="btn" id="resetBinds">Reset</button></div>
+    </div>
+    ${invoke ? `<div class="set-group"><h2>In-game overlay</h2>
+      ${invoke ? `<div class="set-tip"><b>Overlay tip:</b> HotSwap’s overlay is its own window on top of the game, so it never touches the game itself. Set the game’s display mode to <b>Borderless</b> or <b>Windowed</b>; in <b>exclusive fullscreen</b> the game covers the overlay and it won’t show.</div>` : ''}
       ${invoke ? `<div class="set-row"><div class="txt"><b>In-game overlay</b><span>Shows mod changes from hotkeys at the top of the screen, over the game. Works with borderless and windowed games, not exclusive fullscreen. Turn it on or off under Features.</span></div><button class="btn" id="testOverlay">Test</button></div>` : ''}
       ${invoke ? `<div class="set-row"><div class="txt"><b>Overlay position</b><span>Where mod changes and the cheat sheet show up.</span></div>${cornerPicker('ocorner', state.overlayCorner)}</div>
       <div class="set-row"><div class="txt"><b>HUD</b><span>A small bar over the game with your active mods, session time and clock. It keeps the overlay on screen, which can cost a little smoothness in some games.</span></div>${sw('setHud', state.hud)}</div>
       ${state.hud ? `<div class="set-row"><div class="txt"><b>HUD position</b><span>Where the HUD sits.</span></div>${cornerPicker('hcorner', state.hudCorner)}</div>
       <div class="set-row"><div class="txt"><b>CPU and RAM on the HUD</b><span>Your PC's total use, updated every second.</span></div>${sw('setHudStats', state.hudStats)}</div>` : ''}
       <div class="set-row"><div class="txt"><b>Radar position</b><span>Where the enemy radar sits, in games that have one.</span></div>${cornerPicker('rcorner', state.radarCorner)}</div>` : ''}
-      <div class="set-row"><div class="txt"><b>Reset all key bindings</b><span>Puts every mod back on its default hotkey.</span></div><button class="btn" id="resetBinds">Reset</button></div>
-    </div>
-    ${invoke ? `<div class="set-group"><h2>Discord</h2>
-      <div class="set-row"><div class="txt"><b>Show in Discord</b><span>Your Discord status shows the game you're playing with HotSwap and how many mods are on. Needs the Discord app running on this PC.${DISCORD_ERR ? ` <i>${esc(DISCORD_ERR)}.</i>` : ''}</span></div>${sw('setDiscord', state.discord)}</div>
     </div>` : ''}
+`,
+    app: () => `
     ${invoke ? `<div class="set-group"><h2>Startup and tray</h2>
       ${invoke ? `<div class="set-row"><div class="txt"><b>Low memory mode</b><span>Runs HotSwap as lean as it can: no graphics acceleration, fewer background processes, and the overlay closes soon after use. About 300 MB less memory. Animations cost a little more CPU. Takes effect after restarting HotSwap.</span></div>${sw('setLowMem', state.lowMemory)}</div>` : ''}
       <div class="set-row"><div class="txt"><b>Start with Windows</b><span>HotSwap opens quietly in the tray when you sign in, so hotkeys are ready when you start a game.</span></div>${sw('setAutostart', AUTOSTART)}</div>
       <div class="set-row"><div class="txt"><b>Close to tray</b><span>The close button hides HotSwap in the tray instead of quitting. Quit from the tray icon's menu.</span></div>${sw('setTray', state.closeToTray)}</div>
     </div>` : ''}
-    ${invoke ? `<div class="set-group"><h2>Game Boost</h2>
-      <div class="boost-row">${boostGauge(state.boostLevel, state.accent)}<div class="txt"><b>${BOOST_GEARS[state.boostLevel].name}</b><span>${state.boostLevel ? boostSummary(boostGearCfg(state.boostLevel)) : 'Game Boost does nothing.'} Click the dial to shift, or pick Custom. This is the gear for every game; shift in the overlay menu while you play to remember a gear for that game. Everything goes back when the game closes.</span>
-        <div class="setup-actions">${boostCustomBtn(state.boostLevel)}<button class="btn" id="boostCleanBtn">Quick clean</button></div>
-        <span class="boost-honest">Quick clean asks background apps to hand back memory they aren’t using. Handy now and then; apps reload what they need when you switch back.</span></div></div>
-      ${boostStatusHtml(BOOST_STATUS)}
-      ${Object.keys(state.boostGames || {}).length ? `<div class="set-row"><div class="txt"><b>Gears per game</b><span>${Object.entries(state.boostGames).map(([id, n]) => `<button class="bchip" data-gamegear="${esc(id)}" title="Use the gear for every game again">${esc(findGame(id)?.name || id)}: ${BOOST_GEARS[n].name} ×</button>`).join(' ')}</span></div></div>` : ''}
-      <div class="set-row"><div class="txt"><b>Protect recording apps</b><span>OBS, Streamlabs, XSplit, Medal, NVIDIA ShadowPlay, AMD ReLive, Bandicam, Twitch Studio and ShareX are never closed, frozen, slowed or cleaned, and high game priority stays at above normal while one runs, so streams and recordings don’t drop frames. Turn off to treat them like any app.</span></div>${sw('setBoostProtect', state.boostProtect !== false)}</div>
-      <div class="set-row"><div class="txt"><b>Easy on battery</b><span>When a laptop runs on its battery, Game Boost stays at Eco.</span></div>${sw('setBoostBattery', state.boostBattery !== false)}</div>
-      ${true ? `<div class="set-row"><div class="txt"><b>Apps to close</b><span>${state.boostClose.length
-        ? state.boostClose.map(n => `<button class="bchip" data-boostdrop="${esc(n)}" title="Remove">${esc(n.replace(/\.exe$/, ''))} ×</button>`).join(' ')
-        : 'None yet. Browsers, launchers, and chat or RGB apps you don’t need in game are good picks.'} They get a normal close, so they can save first.</span></div><button class="btn" id="boostPick">${BOOST_APPS && BOOST_PICK === 'close' ? 'Done' : 'Choose apps'}</button></div>
-      ${BOOST_APPS && BOOST_PICK === 'close' ? `<div class="boost-apps">${BOOST_APPS.length ? BOOST_APPS.map(a => `<label><input type="checkbox" data-boostapp="${esc(a.name)}"${state.boostClose.includes(a.name) ? ' checked' : ''}><span>${esc(a.name.replace(/\.exe$/, ''))}</span><small>${a.mb.toLocaleString()} MB</small></label>`).join('') : '<p class="empty">Looking at what’s running…</p>'}</div>` : ''}
-      <div class="set-row"><div class="txt"><b>Apps to freeze</b><span>${state.boostFreeze.length
-        ? state.boostFreeze.map(n => `<button class="bchip" data-freezedrop="${esc(n)}" title="Remove">${esc(n.replace(/\.exe$/, ''))} ×</button>`).join(' ')
-        : 'None yet. Frozen apps are paused completely and keep everything they had open. Good for launchers, not for apps you use while playing.'}</span></div><button class="btn" id="freezePick">${BOOST_APPS && BOOST_PICK === 'freeze' ? 'Done' : 'Choose apps'}</button></div>
-      ${BOOST_APPS && BOOST_PICK === 'freeze' ? `<div class="boost-apps">${BOOST_APPS.length ? BOOST_APPS.map(a => `<label><input type="checkbox" data-freezeapp="${esc(a.name)}"${state.boostFreeze.includes(a.name) ? ' checked' : ''}><span>${esc(a.name.replace(/\.exe$/, ''))}</span><small>${a.mb.toLocaleString()} MB</small></label>`).join('') : '<p class="empty">Looking at what’s running…</p>'}</div>` : ''}
-      <div class="set-row"><div class="txt"><b>Reopen them after</b><span>Starts the closed apps again when you quit the game or shift down.</span></div>${sw('setBoostReopen', state.boostReopen)}</div>` : ''}
-      <details class="badv"${state.boostAdvOpen ? ' open' : ''}><summary id="boostAdvToggle">Advanced</summary>
-        <p class="badv-note">Every gear is yours to change: pick one, then switch what it does. Also in the overlay menu while you play.</p>
-        ${boostEditor(state.boostEdit || 1, boostGearCfg(state.boostEdit || 1))}
-        <div class="badv-row"><div class="badv-txt"><b>Your own apps for Efficiency mode</b><span>${state.boostEcoApps.length
-          ? state.boostEcoApps.map(n => `<button class="bchip" data-ecodrop="${esc(n)}" title="Remove">${esc(n.replace(/\.exe$/, ''))} ×</button>`).join(' ')
-          : 'More apps to put in Efficiency mode while you play.'}</span></div><button class="btn" id="ecoPick">${BOOST_APPS && BOOST_PICK === 'eco' ? 'Done' : 'Choose apps'}</button></div>
-        ${BOOST_APPS && BOOST_PICK === 'eco' ? `<div class="boost-apps">${BOOST_APPS.length ? BOOST_APPS.map(a => `<label><input type="checkbox" data-ecoapp="${esc(a.name)}"${state.boostEcoApps.includes(a.name) ? ' checked' : ''}><span>${esc(a.name.replace(/\.exe$/, ''))}</span><small>${a.mb.toLocaleString()} MB</small></label>`).join('') : '<p class="empty">Looking at what’s running…</p>'}</div>` : ''}
-      </details>
+    ${invoke ? `<div class="set-group"><h2>Discord</h2>
+      <div class="set-row"><div class="txt"><b>Show in Discord</b><span>Your Discord status shows the game you're playing with HotSwap and how many mods are on. Needs the Discord app running on this PC.${DISCORD_ERR ? ` <i>${esc(DISCORD_ERR)}.</i>` : ''}</span></div>${sw('setDiscord', state.discord)}</div>
     </div>` : ''}
     <div class="set-group"><h2>Library</h2>
       <div class="set-row"><div class="txt"><b>Steam install</b><span>${esc(STEAM.root || 'Not found.')}</span></div><button class="btn" id="rescanBtn">Rescan</button></div>
@@ -145,6 +159,8 @@ function renderSettings() {
     <div class="set-group"><h2>Data</h2>
       <div class="set-row"><div class="txt"><b>Reset all mod settings</b><span>Turns every mod off in every profile of every game. Profiles, notes and favorites stay.</span></div><button class="btn danger" id="wipeBtn">Reset</button></div>
     </div>
+`,
+    about: () => `
     <div class="set-group"><h2>About and updates</h2>
       <div class="set-row"><div class="txt"><b>HotSwap ${esc(VERSION || '')}</b><span>${UPDATE ? `Version ${esc(UPDATE.version)} is available.` : esc(UPDATE_MSG || 'Free, open source, no ads.')} Game art is read from your local Steam cache. Figtree font under the SIL Open Font License.</span></div>
         ${invoke ? (UPDATE ? '<button class="btn" id="updateBtn">Update now</button>' : '<button class="btn" id="checkUpdateBtn">Check now</button>') : ''}</div>
@@ -152,7 +168,13 @@ function renderSettings() {
       ${invoke ? `<div class="set-row"><div class="txt"><b>Export logs</b><span>Packs HotSwap’s log and a short system summary into a zip in your Downloads, for bug reports. <b>For Discord</b> keeps only the newest lines so it stays under 5 MB. Logs hold game names and folder paths, never your Discord login or messages.</span></div><button class="btn" data-exportlogs="small">For Discord</button><button class="btn" data-exportlogs="full">Full</button></div>` : ''}
       <div class="set-row"><div class="txt"><b>Found a bug or want a game added?</b><span>Opens a GitHub issue with your HotSwap version already filled in.</span></div>
         <div class="btnrow"><a class="btn" href="${esc(bugUrl())}" ${ext}>Report a bug</a><a class="btn" href="${esc(requestUrl())}" ${ext}>Request a game</a></div></div>
-    </div>`;
+    </div>`,
+  };
+  $('setBody').innerHTML = `
+    <div class="set-top"><h1>Settings</h1>
+      <div class="set-tabs" role="tablist">${SET_TABS.map(([k, name, ic]) => `<button role="tab" aria-selected="${k === tab}" class="${k === tab ? 'on' : ''}" data-settab="${k}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${ic}</svg>${name}</button>`).join('')}</div></div>
+    <p class="set-sub">${SET_TABS.find(t => t[0] === tab)[3]}</p>
+    ${pages[tab]()}`;
 }
 
 function profileControl(g) {
@@ -335,10 +357,88 @@ function renderPanel() {
 }
 
 function applyAccent() {
-  const a = ACCENTS.find(x => x.c === state.accent) || ACCENTS[0];
+  const a = accentOf(state.accent);
   document.documentElement.style.setProperty('--accent', a.c);
   document.documentElement.style.setProperty('--accent-ink', a.ink);
+  document.documentElement.style.setProperty('--accent-2', state.accent2 || GLOW2);
+  // Text colors: 'accent' follows the accent color of wherever the text is.
+  TEXT_PARTS.forEach(([k]) => {
+    const c = state.textColors?.[k], v = k === 'text' ? '--fg' : '--t-' + k;
+    if (c) document.documentElement.style.setProperty(v, c === 'accent' ? 'var(--accent)' : c);
+    else document.documentElement.style.removeProperty(v);
+  });
+  // A part with its own color: the sidebar, and the main column while its page is open.
+  const pc = state.pageColors || {};
+  const set = (el, c) => {
+    if (c) { const x = accentOf(c); el.style.setProperty('--accent', x.c); el.style.setProperty('--accent-ink', x.ink); }
+    else { el.style.removeProperty('--accent'); el.style.removeProperty('--accent-ink'); }
+  };
+  set(document.querySelector('.sidebar'), pc.side);
+  set($('main'), pc[state.view]);
 }
+
+// Text that can have its own color (Settings → Appearance).
+const TEXT_PARTS = [
+  ['nav', 'Page buttons', 'Every page in the sidebar, with its icon. Give a page its own color below.'],
+  ['games', 'Game names', 'Your games in the sidebar.'],
+  ['labels', 'Section labels', 'My games, Pinned, With mods, Other games and Software.'],
+  ['titles', 'Page titles', 'The big title at the top of each page.'],
+  ['text', 'All other text', 'Everything else. Light colors read best.'],
+];
+function textSwatchRow(k, cur) {
+  const own = cur && cur !== 'accent' && !ACCENTS.some(a => a.c === cur);
+  const b = (c, cls, name, style = '') => `<button class="swatch ${cls}${(cur || '') === c ? ' on' : ''}" ${style} data-textcolor="${k}" data-c="${c}" title="${name}" aria-label="${name}"></button>`;
+  return `<div class="swatches">${b('accent', 'tacc', 'Accent color')}${b('', 'tdef', 'Default')}
+    ${ACCENTS.map(a => b(a.c, '', a.name, `style="--c:${a.c}"`)).join('')}
+    <label class="swatch pick${own ? ' on' : ''}" style="--c:${own ? cur : 'transparent'}" title="Your own color"><input type="color" data-colorpick="t:${k}" value="${own ? cur : '#ffffff'}" aria-label="Your own color"></label></div>`;
+}
+// The second color of the glow behind pages (the first is the accent).
+const GLOW2 = '#3a5bd0';
+// The parts that can have their own color (Settings → Appearance).
+const PAGE_COLOR_PARTS = [
+  ['side', 'Sidebar', 'Page buttons, the running game and counts next to games.'],
+  ['home', 'Home', ''], ['library', 'Library', ''], ['game', 'Game pages', 'Mods, sliders and the Play button.'],
+  ['maps', 'Maps', ''], ['mods', 'Mods', ''], ['boost', 'Boost', ''],
+  ['overlay', 'Overlay', 'The Overlay page and the in-game overlay.'], ['settings', 'Settings', ''],
+];
+// The preset colors, then your own. `k` is the part ('' = the accent color); parts also get "Same".
+function swatchRow(k, cur) {
+  const presets = ACCENTS;
+  const own = cur && !presets.some(a => a.c === cur);
+  const attr = c => k === '@2' ? `data-accent2="${c}"` : k ? `data-pagecolor="${k}" data-c="${c}"` : `data-accent="${c}"`;
+  return `<div class="swatches">${k && k !== '@2' ? `<button class="swatch same${cur ? '' : ' on'}" data-pagecolor="${k}" data-c="" title="Same as the accent color" aria-label="Same as the accent color"></button>` : ''}
+    ${presets.map(a => `<button class="swatch${cur === a.c ? ' on' : ''}" style="--c:${a.c}" ${attr(a.c)} aria-label="${a.name}" title="${a.name}"></button>`).join('')}
+    <label class="swatch pick${own ? ' on' : ''}" style="--c:${own ? cur : 'transparent'}" title="Your own color"><input type="color" data-colorpick="${k}" value="${own ? cur : '#ffffff'}" aria-label="Your own color"></label></div>`;
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-pagecolor],[data-pcreset],[data-accent2],[data-textcolor],[data-tcreset],#pageColorsToggle,#navColorsToggle');
+  if (!t) return;
+  if (t.id === 'navColorsToggle') { state.navColorsOpen = !t.closest('details').open; save(); return; }
+  if (t.dataset.textcolor) {
+    const tc = { ...(state.textColors || {}) };
+    if (t.dataset.c) tc[t.dataset.textcolor] = t.dataset.c; else delete tc[t.dataset.textcolor];
+    state.textColors = tc; save(); render(); return;
+  }
+  if ('tcreset' in t.dataset) { state.textColors = {}; save(); render(); return; }
+  if (t.dataset.accent2) { state.accent2 = t.dataset.accent2; save(); render(); return; }
+  if (t.id === 'pageColorsToggle') { state.pageColorsOpen = !t.closest('details').open; save(); return; }
+  const pc = { ...(state.pageColors || {}) };
+  if ('pcreset' in t.dataset) state.pageColors = {};
+  else { if (t.dataset.c) pc[t.dataset.pagecolor] = t.dataset.c; else delete pc[t.dataset.pagecolor]; state.pageColors = pc; }
+  save(); render();
+});
+// Your own color: shown live while picking, kept when the picker closes.
+const pickColor = (el, done) => {
+  const k = el.dataset.colorpick, c = el.value;
+  if (k.startsWith('t:')) state.textColors = { ...(state.textColors || {}), [k.slice(2)]: c };
+  else if (k === '@2') state.accent2 = c;
+  else if (k) state.pageColors = { ...(state.pageColors || {}), [k]: c }; else state.accent = c;
+  applyAccent();
+  el.parentElement.style.setProperty('--c', c);
+  if (done) { save(); render(); }
+};
+document.addEventListener('input', e => { if (e.target.matches('[data-colorpick]')) pickColor(e.target, false); });
+document.addEventListener('change', e => { if (e.target.matches('[data-colorpick]')) pickColor(e.target, true); });
 
 // The Maps and Mods pages' code (map.js, mods.js) loads the first time the page opens, not at
 // startup, so it takes no memory until it's used.
@@ -365,12 +465,12 @@ function render() {
   const cb = $('customizeBtn');
   if (cb) { cb.hidden = state.view !== 'home'; cb.classList.toggle('on', homeEdit); }
   lastView = state.view;
-  const views = { home: 'homeView', library: 'libView', maps: 'mapsView', mods: 'modsView', overlay: 'ovView', settings: 'setView', game: 'gameView' };
+  const views = { home: 'homeView', library: 'libView', maps: 'mapsView', mods: 'modsView', boost: 'boostView', overlay: 'ovView', settings: 'setView', game: 'gameView' };
   if (state.view === 'game' && !game()) state.view = 'home';
-  if (!feat(state.view)) state.view = 'home';
+  if (!navOn(state.view)) state.view = 'home';
   Object.entries(views).forEach(([v, id]) => $(id).hidden = v !== state.view);
   renderSide();
-  ({ home: renderHome, library: renderLibrary, maps: renderMaps, mods: () => typeof Mods === 'undefined' ? lazyPage('modsBody', 'mods.js') : Mods.render(), overlay: renderOverlayPage, settings: renderSettings, game: renderGame })[state.view]();
+  ({ home: renderHome, library: renderLibrary, maps: renderMaps, mods: () => typeof Mods === 'undefined' ? lazyPage('modsBody', 'mods.js') : Mods.render(), boost: renderBoost, overlay: renderOverlayPage, settings: renderSettings, game: renderGame })[state.view]();
   if (state.mini) renderMini();
   syncHotkeys();
   syncTrainer();

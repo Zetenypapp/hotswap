@@ -4,7 +4,7 @@
 let menuOpen = false, hudOn = false, DISCORD_ERR = '';
 function overlaySend(note) {
   if (!invoke) return;
-  const a = ACCENTS.find(x => x.c === state.accent) || ACCENTS[0];
+  const a = accentOf(state.pageColors?.overlay || state.accent);
   invoke('overlay_notify', { note: { ...note, fast: !!state.fgFriendly, accent: a.c, ink: a.ink, corner: state.overlayCorner, hudCorner: state.hudCorner, keep: menuOpen || hudOn || talkOn || statsKeep() } }).catch(console.error);
 }
 
@@ -33,7 +33,7 @@ function pushMenu() {
   const g = findGame(runningId());
   const mods = g && modsOf(g).length;
   if (!mods && !dcMenuOk()) { toggleMenu(false); return; }
-  const data = { ...(mods ? menuData(g) : dcMenuData()), noDc: !feat('discord'), noSys: !feat('stats'), boost: boostGear(), boostGame: !!runningId(), boostStatus: BOOST_STATUS, boostGears: [0, 1, 2, 3, 4, 5].map(boostGearCfg), boostEdit: state.boostEdit || 1, accent: state.accent }, sig = JSON.stringify(data);
+  const data = { ...(mods ? menuData(g) : dcMenuData()), noDc: !feat('discord'), noSys: !feat('stats'), noBoost: !feat('boost'), boost: boostGear(), boostGame: !!runningId(), boostStatus: BOOST_STATUS, boostGears: [0, 1, 2, 3, 4, 5].map(boostGearCfg), boostEdit: state.boostEdit || 1, accent: accentOf(state.pageColors?.overlay || state.accent).c }, sig = JSON.stringify(data);
   if (sig === lastMenu) return;
   lastMenu = sig;
   overlaySend({ kind: 'menu', open: true, data });

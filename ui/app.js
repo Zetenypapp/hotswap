@@ -37,10 +37,20 @@ const ACCENTS = [
   { name: 'Amber', c: '#f3b73f', ink: '#1d1404' },
   { name: 'Mint', c: '#3fd49a', ink: '#05170f' },
   { name: 'Sky', c: '#5cb8ff', ink: '#04121d' },
+  { name: 'Deep blue', c: '#3a5bd0', ink: '#ffffff' },
   { name: 'Rose', c: '#ff7a93', ink: '#1f060b' },
   { name: 'Violet', c: '#a493ff', ink: '#0f0a24' },
   { name: 'Red', c: '#ff4545', ink: '#1f0404' },
 ];
+// A color and the text color that reads on it (a dark shade of it, or white on dark colors).
+function accentOf(c) {
+  const a = ACCENTS.find(x => x.c === c);
+  if (a) return a;
+  if (!/^#[0-9a-f]{6}$/i.test(c || '')) return ACCENTS[0];
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+  const light = (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5;
+  return { c, ink: light ? '#' + [r, g, b].map(v => Math.round(v * .12).toString(16).padStart(2, '0')).join('') : '#ffffff' };
+}
 
 /* ---------- Hotkey combos ----------
    A combo is modifiers then a KeyboardEvent.code, joined by "+": "F1", "Shift+F9", "Ctrl+Alt+KeyK".
@@ -62,7 +72,7 @@ const DEFAULTS = {
   showSoftware: true, softOpen: false, closeToTray: true, autoUpdate: true, sounds: true, overlay: true, paused: {},
   boostLevel: 0, boostClose: [], boostFreeze: [], boostReopen: true, boostAdv: null, boostGames: {}, boostGears: {}, boostEdit: 1, boostBattery: true, boostEcoApps: [], boostProtect: true,
   binds: {}, panicKey: 'Ctrl+Numpad0', profiles: {}, activeProfile: {}, sessions: [],
-  pinned: {}, off: {}, navOrder: null, navHidden: {}, sidePins: {}, sideInfo: null, catOrder: {}, hiddenMods: {}, modNames: {}, rowSize: 'comfortable', sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, dcPopups: 'always', fgFriendly: false, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
+  pinned: {}, off: {}, pageColors: {}, navOrder: null, navHidden: {}, sidePins: {}, sideInfo: null, catOrder: {}, hiddenMods: {}, modNames: {}, rowSize: 'comfortable', sheetKey: 'Ctrl+F1', menuKey: 'Insert', dcOverlay: true, dcTalk: true, dcNotes: true, dcPrivacy: 0, dcJoins: true, dcPopups: 'always', fgFriendly: false, hud: false, hudCorner: 'top-left', hudStats: true, discord: true, overlayCorner: 'top', radarCorner: 'top-right', mini: false, lastVersion: '', pendingNotes: null,
 };
 const CORNERS = [['top-left', 'Top left'], ['top', 'Top'], ['top-right', 'Top right'], ['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right']];
 const SHEET = '__sheet'; // capture.mid while rebinding the cheat sheet key
@@ -219,6 +229,8 @@ const activeCount = g => modsOf(g).filter(m => isActive(g, m)).length;
 const query = () => $('search').value.trim().toLowerCase();
 // Whether a feature is on (see features.js).
 const feat = k => !state.off?.[k];
+// Whether a page shows: the Overlay page goes with the overlay, the others with their feature.
+const navOn = v => v === 'overlay' ? !!state.overlay : feat(v);
 // A mod's short name if the user gave it one (see gamelook.js).
 const modName = (g, m) => state.modNames[g.id]?.[m.id] || m.name;
 // A game's categories in the user's order (new ones from an update go last).
@@ -281,12 +293,17 @@ async function boostClean() {
   toast('Quick clean', 'asking background apps for memory…');
   const r = await invoke('boost_clean').catch(e => ({ error: String(e) }));
   if (r.error) toast('Quick clean failed', r.error);
-  else toast('Quick clean', r.freed_mb > 0 ? `${r.freed_mb.toLocaleString()} MB freed from ${r.apps} apps` : 'Nothing to free right now');
+  else {
+    toast('Quick clean', r.freed_mb > 0 ? `${r.freed_mb.toLocaleString()} MB freed from ${r.apps} apps` : 'Nothing to free right now');
+    BOOST_LAST_CLEAN = { mb: r.freed_mb, apps: r.apps, at: Date.now() };
+    if (state.view === 'boost') render();
+  }
 }
 function syncBoost() {
   // Each gear's settings, with "your own apps" filled in from the one shared list.
   const gears = [0, 1, 2, 3, 4, 5].map(n => { const g = boostGearCfg(n); return { ...g, eco_apps: g.eco_mine ? state.boostEcoApps || [] : [] }; });
-  invoke?.('boost_set', { cfg: { level: state.boostLevel || 0, close: state.boostClose || [], freeze: state.boostFreeze || [], reopen: !!state.boostReopen, gears, per_game: state.boostGames || {}, battery_eco: state.boostBattery !== false, protect_recorders: state.boostProtect !== false } }).catch(console.error);
+  const on = feat('boost');
+  invoke?.('boost_set', { cfg: { level: on ? state.boostLevel || 0 : 0, close: state.boostClose || [], freeze: state.boostFreeze || [], reopen: !!state.boostReopen, gears, per_game: on ? state.boostGames || {} : {}, battery_eco: state.boostBattery !== false, protect_recorders: state.boostProtect !== false } }).catch(console.error);
 }
 // A gear's settings: its preset, with the user's changes on top (Custom starts from the old
 // single Advanced set, if there was one).
@@ -423,6 +440,9 @@ function renderSide() {
   const pins = state.sidePins || {}, pinned = all.filter(g => pins[g.id]), games = all.filter(g => !pins[g.id]);
   const modded = games.filter(hasLiveMods), other = games.filter(g => !hasLiveMods(g));
   $('gameCount').textContent = gamesOnly().length;
+  // Game pages switched off (Boost only or Overlay only): the sidebar is just the pages.
+  document.querySelector('.side-label').hidden = !feat('game');
+  if (!feat('game')) { $('games').innerHTML = ''; finishSide(); return; }
   let html = (sideEdit ? sideEditBar() : '') + (!all.length ? '<p class="empty" style="padding:6px 10px">No games match.</p>'
     : (pinned.length ? `<div class="side-sec">Pinned <span class="n">${pinned.length}</span></div>${pinned.map(g => row(g, !hasLiveMods(g))).join('')}` : '')
       + (modded.length ? `<div class="side-sec${pinned.length ? ' other' : ''}">With mods <span class="n">${modded.length}</span></div>${modded.map(g => row(g)).join('')}` : '')
@@ -435,6 +455,9 @@ function renderSide() {
   }
   $('games').innerHTML = html;
 
+  finishSide();
+}
+function finishSide() {
   document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === state.view));
   $('backBtn').disabled = nav.i <= 0;
   $('fwdBtn').disabled = nav.i >= nav.stack.length - 1;

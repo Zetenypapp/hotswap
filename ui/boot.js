@@ -33,8 +33,8 @@ document.addEventListener('securitypolicyviolation', e => invoke?.('log_ui', { m
     listen?.('hotkey', e => onCombo(e.payload));
     listen?.('boost', e => {
       BOOST_STATUS = e.payload.status || [];
-      if (e.payload.lines.length) toast(e.payload.started ? `Game Boost: ${BOOST_GEARS[e.payload.level].name}` : 'Game Boost off', e.payload.lines.join(' · '));
-      if (state.view === 'settings') render();
+      if (e.payload.lines.length) toast(e.payload.started ? `Boost: ${BOOST_GEARS[e.payload.level].name}` : 'Boost off', e.payload.lines.join(' · '));
+      if (state.view === 'boost') render();
       pushMenu();
     });
     listen?.('mod-progress', e => { if (typeof Mods !== 'undefined') Mods.onProgress(e.payload); });

@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- The banner at the top of each release. Render: docs/banner.py <version> -->
+<html><head><meta charset="utf-8"><style>
+@font-face { font-family: Figtree; src: url("../ui/fonts/Figtree.ttf"); font-weight: 300 900; }
+html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; }
+body { font-family: Figtree, "Segoe UI", sans-serif; color: #e9f5ef; position: relative;
+  background: radial-gradient(38% 60% at 78% 48%, rgba(63, 212, 154, .28), transparent 70%), radial-gradient(60% 80% at 0% 100%, rgba(63, 212, 154, .08), transparent 70%), #07120e; }
+body::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: 40px 40px;
+  -webkit-mask-image: radial-gradient(70% 90% at 75% 40%, #000, transparent 85%); }
+.pill { position: absolute; left: 88px; top: 153px; display: flex; align-items: center; gap: 10px; padding: 10px 17px; border-radius: 999px; border: 1px solid rgba(63,212,154,.28); background: rgba(63,212,154,.06);
+  font-size: 18px; font-weight: 700; letter-spacing: .06em; color: #a8c9bb; }
+.pill i { width: 9px; height: 9px; border-radius: 50%; background: #3fd49a; box-shadow: 0 0 10px #3fd49a; }
+h1 { position: absolute; left: 84px; top: 204px; margin: 0; font-size: 132px; font-weight: 900; letter-spacing: -.05em; line-height: 1.1; }
+h1 span { color: #3fd49a; text-shadow: 0 0 40px rgba(63,212,154,.45); }
+.tag { position: absolute; left: 88px; top: 366px; font-size: 36px; font-weight: 500; color: #bcd6ca; }
+.chips { position: absolute; left: 88px; top: 447px; display: flex; gap: 10px; }
+.chips span { padding: 9px 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.035); font-size: 17px; font-weight: 700; }
+.foot { position: absolute; left: 88px; top: 571px; font: 500 21px Consolas, "Cascadia Mono", monospace; color: #c9dcd3; }
+.foot b { font-weight: 500; color: #7fa596; }
+.logo { position: absolute; left: 860px; top: 168px; width: 300px; height: 300px; border-radius: 42px; background: #3fd49a; transform: rotate(-6deg);
+  box-shadow: 0 30px 90px rgba(0,0,0,.5), 0 0 120px rgba(63,212,154,.25); display: grid; place-items: center; }
+</style></head><body>
+<div class="pill"><i></i>OPEN SOURCE · FREE FOREVER</div>
+<h1>Hot<span>Swap</span></h1>
+<div class="tag">Swap the way you play, in real time.</div>
+<div class="chips"><span>⚡ Game trainers</span><span>🧩 Mod launcher</span><span>📚 Game library</span><span>🛡️ Single-player only</span></div>
+<div class="foot">github.com/<b>Zetenypapp/hotswap</b> &nbsp;·&nbsp; <b id="ver">vX</b></div>
+<div class="logo"><svg width="270" height="270" viewBox="0 0 24 24"><path d="M5.5 9.5h11.5l-3-2.6M18.5 14.5H7l3 2.6" fill="none" stroke="#06140e" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+<script>document.getElementById('ver').textContent = 'v' + (location.hash.slice(1) || '0.0.0');</script>
+</body></html>

@@ -4,11 +4,11 @@
 
 let sideEdit = false;
 // The page buttons as written in index.html, read once so they can be reordered and hidden.
-const NAV = [...document.querySelectorAll('.mainnav [data-view]')].map(b => ({ view: b.dataset.view, html: b.innerHTML }));
+const NAV = [...document.querySelectorAll('.mainnav [data-view]')].map(b => ({ view: b.dataset.view, html: b.innerHTML, name: b.textContent.trim() }));
 const NAV_BY = Object.fromEntries(NAV.map(n => [n.view, n]));
 // The user's page order (new pages from an update go last).
 // Pages for features switched off in Settings → Features don't show at all.
-const navOrder = () => [...(state.navOrder || []).filter(v => NAV_BY[v]), ...NAV.map(n => n.view).filter(v => !(state.navOrder || []).includes(v))].filter(v => feat(v));
+const navOrder = () => [...(state.navOrder || []).filter(v => NAV_BY[v]), ...NAV.map(n => n.view).filter(v => !(state.navOrder || []).includes(v))].filter(v => navOn(v));
 
 // What game rows show: active mods, mods available, playtime or nothing. Older settings only had
 // the active mods switch.
@@ -28,9 +28,11 @@ function renderNav() {
     ? order.map((v, i) => `<div class="nav-edit${hid[v] ? ' off' : ''}"><span class="nav-lbl">${NAV_BY[v].html}</span>
         <button class="ghost" data-navmove="${v}" data-dir="-1" title="Move up"${i ? '' : ' disabled'}>↑</button><button class="ghost" data-navmove="${v}" data-dir="1" title="Move down"${i < order.length - 1 ? '' : ' disabled'}>↓</button>
         <button class="ghost" data-navhide="${v}" title="${hid[v] ? 'Show' : 'Hide'}">${eyeIcon(!hid[v])}</button></div>`).join('')
-    : order.filter(v => !hid[v]).map(v => `<button data-view="${v}">${NAV_BY[v].html}</button>`).join('');
+    : order.filter(v => !hid[v]).map(v => `<button data-view="${v}"${navColor(v)}>${NAV_BY[v].html}</button>`).join('');
   $('sideEditBtn').classList.toggle('on', sideEdit);
 }
+// A page button's own text color, if it has one (Settings → Appearance → Text colors).
+const navColor = v => { const c = state.textColors?.['nav:' + v]; return c ? ` style="--tn:${c === 'accent' ? 'var(--accent)' : c}"` : ''; };
 const eyeIcon = open => `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/>${open ? '<circle cx="12" cy="12" r="3"/>' : '<path d="M4 4l16 16"/>'}</svg>`;
 
 // The top of the games list while customising.

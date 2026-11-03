@@ -385,8 +385,8 @@
     sel = Math.max(0, Math.min(sel, mods.length - 1));
     const status = menu.paused ? 'Mods paused' : menu.connected ? 'Live in the game' : (menu.message || 'Connecting…');
     $('menu').innerHTML = `
-      <div class="m-head">${menu.discordOnly ? logo(34) : `<button class="view${view === 'mods' ? ' on' : ''}" data-view="mods" title="Mods">${logo(34)}</button>`}${menu.noDc ? '' : `<button class="view dc${view === 'discord' ? ' on' : ''}" data-view="discord" title="Discord">${DISCORD}</button>`}${menu.noSys ? '' : `<button class="view sys${view === 'system' ? ' on' : ''}" data-view="system" title="System">${CHART}</button>`}<button class="view sys${view === 'boost' ? ' on' : ''}" data-view="boost" title="Game Boost">${GAUGE}</button>
-        ${menu.discordOnly ? `<div class="m-title"><b>${view === 'system' ? 'System' : view === 'boost' ? 'Game Boost' : 'Discord'}</b><span>${esc(menu.game || 'No game running')}</span></div>` : `<div class="m-title"><b>${esc(menu.game)}</b><span><span class="dot${menu.connected && !menu.paused ? ' ok' : ''}"></span>${esc(status)} · ${menu.count} on</span></div>
+      <div class="m-head">${menu.discordOnly ? logo(34) : `<button class="view${view === 'mods' ? ' on' : ''}" data-view="mods" title="Mods">${logo(34)}</button>`}${menu.noDc ? '' : `<button class="view dc${view === 'discord' ? ' on' : ''}" data-view="discord" title="Discord">${DISCORD}</button>`}${menu.noSys ? '' : `<button class="view sys${view === 'system' ? ' on' : ''}" data-view="system" title="System">${CHART}</button>`}${menu.noBoost ? '' : `<button class="view sys${view === 'boost' ? ' on' : ''}" data-view="boost" title="Boost">${GAUGE}</button>`}
+        ${menu.discordOnly ? `<div class="m-title"><b>${view === 'system' ? 'System' : view === 'boost' ? 'Boost' : 'Discord'}</b><span>${esc(menu.game || 'No game running')}</span></div>` : `<div class="m-title"><b>${esc(menu.game)}</b><span><span class="dot${menu.connected && !menu.paused ? ' ok' : ''}"></span>${esc(status)} · ${menu.count} on</span></div>
         <button class="btn${menu.paused ? ' on' : ''}" data-cmd="pause">${menu.paused ? 'Resume' : 'Pause'}</button>
         <button class="btn danger" data-cmd="panic">All off</button>`}
         <button class="btn round" data-cmd="close" title="Close (${esc(menu.menuKey)})">✕</button></div>
@@ -450,7 +450,7 @@
     if (hud) renderHud();
   }
   const GAUGE = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 18a9 9 0 1 1 16 0"/><path d="m12 15 4-5"/></svg>';
-  // Game Boost: the same dial as in HotSwap's Settings; clicking a segment shifts right away.
+  // Boost: the same dial as on HotSwap's Boost page; clicking a segment shifts right away.
   let boostTab = 'gears', boostEdit = 0;
   function boostPanel() {
     const n = menu.boost || 0;
@@ -460,7 +460,7 @@
       return `${tabs}<div class="boost-adv">${boostEditor(boostEdit, menu.boostGears?.[boostEdit])}
       <p class="sys-note">App lists for closing, freezing and Efficiency mode are picked in HotSwap's Settings.</p></div>`;
     }
-    return `${tabs}<div class="boost-panel">${boostGauge(n, menu.accent)}<div><b>${BOOST_GEARS[n].name}</b><p>${n ? boostSummary(menu.boostGears?.[n]) : 'Game Boost does nothing.'}</p>
+    return `${tabs}<div class="boost-panel">${boostGauge(n, menu.accent)}<div><b>${BOOST_GEARS[n].name}</b><p>${n ? boostSummary(menu.boostGears?.[n]) : 'Boost does nothing.'}</p>
       <p class="sys-note">${menu.boostGame ? 'Click the dial to shift. HotSwap remembers this gear for this game.' : 'Click the dial to shift. Starts with your next game.'}</p>
       <div class="boost-btns">${boostCustomBtn(n)}<button class="btn" data-bclean>Quick clean</button></div></div></div>${boostStatusHtml(menu.boostStatus)}`;
   }
@@ -638,6 +638,7 @@
       // Tabs for features switched off in Settings → Features are gone.
       if (menu?.noDc && view === 'discord') view = menu.discordOnly ? 'system' : 'mods';
       if (menu?.noSys && view === 'system') view = menu.discordOnly ? 'discord' : 'mods';
+      if (menu?.noBoost && view === 'boost') view = menu.discordOnly ? 'discord' : 'mods';
       return renderMenu();
     }
     if (p.kind === 'theme') return;

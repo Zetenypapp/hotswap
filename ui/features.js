@@ -4,6 +4,9 @@
 // key, name, what it does, what turning it off saves. Keys starting with "set" are existing
 // switches (their own state and click handler in events.js); the rest live in state.off.
 const FEATURES = [
+  ['library', 'Library', 'Every game and app you have, with filters and art.', 'The Library page is gone from the sidebar.'],
+  ['game', 'Games and mods', 'Your games in the sidebar and their mod pages.', 'The sidebar shows only pages. Mods you had on and their hotkeys still work.'],
+  ['boost', 'Boost', 'The Boost page and Boost in the overlay.', 'Nothing about your PC changes when a game starts.'],
   ['feed', 'Home feed', 'News from your games, deals, store charts and your own sources on Home.', 'No downloads from Steam, CheapShark or your sources. Home keeps Jump back in.'],
   ['maps', 'Maps', 'Interactive maps for supported games.', 'The Maps page and its code never load.'],
   ['mods', 'Mods page', 'Installing mods from Thunderstore, Nexus and SpaceDock.', 'The Mods page and its mod lists never load.'],
@@ -16,6 +19,20 @@ const FEATURES = [
 const FEATURE_STATE = { setOverlay: 'overlay', setSounds: 'sounds', setAutoUpdate: 'autoUpdate' };
 const featOn = k => FEATURE_STATE[k] ? !!state[FEATURE_STATE[k]] : feat(k);
 
+// Modes: one click sets which features are on. Each lists the features it turns off; the
+// overlay is on in all of them but Boost only.
+const MODES = [
+  ['all', 'Everything', 'All of HotSwap.', []],
+  ['boost', 'Boost only', 'Home and Boost. Nothing else loads.', ['library', 'game', 'maps', 'mods', 'discord', 'stats']],
+  ['overlay', 'Overlay only', 'Home and the in-game overlay with Discord, stats and Boost.', ['library', 'game', 'maps', 'mods']],
+];
+const OWN_FEATURES = FEATURES.map(f => f[0]).filter(k => !FEATURE_STATE[k]);
+// The mode that matches what's on right now, if any.
+function currentMode() {
+  const m = MODES.find(([k, , , off]) => OWN_FEATURES.every(f => feat(f) === !off.includes(f)) && !!state.overlay === (k !== 'boost'));
+  return m ? m[0] : null;
+}
+
 function featuresSettings() {
   const row = ([k, name, what, saves]) => {
     const on = featOn(k), id = FEATURE_STATE[k] ? ` id="${k}"` : ` data-feat="${k}"`;
@@ -23,7 +40,12 @@ function featuresSettings() {
     return `<div class="set-row"><div class="txt"><b>${name}</b><span>${what}${saves ? ` <i>Off: ${saves}</i>` : ''}</span></div><button class="switch" role="switch"${id} aria-checked="${on}"></button></div>`;
   };
   const n = FEATURES.filter(f => !featOn(f[0])).length;
-  return `<div class="set-group"><h2>Features</h2>
+  const mode = currentMode();
+  return `<div class="set-group"><h2>Mode</h2>
+    <div class="modes">${MODES.map(([k, name, what]) => `<button class="mode${mode === k ? ' on' : ''}" data-featmode="${k}"><b>${name}</b><span>${what}</span></button>`).join('')}</div>
+    <div class="set-tip">${mode ? '' : '<b>Custom:</b> your own mix of features below. '}Pick a mode for a lighter HotSwap, or switch single features below.</div>
+  </div>
+  <div class="set-group"><h2>Features</h2>
     <div class="set-row"><div class="txt"><b>Turn off what you don’t use</b><span>Switched off features don’t load or run at all, so HotSwap uses less memory, network and CPU. ${n ? `${n} off right now.` : 'Everything is on.'}</span></div>
       <div class="btnrow"><button class="btn" data-featall="0" title="Only mods, hotkeys, the overlay and update checks">Minimal</button><button class="btn" data-featall="1">All on</button></div></div>
     ${FEATURES.map(row).join('')}
@@ -34,7 +56,9 @@ function featuresSettings() {
 function applyFeature(k) {
   const on = feat(k);
   if (k === 'feed') { if (on) refreshHome(false); }
-  if ((k === 'maps' || k === 'mods') && !on && state.view === k) { go('home'); return; }
+  if (['maps', 'mods', 'library', 'boost'].includes(k) && !on && state.view === k) { go('home'); return; }
+  if (k === 'game' && !on && state.view === 'game') { go('home'); return; }
+  if (k === 'boost') { syncBoost(); lastMenu = ''; pushMenu(); }
   if (k === 'discord') {
     VOICE = null; lastTalk = '';
     if (invoke && localStorage.getItem('hs.dc.voice') === '1') invoke(on ? 'voice_start' : 'voice_stop').catch(() => {});
@@ -45,10 +69,16 @@ function applyFeature(k) {
 }
 
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-feat],[data-featall]');
+  const t = e.target.closest('[data-feat],[data-featall],[data-featmode]');
   if (!t) return;
   const set = (k, on) => { const off = (state.off ||= {}); if (on) delete off[k]; else off[k] = true; };
-  if (t.dataset.feat) {
+  if (t.dataset.featmode) {
+    const [k, , , off] = MODES.find(m => m[0] === t.dataset.featmode);
+    for (const f of OWN_FEATURES) { const on = !off.includes(f); if (feat(f) !== on) { set(f, on); save(); applyFeature(f); } }
+    state.overlay = k !== 'boost';
+    if (!state.overlay) { if (menuOpen) toggleMenu(false); hudOn = false; invoke?.('overlay_close'); }
+    save();
+  } else if (t.dataset.feat) {
     const k = t.dataset.feat;
     set(k, !feat(k));
     save(); applyFeature(k);

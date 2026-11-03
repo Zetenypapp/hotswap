@@ -9,7 +9,7 @@ HotSwap is a free, open-source, ad-free mod app for **single-player** PC games o
 
 > 📖 **Every game, mod and feature in detail: [FEATURES.md](FEATURES.md)**
 
-![Satisfactory mod page](docs/game.png)
+![Satisfactory mod page](docs/game.jpg)
 
 ## 🎮 Games
 
@@ -22,7 +22,8 @@ Every other game still shows up in your library with art, playtime and launching
 ## ✨ What's inside
 
 - 🔁 **Live mods with hotkeys:** flip mods while you play, from the app or with keys that work in game, plus profiles and a panic key
-- 🏎️ **Game Boost:** a gearbox for your PC while you play, from Eco to Redline, every gear yours to change ([details](FEATURES.md#️-game-boost))
+- 🏎️ **Boost:** a gearbox for your PC while you play, from Eco to Redline, every gear yours to change, on its own page ([details](FEATURES.md#️-boost))
+- 🎨 **Make it yours:** colors for every part, page and text, plus Boost only and Overlay only modes ([details](FEATURES.md#-make-it-yours))
 - 🧩 **Mod loader:** install community mods from ficsit.app, Thunderstore, Nexus Mods and SpaceDock
 - 🗺️ **Live maps** for Satisfactory and Subnautica, with your position and teleport
 - 📚 **Your whole library** from Steam, Epic and GOG, with news, deals and playtime on Home
@@ -36,17 +37,19 @@ Press **Insert** in a game for HotSwap's menu right over it:
 
 - 🎮 **Mods:** every mod as a card, with profiles, pause and all off
 - 💬 **Discord:** your voice call in game: who's talking, mute, deafen, volumes and channels
-- 🏎️ **Game Boost:** shift gears on the rev-counter dial, Quick clean, and change any gear in Advanced
+- 🏎️ **Boost:** shift gears on the rev-counter dial, Quick clean, and change any gear in Advanced
 - 📊 **System stats:** live graphs of your CPU, GPU, memory, temperatures, disk, network and the game itself
 
-| 💬 Discord | 📊 System stats | 🏎️ Game Boost |
+| 💬 Discord | 📊 System stats | 🏎️ Boost |
 |---|---|---|
-| ![Discord voice in the overlay](docs/overlay-discord.jpg) | ![System stats in the overlay](docs/overlay-system.jpg) | ![Game Boost in the overlay](docs/overlay-boost.jpg) |
+| ![Discord voice in the overlay](docs/overlay-discord.jpg) | ![System stats in the overlay](docs/overlay-system.jpg) | ![Boost in the overlay](docs/overlay-boost.jpg) |
 
 Plus a small **HUD** in a corner, toasts when mods change, and a hotkey cheat sheet (hold Ctrl+F1). The overlay is a see-through window on top of the game, so nothing is injected; use **borderless or windowed** mode. [More about the overlay →](FEATURES.md#️-in-game-overlay)
 
-![Home](docs/home.png)
-![Library](docs/library.png)
+![Home](docs/home.jpg)
+![Boost](docs/boost.jpg)
+![Library](docs/library.jpg)
+![Settings](docs/settings.jpg)
 
 ## 🛠️ Built with
 

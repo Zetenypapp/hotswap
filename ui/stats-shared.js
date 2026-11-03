@@ -110,7 +110,7 @@ function statCard(m, s, cfg, size, extraClass = '') {
   return `<div class="sys-card s-${size || 'm'}${extraClass}" style="${cfg.colors[m.id] ? `--c:${cfg.colors[m.id]}` : ''}"><div class="top"><b>${m.name}</b><span>${statText(m, v, cfg.units)}</span></div>${sub ? `<small class="sub">${sub}</small>` : ''}${body}</div>`;
 }
 
-// Game Boost's gears and its rev-counter dial (Settings and the overlay menu). Every gear is a set
+// Boost's gears and its rev-counter dial (the overlay menu; the Boost page draws its own). Every gear is a set
 // of real changes (boost.rs) the user can edit in Advanced; these are the starting points.
 const BOOST_GEARS = [
   { name: 'Off' }, { name: 'Eco' }, { name: 'Sport' }, { name: 'Turbo' }, { name: 'Redline' }, { name: 'Custom' },
@@ -125,7 +125,7 @@ const BOOST_PRESETS = {
 };
 // One line on what a gear does, from its settings.
 function boostSummary(g) {
-  if (!g) return 'Game Boost does nothing.';
+  if (!g) return 'Boost does nothing.';
   const parts = [`${{ normal: 'normal', above: 'above normal', high: 'high' }[g.priority] || 'above normal'} priority`];
   if (g.plan === 'high') parts.push('High performance plan');
   if (g.plan === 'ultimate') parts.push('Ultimate Performance plan');
@@ -173,14 +173,14 @@ const BOOST_ADV = [
   { k: 'no_mouse_accel', name: 'No mouse acceleration', info: 'Turns off “Enhance pointer precision”, so aim follows your hand exactly.' },
   { k: 'no_transparency', name: 'No transparency effects', info: 'Windows draws plain backgrounds instead of see-through ones.' },
   { k: 'no_gamebar', name: 'No Xbox Game Bar', info: 'The controller’s Xbox button and Win+G don’t open Game Bar while the game is in front.' },
-  { group: 'Your apps', info: 'The close and freeze lists are in HotSwap’s Settings, under Game Boost.' },
+  { group: 'Your apps', info: 'The close and freeze lists are on HotSwap’s Boost page, under Your apps.' },
   { k: 'close_apps', name: 'Close the apps on your list', info: 'They get a normal close, so they can save first. Reopened after, if you like.' },
   { k: 'freeze_apps', name: 'Freeze the apps on your list', info: 'Paused completely, keeping everything they had open. Resumed after.' },
   { group: 'Efficiency mode for background apps', info: 'What Task Manager’s leaf does: less CPU, run slower and cooler, and their memory goes first when the game needs more. They keep working.' },
   { k: 'eco_steam', name: 'Steam’s web helper', info: 'The Steam store and library pages. Steam itself stays normal, your game needs it.' },
   { k: 'eco_browsers', name: 'Browsers', info: 'Chrome, Edge, Firefox, Opera, Brave and Vivaldi. Like their own memory and energy savers, but it works while they run.' },
   { k: 'eco_discord', name: 'Discord', info: 'In a voice call, it can make your voice crackle.' },
-  { k: 'eco_mine', name: 'Your own apps', info: 'The apps you picked for Efficiency mode in Settings.' },
+  { k: 'eco_mine', name: 'Your own apps', info: 'The apps you picked for Efficiency mode on the Boost page.' },
   { group: 'Other apps' },
   { k: 'pause_wallpaper', name: 'Pause Wallpaper Engine', info: 'Your animated wallpaper stops while you play and starts again after.' },
   { k: 'hide_hotswap', name: 'Tuck HotSwap away', info: 'HotSwap’s window goes to the tray and frees its memory. Mods, hotkeys and the overlay keep working.' },

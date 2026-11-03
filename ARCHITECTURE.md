@@ -105,12 +105,13 @@ A map of every file and what it does. HotSwap has two halves:
 | `data.js` | Every game's mod list (names, descriptions, hotkeys) and which mods work. |
 | `app.js` | The core: saved settings, the library, profiles, key bindings, changing mods, and sending errors to the log. |
 | `home.js` | The Home page: its panels, customise mode (move, resize, hide, add) and custom sources. |
-| `pages.js` | The Maps, Settings and game pages, and the function that draws whichever page is open. |
+| `pages.js` | The Maps, Settings (in tabs) and game pages, the colors for each part, page and text, and the function that draws whichever page is open. |
 | `ingame.js` | Sends mod changes, the menu and the HUD to the overlay. |
 | `discord.js` | The Overlay page, Discord voice popups, who's talking, and your Discord status. |
 | `gamelook.js` | Customising a game page: category order, hidden mods, short mod names and row size. |
 | `sidebar.js` | Customising the sidebar: page order and hidden pages, pinned games, what game rows show. |
-| `features.js` | Features on and off (Settings): parts of HotSwap that can be switched off so they don't load. |
+| `features.js` | Features on and off (Settings): parts of HotSwap that can be switched off so they don't load, and the Everything, Boost only and Overlay only modes. |
+| `boostpage.js` | The Boost page: the gear, the rev counter, gear cards, what Boost is doing, Quick clean, app lists and the gear editor. |
 | `stats.js` | System stats settings on the Overlay page, and the readings for the stats widget and HUD. |
 | `stats-shared.js` | Shared by the window and the overlay: the list of stats, their formats, the default settings and the graph drawing. |
 | `session.js` | Sounds, the Play button, Inject and the running game's session. |

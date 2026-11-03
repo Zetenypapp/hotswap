@@ -7,6 +7,8 @@ const PAGE_ICONS = {
   library: ICONS_GRID(),
   maps: '<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z" opacity=".35"/><path d="M9 4v14l6 2V6z"/>',
   mods: '<path d="M10 3h4v3a2 2 0 1 0 4 0V3h3v7h-3a2 2 0 1 0 0 4h3v7h-7v-3a2 2 0 1 0-4 0v3H3v-7h3a2 2 0 1 0 0-4H3V3z"/>',
+  boost: '<path d="M12 4a10 10 0 0 0-10 10c0 2.1.6 4 1.7 5.6h16.6A10 10 0 0 0 12 4z" opacity=".35"/><path d="M10.6 15.4a2 2 0 0 1 .3-2.8l6.6-4.9-4.1 7.1a2 2 0 0 1-2.8.6z"/>',
+  overlay: '<rect x="2" y="4" width="20" height="14" rx="3" opacity=".35"/><rect x="5" y="7" width="9" height="6" rx="2"/>',
   settings: '<circle cx="12" cy="12" r="4"/><path d="M11 2h2v4h-2zM11 18h2v4h-2zM2 11h4v2H2zM18 11h4v2h-4z"/>',
   action: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
 };
@@ -16,8 +18,8 @@ const palIcon = k => `<span class="pal-ic"><svg width="16" height="16" viewBox="
 function paletteItems(q) {
   const items = [];
   const add = (kind, label, sub, run, ic) => items.push({ kind, label, sub, run, ic });
-  [['home', 'Home'], ['library', 'Library'], ['maps', 'Maps'], ['mods', 'Mods'], ['settings', 'Settings']]
-    .filter(([v]) => feat(v)).forEach(([v, l]) => add('Page', l, '', () => go(v), palIcon(v)));
+  [['home', 'Home'], ['library', 'Library'], ['maps', 'Maps'], ['mods', 'Mods'], ['boost', 'Boost'], ['overlay', 'Overlay'], ['settings', 'Settings']]
+    .filter(([v]) => navOn(v)).forEach(([v, l]) => add('Page', l, '', () => go(v), palIcon(v)));
   const games = q ? LIB : gamesOnly().slice().sort((a, b) => b.lastPlayed - a.lastPlayed).slice(0, 6);
   games.forEach(g => add(g.software ? 'Software' : 'Game', g.name, [g.playtime ? hours(g.playtime) : '', modsOf(g).length ? `${modsOf(g).length} mods` : ''].filter(Boolean).join(' · '),
     () => go('game', g.id), tile(g, 'pal-tile', false)));

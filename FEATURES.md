@@ -5,7 +5,8 @@ Everything HotSwap can do, in detail. For the short version, see the [README](RE
 - [🎮 Games](#-games)
 - [🧰 Engine mods](#-engine-mods)
 - [🎛️ In-game overlay](#️-in-game-overlay)
-- [🏎️ Game Boost](#️-game-boost)
+- [🏎️ Boost](#️-boost)
+- [🎨 Make it yours](#-make-it-yours)
 - [💬 Discord](#-discord)
 - [🗺️ Live maps](#️-live-maps)
 - [🧩 Mod loader](#-mod-loader)
@@ -135,9 +136,9 @@ Press **Insert** (or your own key) in a game for a full menu over it. The tabs a
   - **Disk:** read and write; **network:** download and upload
   - **The game itself:** its CPU, memory and GPU use
   - Each as a line, area or bar graph, number only, in small, medium or large cards, over the time window you pick
-- 🏎️ **Game Boost:** the rev-counter dial to shift gears live, Quick clean, what Game Boost is doing right now, and the **Advanced** tab to change any gear's settings without leaving the game.
+- 🏎️ **Boost:** the rev-counter dial to shift gears live, Quick clean, what Boost is doing right now, and the **Advanced** tab to change any gear's settings without leaving the game.
 
-![Game Boost in the overlay](docs/overlay-boost.jpg)
+![Boost in the overlay](docs/overlay-boost.jpg)
 
 ### Also on screen
 
@@ -148,13 +149,17 @@ Press **Insert** (or your own key) in a game for a full menu over it. The tabs a
 - **Frame generation friendly mode**, for games using DLSS or FSR frame generation
 - With **Low memory mode** on, the overlay closes 20 seconds after you last used it, freeing its memory
 
-## 🏎️ Game Boost
+## 🏎️ Boost
 
-A gearbox for your PC while you play: shift between **Eco, Sport, Turbo, Redline** and your own **Custom** gear on a rev-counter dial, in **Settings → Game Boost** or in the overlay. Changes apply live, and everything goes back when the game closes. If HotSwap ever closes mid-game, its next start puts things back.
+A gearbox for your PC while you play: shift between **Eco, Sport, Turbo, Redline** and your own **Custom** gear on a rev-counter dial, on the **Boost** page in the sidebar or in the overlay. Changes apply live, and everything goes back when the game closes. If HotSwap ever closes mid-game, its next start puts things back.
+
+![The Boost page](docs/boost.jpg)
+
+The Boost page shows everything in one place: the gear and what it changes (priority, power plan, how many settings and apps), the dial, a card for every gear, what Boost is doing right now while a game runs, Quick clean with how much it last freed, the safety switches, your app lists and every gear's settings.
 
 ### Gears
 
-Every gear is a set of real changes, and every gear is yours to change: in **Advanced**, pick a gear with the 5-way switch and turn each setting on or off for it.
+Every gear is a set of real changes, and every gear is yours to change: in **Tune a gear** on the Boost page (or **Advanced** in the overlay), pick a gear with the 5-way switch and turn each setting on or off for it.
 
 ![Editing a gear in the overlay's Advanced tab](docs/overlay-advanced.jpg)
 
@@ -198,7 +203,36 @@ The starting points:
 - **Quick clean:** a one-off button that asks background apps to hand back memory they aren't using, and says how much was freed
 - **Recording apps protected:** OBS, Streamlabs, XSplit, Medal, NVIDIA ShadowPlay, AMD ReLive, Bandicam, Twitch Studio and ShareX are never closed, frozen, slowed or cleaned, and high game priority stays at above normal while one runs. Can be turned off.
 
-No fake "RAM cleaning": Windows already gives games free memory instantly, and emptying it makes games load slower. Game Boost only changes Windows settings and the game's priority, using the same standard Windows calls as Task Manager. It never touches the game's memory.
+No fake "RAM cleaning": Windows already gives games free memory instantly, and emptying it makes games load slower. Boost only changes Windows settings and the game's priority, using the same standard Windows calls as Task Manager. It never touches the game's memory.
+
+## 🎨 Make it yours
+
+### Modes
+
+Settings → **Features** starts with three modes, for a lighter HotSwap when you only want part of it:
+
+| Mode | What's left |
+|---|---|
+| **Everything** | All of HotSwap |
+| **Boost only** | Home and Boost. No library, mods, maps, overlay, Discord or stats |
+| **Overlay only** | Home and the in-game overlay with Discord, stats and Boost |
+
+Or switch single parts on and off: Library, games and mods, Boost, the Home feed, Maps, the Mods page, Discord, system stats, the overlay, sounds and update checks. Switched off parts don't load or run at all.
+
+### Colors
+
+![Settings → Appearance](docs/settings.jpg)
+
+Settings → **Appearance**:
+
+- 🎨 **Accent color** and a **second color** for the glow behind every page: 8 presets or any color you pick
+- 🧩 **Colors for each part:** the sidebar, Home, Library, game pages, Maps, Mods, Boost, Overlay (the in-game one too) and Settings can each have their own accent
+- 🔤 **Page buttons:** one color for all of them, or a different one for each page
+- ✏️ **Text colors** for game names, section labels, page titles and all other text. **A** follows the accent color of wherever the text is
+
+### Settings
+
+Settings is split into tabs: **Features, Appearance, Hotkeys and overlay, App** and **About**, and opens on the last one you used.
 
 ## 💬 Discord
 
