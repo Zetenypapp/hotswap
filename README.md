@@ -88,6 +88,8 @@ Want to change something? **[ARCHITECTURE.md](ARCHITECTURE.md)** lists every fil
 
 HotSwap is for **single-player and private games only**. It refuses to mod anything with anti-cheat, and you shouldn't use it to get an edge over other players.
 
+**Boost** and the **in-game overlay** are different: they work with every game, multiplayer and anti-cheat games included, because they never touch the game. The overlay is its own see-through window on top, and Boost only changes Windows settings and the game's priority, the way Task Manager does. Neither reads or writes the game's memory, and nothing is injected.
+
 ## 🛡️ Security
 
 HotSwap changes other programs' memory, so it's built to be careful with its own:

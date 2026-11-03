@@ -115,7 +115,7 @@ Single-player games without their own mod list still get mods if HotSwap knows t
 
 ## 🎛️ In-game overlay
 
-The overlay is its own see-through window on top of your game: nothing is injected into the game, so it can't trip anti-cheat. Run games in **borderless or windowed** mode; exclusive fullscreen draws over it.
+The overlay is its own see-through window on top of your game: nothing is injected into the game, so it can't trip anti-cheat and works with every game, multiplayer ones included. Run games in **borderless or windowed** mode; exclusive fullscreen draws over it.
 
 ### The menu (Insert)
 
@@ -152,6 +152,8 @@ Press **Insert** (or your own key) in a game for a full menu over it. The tabs a
 ## 🏎️ Boost
 
 A gearbox for your PC while you play: shift between **Eco, Sport, Turbo, Redline** and your own **Custom** gear on a rev-counter dial, on the **Boost** page in the sidebar or in the overlay. Changes apply live, and everything goes back when the game closes. If HotSwap ever closes mid-game, its next start puts things back.
+
+Boost works with **every game**, multiplayer and anti-cheat games included: it only changes Windows settings and the game's priority, the way Task Manager does, and never reads or writes the game's memory.
 
 ![The Boost page](docs/boost.jpg)
 
