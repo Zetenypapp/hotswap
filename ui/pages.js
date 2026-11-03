@@ -135,6 +135,7 @@ function renderSettings() {
       <div class="set-row"><div class="txt"><b>HUD</b><span>A small bar over the game with your active mods, session time and clock. It keeps the overlay on screen, which can cost a little smoothness in some games.</span></div>${sw('setHud', state.hud)}</div>
       ${state.hud ? `<div class="set-row"><div class="txt"><b>HUD position</b><span>Where the HUD sits.</span></div>${cornerPicker('hcorner', state.hudCorner)}</div>
       <div class="set-row"><div class="txt"><b>CPU and RAM on the HUD</b><span>Your PC's total use, updated every second.</span></div>${sw('setHudStats', state.hudStats)}</div>` : ''}
+      <div class="set-row"><div class="txt"><b>Keep the game in front</b><span>The menu opens without taking over, so the game keeps running at full speed behind it. Clicks and the menu’s keys (arrows, Enter, Space, Tab, Esc) go to the menu. Only for games that show a mouse cursor: in shooters and other games that lock the mouse, you can’t point at the menu.</span></div>${sw('setMenuFocus', state.menuFocus)}</div>
       <div class="set-row"><div class="txt"><b>Radar position</b><span>Where the enemy radar sits, in games that have one.</span></div>${cornerPicker('rcorner', state.radarCorner)}</div>` : ''}
     </div>` : ''}
 `,

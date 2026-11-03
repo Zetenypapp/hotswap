@@ -53,7 +53,7 @@ function toggleMenu(open = !menuOpen, test = false) {
   if (open && (!g || !modsOf(g).length) && !dcMenuOk()) { if (test) toast('Open a game with mods first', ''); return; }
   menuOpen = open;
   lastMenu = '';
-  invoke('overlay_menu', { open }).catch(console.error);
+  invoke('overlay_menu', { open, game: runningId() || RUNNING || null, keepFocus: !!state.menuFocus }).catch(console.error);
   if (open) pushStatsCfg(true);
   if (open) {
     if (test) overlaySend({ kind: 'menu', open: true, data: g && modsOf(g).length ? menuData(g) : dcMenuData() }); else pushMenu();

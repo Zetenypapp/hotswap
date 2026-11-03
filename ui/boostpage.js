@@ -1,64 +1,6 @@
 // The Boost page: Game Boost's gearbox, what it does right now, Quick clean, every gear's settings
-// and the app lists. The backend (boost.rs) does the work; app.js holds the state helpers.
-
-const GEAR_COLORS = ['#8a919a', '#3fd49a', '#5cb8ff', '#ffb340', '#e0409f', null]; // Custom uses the accent
-const GEAR_TAGS = [
-  'Your PC as usual. Nothing changes when a game starts.',
-  'A light touch: the game goes first, nothing else is touched.',
-  'High performance power and Windows Game Mode.',
-  'Background apps closed, frozen or slowed. The game gets the PC.',
-  'Everything at once. Ultimate power, nothing in the way.',
-  'Your own gear, set up exactly how you like it.',
-];
-const gearColor = n => GEAR_COLORS[n] || 'var(--accent)';
-const gearMark = n => n === 5 ? 'C' : n ? String(n) : 'N';
-
-// What a gear changes, as short lines, and how many settings it has on.
-function boostLines(g) {
-  if (!g) return [];
-  const out = [`${{ normal: 'Normal', above: 'Above normal', high: 'High' }[g.priority] || 'Above normal'} game priority`];
-  if (g.plan !== 'none') out.push(g.plan === 'ultimate' ? 'Ultimate Performance plan' : 'High performance plan');
-  BOOST_ADV.forEach(it => { if (it.k && !it.opts && g[it.k]) out.push(it.name); });
-  return out;
-}
-const boostCount = g => boostLines(g).length - (g.priority === 'normal' ? 1 : 0);
-
-// The big rev counter. Gears 0-4 are the arc; Custom puts the needle straight up.
-let dialAngle = -90;
-function boostDial(level) {
-  const C = 160, pt = (r, deg) => [C + r * Math.cos(deg * Math.PI / 180), C - r * Math.sin(deg * Math.PI / 180)].map(n => n.toFixed(1));
-  const arc = (r1, r2, a1, a2) => { const [o1, o2, i2, i1] = [pt(r1, a1), pt(r1, a2), pt(r2, a2), pt(r2, a1)]; return `M${o1} A${r1} ${r1} 0 0 1 ${o2} L${i2} A${r2} ${r2} 0 0 0 ${i1} Z`; };
-  const custom = level === 5;
-  const segs = [0, 1, 2, 3, 4].map(i => {
-    const on = !custom && i <= level;
-    return `<path data-gear="${i}" d="${arc(132, 104, 180 - 36 * i - 1.2, 180 - 36 * (i + 1) + 1.2)}" fill="${gearColor(i)}" opacity="${on ? 1 : .13}"${on && i ? ' filter="url(#bglow)"' : ''}><title>${BOOST_GEARS[i].name}</title></path>`;
-  }).join('');
-  const ticks = Array.from({ length: 41 }, (_, k) => {
-    const deg = 180 - 4.5 * k, big = k % 5 === 0, [a, b] = [pt(142, deg), pt(big ? 154 : 148, deg)];
-    return `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${k >= 32 ? '#e0409f' : 'rgba(255,255,255,.45)'}" stroke-width="${big ? 2.4 : 1.2}" stroke-linecap="round"/>`;
-  }).join('');
-  const nums = Array.from({ length: 9 }, (_, k) => { const [x, y] = pt(90, 180 - 22.5 * k); return `<text x="${x}" y="${(+y + 4).toFixed(1)}" text-anchor="middle" class="bd-num${k >= 7 ? ' red' : ''}">${k}</text>`; }).join('');
-  const to = custom ? 0 : -90 + 36 * level + 18;
-  return `<svg class="bd" viewBox="0 0 320 196" role="group" aria-label="Boost gear">
-    <defs><filter id="bglow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-      <radialGradient id="bhub"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#b9c0c8"/></radialGradient></defs>
-    <path d="${arc(134, 102, 180, 0)}" fill="rgba(255,255,255,.04)"/>
-    ${ticks}${segs}${nums}
-    <text x="${C}" y="${C - 34}" text-anchor="middle" class="bd-x">×1000 rpm</text>
-    <g class="bd-needle" data-to="${to}" style="transform: rotate(${dialAngle}deg)">
-      <path d="M${C - 4} ${C} L${C} ${C - 122} L${C + 4} ${C} Z" fill="${custom ? 'var(--accent)' : '#fff'}" filter="url(#bglow)"/>
-    </g>
-    <circle cx="${C}" cy="${C}" r="15" fill="url(#bhub)"/><circle cx="${C}" cy="${C}" r="5" fill="#16181c"/>
-    <text x="${C}" y="${C + 34}" text-anchor="middle" class="bd-gear" fill="${gearColor(level)}">${gearMark(level)}</text>
-  </svg>`;
-}
-// Swings the needle from where it was to the new gear.
-function swingDial() {
-  const n = document.querySelector('#boostBody .bd-needle');
-  if (!n) return;
-  const to = +n.dataset.to;
-  requestAnimationFrame(() => requestAnimationFrame(() => { n.style.transform = `rotate(${to}deg)`; dialAngle = to; }));
-}
+// and the app lists. The backend (boost.rs) does the work; app.js holds the state helpers, and the
+// dial and gear colors are in stats-shared.js (the overlay menu draws them too).
 
 let BOOST_LAST_CLEAN = null; // { mb, apps, at } from the last Quick clean
 const cleanAgo = t => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; };

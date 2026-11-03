@@ -903,11 +903,19 @@ impl Extras {
 
 impl Boost {
     /// New settings. A running boost moves to them right away.
+    /// Shifting fast (clicking through gears) applies only the last gear, once things settle:
+    /// every change closes, freezes or reopens apps, so each one in between would be wasted work.
     pub fn set(&self, app: &AppHandle, cfg: Config) {
+        static SET_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         *self.cfg.lock().unwrap() = cfg;
         if self.active.lock().unwrap().is_some() {
             let app = app.clone();
+            let id = SET_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
             std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(400));
+                if SET_GEN.load(std::sync::atomic::Ordering::Relaxed) != id {
+                    return;
+                }
                 let boost = app.state::<Boost>();
                 let mut guard = boost.active.lock().unwrap();
                 if let Some(a) = guard.as_mut() {

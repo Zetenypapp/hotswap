@@ -162,32 +162,50 @@ pub(crate) async fn overlay_notify(app: AppHandle, note: serde_json::Value) -> R
 }
 
 /// Opens or closes the overlay menu: it takes the mouse and keyboard while open, then gives focus
-/// back to the game.
+/// back to the game. With `keep_focus` the game stays in front (and at full speed): clicks still
+/// reach the menu, and its keys come through menu_key_hook.
 #[tauri::command]
-pub(crate) async fn overlay_menu(app: AppHandle, open: bool) -> Result<(), String> {
+pub(crate) async fn overlay_menu(app: AppHandle, open: bool, game: Option<String>, keep_focus: Option<bool>) -> Result<(), String> {
     let win = overlay_window(&app).await?;
+    let keep_focus = keep_focus.unwrap_or(false);
     #[cfg(windows)]
     use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
     if open {
+        let was_open = OVERLAY_MENU.swap(true, Ordering::Relaxed);
         #[cfg(windows)]
         {
             let fg = unsafe { GetForegroundWindow() } as isize;
             if win.hwnd().map_or(true, |h| h.0 as isize != fg) {
-                OVERLAY_PREV.store(fg, Ordering::Relaxed);
+                if keep_focus {
+                    MENU_FG.store(fg, Ordering::Relaxed);
+                } else {
+                    OVERLAY_PREV.store(fg, Ordering::Relaxed);
+                }
             }
         }
-        OVERLAY_MENU.store(true, Ordering::Relaxed);
+        if !keep_focus && !was_open {
+            if let Some(g) = game {
+                hold_game_stats(&app, &g).await;
+            }
+        }
         // The menu needs the whole screen (it dims the game behind it).
         if let Some(m) = app.primary_monitor().ok().flatten() {
             let sc = m.scale_factor();
             overlay_fit(app.clone(), 0.0, 0.0, m.size().width as f64 / sc, m.size().height as f64 / sc - 1.0);
         }
         let _ = win.set_ignore_cursor_events(false);
-        tool_window(&win, false);
-        let _ = win.show();
-        let _ = win.set_focus();
+        if keep_focus {
+            menu_key_hook(&app);
+            MENU_KEYS.store(true, Ordering::Relaxed);
+            overlay_show(&win);
+        } else {
+            tool_window(&win, false);
+            let _ = win.show();
+            let _ = win.set_focus();
+        }
     } else {
         OVERLAY_MENU.store(false, Ordering::Relaxed);
+        MENU_KEYS.store(false, Ordering::Relaxed);
         let _ = win.set_ignore_cursor_events(true);
         tool_window(&win, true);
         let keep = OVERLAY_KEEP.load(Ordering::Relaxed);
@@ -205,6 +223,77 @@ pub(crate) async fn overlay_menu(app: AppHandle, open: bool) -> Result<(), Strin
         }
     }
     Ok(())
+}
+
+/// The game's CPU, GPU and memory, read just before the menu takes focus: many games slow down
+/// once they're not in front, so the System tab shows these while the menu is open.
+async fn hold_game_stats(app: &AppHandle, game: &str) {
+    let Some(pid) = app.state::<watch::Watch>().stats_pid_of(game) else { return };
+    let a = app.clone();
+    let snap = tauri::async_runtime::spawn_blocking(move || {
+        let stats = a.state::<stats::Stats>();
+        stats.read(Some(pid)); // CPU use is measured between two reads
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        serde_json::to_value(stats.read(Some(pid))).ok()
+    })
+    .await
+    .ok()
+    .flatten();
+    let held = snap.map(|s| s["game"].clone()).unwrap_or_default();
+    let _ = app.emit_to("overlay", "overlay", serde_json::json!({ "kind": "hold", "game": held }));
+}
+
+/// The menu takes its keys (see menu_key_hook) while this is set, and only while this window (the
+/// game) is in front.
+static MENU_KEYS: AtomicBool = AtomicBool::new(false);
+static MENU_FG: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+static MENU_APP: std::sync::OnceLock<AppHandle> = std::sync::OnceLock::new();
+
+/// For the menu that leaves the game in front: a low-level keyboard hook, installed once on its own
+/// thread, that takes the menu's keys (arrows, Enter, Space, Tab, Esc) before the game sees them and
+/// passes them to the overlay. Every other key, and any key with Ctrl, Alt or Windows held (Alt+Tab),
+/// goes to the game as usual.
+fn menu_key_hook(app: &AppHandle) {
+    let _ = MENU_APP.set(app.clone());
+    static STARTED: std::sync::Once = std::sync::Once::new();
+    #[cfg(windows)]
+    STARTED.call_once(|| {
+        std::thread::spawn(|| unsafe {
+            use windows_sys::Win32::UI::{
+                Input::KeyboardAndMouse::{GetAsyncKeyState, VK_CONTROL, VK_DOWN, VK_ESCAPE, VK_LEFT, VK_LWIN, VK_RETURN, VK_RIGHT, VK_RWIN, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP},
+                WindowsAndMessaging::{CallNextHookEx, GetForegroundWindow, GetMessageW, SetWindowsHookExW, KBDLLHOOKSTRUCT, LLKHF_ALTDOWN, MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_SYSKEYDOWN},
+            };
+            unsafe extern "system" fn hook(code: i32, w: usize, l: isize) -> isize {
+                if code >= 0 && MENU_KEYS.load(Ordering::Relaxed) && GetForegroundWindow() as isize == MENU_FG.load(Ordering::Relaxed) {
+                    let k = &*(l as *const KBDLLHOOKSTRUCT);
+                    let held = |vk: u16| GetAsyncKeyState(vk as i32) < 0;
+                    let key = match k.vkCode as u16 {
+                        VK_UP => "ArrowUp",
+                        VK_DOWN => "ArrowDown",
+                        VK_LEFT => "ArrowLeft",
+                        VK_RIGHT => "ArrowRight",
+                        VK_RETURN => "Enter",
+                        VK_SPACE => " ",
+                        VK_TAB => "Tab",
+                        VK_ESCAPE => "Escape",
+                        _ => "",
+                    };
+                    if !key.is_empty() && k.flags & LLKHF_ALTDOWN == 0 && !held(VK_CONTROL) && !held(VK_LWIN) && !held(VK_RWIN) {
+                        if matches!(w as u32, WM_KEYDOWN | WM_SYSKEYDOWN) {
+                            if let Some(app) = MENU_APP.get() {
+                                let _ = app.emit_to("overlay", "overlay", serde_json::json!({ "kind": "key", "key": key, "shift": held(VK_SHIFT) }));
+                            }
+                        }
+                        return 1;
+                    }
+                }
+                CallNextHookEx(std::ptr::null_mut(), code, w, l)
+            }
+            SetWindowsHookExW(WH_KEYBOARD_LL, Some(hook), std::ptr::null_mut(), 0);
+            let mut msg: MSG = std::mem::zeroed();
+            while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {}
+        });
+    });
 }
 
 /// Gives keyboard and mouse focus back to a window (the game). Windows can refuse a plain

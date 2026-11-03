@@ -119,6 +119,7 @@ document.addEventListener('click', e => {
     case 'sheetBind': startCapture(null, SHEET, 'up'); break;
     case 'menuBind': startCapture(null, MENU, 'up'); break;
     case 'setHud': state.hud = !state.hud; save(); render(); syncHud(true); break;
+    case 'setMenuFocus': state.menuFocus = !state.menuFocus; save(); render(); break;
     case 'setHudStats': state.hudStats = !state.hudStats; save(); render(); syncHud(true); break;
     case 'setDiscord': state.discord = !state.discord; save(); render(); break;
     case 'setFgFriendly': state.fgFriendly = !state.fgFriendly; save(); syncHud(true); pushStatsCfg(true); render(); break;

@@ -110,7 +110,7 @@ function statCard(m, s, cfg, size, extraClass = '') {
   return `<div class="sys-card s-${size || 'm'}${extraClass}" style="${cfg.colors[m.id] ? `--c:${cfg.colors[m.id]}` : ''}"><div class="top"><b>${m.name}</b><span>${statText(m, v, cfg.units)}</span></div>${sub ? `<small class="sub">${sub}</small>` : ''}${body}</div>`;
 }
 
-// Boost's gears and its rev-counter dial (the overlay menu; the Boost page draws its own). Every gear is a set
+// Boost's gears and its rev-counter dial (the Boost page and the overlay menu). Every gear is a set
 // of real changes (boost.rs) the user can edit in Advanced; these are the starting points.
 const BOOST_GEARS = [
   { name: 'Off' }, { name: 'Eco' }, { name: 'Sport' }, { name: 'Turbo' }, { name: 'Redline' }, { name: 'Custom' },
@@ -135,26 +135,64 @@ function boostSummary(g) {
   if (extras) parts.push(`${extras} more setting${extras > 1 ? 's' : ''}`);
   return parts.join(' · ') + '.';
 }
-function boostGauge(level, accent = '#f3b73f') {
+const GEAR_COLORS = ['#8a919a', '#3fd49a', '#5cb8ff', '#ffb340', '#e0409f', null]; // Custom uses the accent
+const GEAR_TAGS = [
+  'Your PC as usual. Nothing changes when a game starts.',
+  'A light touch: the game goes first, nothing else is touched.',
+  'High performance power and Windows Game Mode.',
+  'Background apps closed, frozen or slowed. The game gets the PC.',
+  'Everything at once. Ultimate power, nothing in the way.',
+  'Your own gear, set up exactly how you like it.',
+];
+const gearColor = n => GEAR_COLORS[n] || 'var(--accent, var(--c))';
+const gearMark = n => n === 5 ? 'C' : n ? String(n) : 'N';
+
+// What a gear changes, as short lines, and how many settings it has on.
+function boostLines(g) {
+  if (!g) return [];
+  const out = [`${{ normal: 'Normal', above: 'Above normal', high: 'High' }[g.priority] || 'Above normal'} game priority`];
+  if (g.plan !== 'none') out.push(g.plan === 'ultimate' ? 'Ultimate Performance plan' : 'High performance plan');
+  BOOST_ADV.forEach(it => { if (it.k && !it.opts && g[it.k]) out.push(it.name); });
+  return out;
+}
+const boostCount = g => boostLines(g).length - (g.priority === 'normal' ? 1 : 0);
+
+// The big rev counter. Gears 0-4 are the arc; Custom puts the needle straight up.
+let dialAngle = -90;
+function boostDial(level) {
+  const C = 160, pt = (r, deg) => [C + r * Math.cos(deg * Math.PI / 180), C - r * Math.sin(deg * Math.PI / 180)].map(n => n.toFixed(1));
+  const arc = (r1, r2, a1, a2) => { const [o1, o2, i2, i1] = [pt(r1, a1), pt(r1, a2), pt(r2, a2), pt(r2, a1)]; return `M${o1} A${r1} ${r1} 0 0 1 ${o2} L${i2} A${r2} ${r2} 0 0 0 ${i1} Z`; };
   const custom = level === 5;
-  const pt = (r, deg) => [100 + r * Math.cos(deg * Math.PI / 180), 100 - r * Math.sin(deg * Math.PI / 180)].map(n => n.toFixed(1));
-  const seg = i => {
-    const [a1, a2] = [180 - 36 * i - 1.5, 180 - 36 * (i + 1) + 1.5];
-    const [o1, o2, n2, n1] = [pt(88, a1), pt(88, a2), pt(66, a2), pt(66, a1)];
-    const color = i === 0 ? 'rgba(255,255,255,.35)' : i === 4 ? '#e0409f' : accent;
-    return `<path data-gear="${i}" d="M${o1} A88 88 0 0 1 ${o2} L${n2} A66 66 0 0 0 ${n1} Z" fill="${color}" opacity="${!custom && i <= level ? 1 : .18}"><title>${BOOST_GEARS[i].name}</title></path>`;
-  };
-  const ticks = Array.from({ length: 21 }, (_, k) => { const [a, b] = [pt(94, 180 - 9 * k), pt(k % 4 ? 97 : 101, 180 - 9 * k)]; return `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${k >= 16 ? '#e0409f' : 'rgba(255,255,255,.5)'}" stroke-width="${k % 4 ? 1 : 2}"/>`; }).join('');
-  const [nx, ny] = pt(78, custom ? 90 : 180 - 36 * level - 18);
-  return `<svg class="boost-gauge" viewBox="0 0 200 118" role="group" aria-label="Game Boost gear">
-    ${ticks}${[0, 1, 2, 3, 4].map(seg).join('')}
-    <line x1="100" y1="100" x2="${nx}" y2="${ny}" stroke="${custom ? accent : '#fff'}" stroke-width="3.5" stroke-linecap="round" style="transition: all .3s"/>
-    <circle cx="100" cy="100" r="7" fill="#fff"/>
-    <text x="100" y="117" text-anchor="middle" font-size="9" fill="rgba(255,255,255,.6)" letter-spacing="2">${custom ? 'CUSTOM' : `GEAR ${level}`}</text>
+  const segs = [0, 1, 2, 3, 4].map(i => {
+    const on = !custom && i <= level;
+    return `<path data-gear="${i}" d="${arc(132, 104, 180 - 36 * i - 1.2, 180 - 36 * (i + 1) + 1.2)}" fill="${gearColor(i)}" opacity="${on ? 1 : .13}"${on && i ? ' filter="url(#bglow)"' : ''}><title>${BOOST_GEARS[i].name}</title></path>`;
+  }).join('');
+  const ticks = Array.from({ length: 41 }, (_, k) => {
+    const deg = 180 - 4.5 * k, big = k % 5 === 0, [a, b] = [pt(142, deg), pt(big ? 154 : 148, deg)];
+    return `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${k >= 32 ? '#e0409f' : 'rgba(255,255,255,.45)'}" stroke-width="${big ? 2.4 : 1.2}" stroke-linecap="round"/>`;
+  }).join('');
+  const nums = Array.from({ length: 9 }, (_, k) => { const [x, y] = pt(90, 180 - 22.5 * k); return `<text x="${x}" y="${(+y + 4).toFixed(1)}" text-anchor="middle" class="bd-num${k >= 7 ? ' red' : ''}">${k}</text>`; }).join('');
+  const to = custom ? 0 : -90 + 36 * level + 18;
+  return `<svg class="bd" viewBox="0 0 320 196" role="group" aria-label="Boost gear">
+    <defs><filter id="bglow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <radialGradient id="bhub"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#b9c0c8"/></radialGradient></defs>
+    <path d="${arc(134, 102, 180, 0)}" fill="rgba(255,255,255,.04)"/>
+    ${ticks}${segs}${nums}
+    <text x="${C}" y="${C - 34}" text-anchor="middle" class="bd-x">×1000 rpm</text>
+    <g class="bd-needle" data-to="${to}" style="transform: rotate(${dialAngle}deg)">
+      <path d="M${C - 4} ${C} L${C} ${C - 122} L${C + 4} ${C} Z" fill="${custom ? 'var(--accent, var(--c))' : '#fff'}" filter="url(#bglow)"/>
+    </g>
+    <circle cx="${C}" cy="${C}" r="15" fill="url(#bhub)"/><circle cx="${C}" cy="${C}" r="5" fill="#16181c"/>
+    <text x="${C}" y="${C + 34}" text-anchor="middle" class="bd-gear" fill="${gearColor(level)}">${gearMark(level)}</text>
   </svg>`;
 }
-// The Custom gear sits next to the dial.
-const boostCustomBtn = level => `<button class="btn${level === 5 ? ' accent' : ''}" data-gear="5" title="Your own gear: set it up in Advanced">Custom</button>`;
+// Swings the needle from where it was to the new gear.
+function swingDial() {
+  const n = document.querySelector('.bd-needle');
+  if (!n) return;
+  const to = +n.dataset.to;
+  requestAnimationFrame(() => requestAnimationFrame(() => { n.style.transform = `rotate(${to}deg)`; dialAngle = to; }));
+}
 
 // Each gear's settings in Advanced (boost.rs), all real changes, applied live and put back after.
 const BOOST_ADV = [

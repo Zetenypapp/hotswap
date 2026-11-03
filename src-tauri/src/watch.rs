@@ -67,20 +67,32 @@ impl Watch {
 
     /// Process ID of the game's main Unreal executable (`*-Win64-Shipping.exe` in its folder).
     pub fn pid_of(&self, id: &str) -> Option<u32> {
+        self.find_pid(id, false)
+    }
+
+    /// The game's process for its stats: as pid_of, or for any other game (say CS2 on Source 2)
+    /// the biggest process in its folder, not a launcher or crash reporter. Not for attaching
+    /// mods: early on that can be a launcher stub.
+    pub fn stats_pid_of(&self, id: &str) -> Option<u32> {
+        self.find_pid(id, true)
+    }
+
+    fn find_pid(&self, id: &str, any: bool) -> Option<u32> {
         let (_, dir) = self.targets.lock().unwrap().iter().find(|(gid, _)| gid == id).cloned()?;
         let mut sys = System::new();
-        sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing().with_exe(UpdateKind::Always));
+        sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing().with_exe(UpdateKind::Always).with_memory());
         // Unreal games run a "-Win64-Shipping" exe (the launcher exe is only a stub); Unity games
         // run their main exe, the one with a "<name>_Data" folder next to it; a few others by name.
-        let exes: Vec<(u32, String)> = sys.processes().values()
-            .filter_map(|p| Some((p.pid().as_u32(), p.exe()?.to_string_lossy().to_lowercase())))
-            .filter(|(_, e)| e.starts_with(&dir) && e.ends_with(".exe"))
+        let exes: Vec<(u32, String, u64)> = sys.processes().values()
+            .filter_map(|p| Some((p.pid().as_u32(), p.exe()?.to_string_lossy().to_lowercase(), p.memory())))
+            .filter(|(_, e, _)| e.starts_with(&dir) && e.ends_with(".exe"))
             .collect();
-        exes.iter().find(|(_, e)| e.ends_with("-win64-shipping.exe"))
-            .or_else(|| exes.iter().find(|(_, e)| std::path::Path::new(&format!("{}_Data", e.trim_end_matches(".exe"))).is_dir()))
+        exes.iter().find(|(_, e, _)| e.ends_with("-win64-shipping.exe"))
+            .or_else(|| exes.iter().find(|(_, e, _)| std::path::Path::new(&format!("{}_Data", e.trim_end_matches(".exe"))).is_dir()))
             // Games on their own engine, by exe name.
-            .or_else(|| exes.iter().find(|(_, e)| [r"\scrapmechanic.exe", r"\stormworks64.exe", r"\stormworks.exe", r"\eurotrucks2.exe", r"\amtrucks.exe", r"\gta5.exe", r"\gta5_enhanced.exe"].iter().any(|n| e.ends_with(n))))
-            .map(|(pid, _)| *pid)
+            .or_else(|| exes.iter().find(|(_, e, _)| [r"\scrapmechanic.exe", r"\stormworks64.exe", r"\stormworks.exe", r"\eurotrucks2.exe", r"\amtrucks.exe", r"\gta5.exe", r"\gta5_enhanced.exe"].iter().any(|n| e.ends_with(n))))
+            .or_else(|| exes.iter().filter(|_| any).max_by_key(|(_, _, mem)| *mem))
+            .map(|(pid, _, _)| *pid)
     }
 
     /// Every process running from the game's install folder (games can have several).

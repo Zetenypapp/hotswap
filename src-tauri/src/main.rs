@@ -330,7 +330,7 @@ fn system_stats(stats: State<stats::Stats>) -> (f32, f32) {
 /// Everything the overlay's System tab graphs (see stats.rs).
 #[tauri::command]
 fn system_stats_full(stats: State<stats::Stats>, watch: State<watch::Watch>, game: Option<String>) -> stats::Snapshot {
-    stats.read(game.and_then(|g| watch.pid_of(&g)))
+    stats.read(game.and_then(|g| watch.stats_pid_of(&g)))
 }
 
 #[derive(serde::Serialize)]
