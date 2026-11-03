@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fps-allow"
+description = "Enables the fps_allow command without any pre-configured scope."
+commands.allow = ["fps_allow"]
+
+[[permission]]
+identifier = "deny-fps-allow"
+description = "Denies the fps_allow command without any pre-configured scope."
+commands.deny = ["fps_allow"]

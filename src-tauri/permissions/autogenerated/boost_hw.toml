@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-boost-hw"
+description = "Enables the boost_hw command without any pre-configured scope."
+commands.allow = ["boost_hw"]
+
+[[permission]]
+identifier = "deny-boost-hw"
+description = "Denies the boost_hw command without any pre-configured scope."
+commands.deny = ["boost_hw"]
