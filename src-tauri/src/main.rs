@@ -20,6 +20,7 @@ mod ets2;
 mod extra;
 mod farming;
 mod fps;
+mod fthr;
 mod gog;
 mod home;
 mod logs;
@@ -543,6 +544,11 @@ fn main() {
         let key = conf["plugins"]["updater"]["pubkey"].as_str().unwrap_or("");
         let (data, sig) = (fs::read(&f).unwrap_or_default(), fs::read_to_string(format!("{f}.sig")).unwrap_or_default());
         println!("{:?}", catalog::verify_with(key, &data, &sig));
+        return;
+    }
+    // Dev aid: `hotswap --fthr [save_clip|toggle_recording|...]` prints FTHR Clips' status or sends it a command.
+    if let Some(i) = std::env::args().position(|a| a == "--fthr") {
+        fthr::test(std::env::args().nth(i + 1));
         return;
     }
     // Dev aid: `hotswap --fps <exe name>` prints that app's frame rate for ten seconds.
@@ -1209,7 +1215,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            load_data, save_data, scan_library, running_game, launch_game, set_hotkeys, fetch_home, fetch_source, log_ui, export_logs, close_game, trainer_set, setup_check, catalog::catalog_remote, boost::boost_apps, boost::boost_set, boost::boost_clean, boost::boost_hw, trainer_action, set_close_to_tray, get_autostart, set_autostart, cmd_maps::map_show, cmd_maps::map_hide, cmd_maps::map_world, cmd_maps::map_background, check_update, install_update, app_version, overlay::overlay_notify, overlay::overlay_close, overlay::overlay_menu, overlay::overlay_input, overlay::overlay_ready, overlay::overlay_fit, cmd_mods::mods_release, cmd_mods::ts_search, cmd_mods::ts_list, cmd_mods::ts_install, cmd_mods::ts_install_file, cmd_mods::ts_set_enabled, cmd_mods::ts_remove, cmd_discord::voice_start, cmd_discord::voice_options, cmd_discord::voice_stop, cmd_discord::voice_state, cmd_discord::voice_send, system_stats, system_stats_full, fps::fps_allow, fps::fps_status, cmd_discord::discord_presence, overlay::radar_show, set_mini, cmd_mods::fmods_list, cmd_mods::fmods_set_enabled, cmd_mods::fmods_remove, cmd_mods::fmods_install, cmd_mods::fmods_downloads, cmd_mods::fmods_pick, cmd_mods::nexus_search, cmd_mods::mods_state, cmd_mods::mods_search, cmd_mods::mods_install, cmd_mods::mods_uninstall, cmd_mods::mods_set_enabled, cmd_mods::mods_updates, cmd_maps::map_player, cmd_maps::map_teleport, cmd_maps::map_pins_load, cmd_maps::map_pins_save
+            load_data, save_data, scan_library, running_game, launch_game, set_hotkeys, fetch_home, fetch_source, log_ui, export_logs, close_game, trainer_set, setup_check, catalog::catalog_remote, boost::boost_apps, boost::boost_set, boost::boost_clean, boost::boost_hw, trainer_action, set_close_to_tray, get_autostart, set_autostart, cmd_maps::map_show, cmd_maps::map_hide, cmd_maps::map_world, cmd_maps::map_background, check_update, install_update, app_version, overlay::overlay_notify, overlay::overlay_close, overlay::overlay_menu, overlay::overlay_input, overlay::overlay_ready, overlay::overlay_fit, cmd_mods::mods_release, cmd_mods::ts_search, cmd_mods::ts_list, cmd_mods::ts_install, cmd_mods::ts_install_file, cmd_mods::ts_set_enabled, cmd_mods::ts_remove, cmd_discord::voice_start, cmd_discord::voice_options, cmd_discord::voice_stop, cmd_discord::voice_state, cmd_discord::voice_send, system_stats, system_stats_full, fps::fps_allow, fps::fps_status, fthr::clips_status, fthr::clips_command, fthr::clips_open, cmd_discord::discord_presence, overlay::radar_show, set_mini, cmd_mods::fmods_list, cmd_mods::fmods_set_enabled, cmd_mods::fmods_remove, cmd_mods::fmods_install, cmd_mods::fmods_downloads, cmd_mods::fmods_pick, cmd_mods::nexus_search, cmd_mods::mods_state, cmd_mods::mods_search, cmd_mods::mods_install, cmd_mods::mods_uninstall, cmd_mods::mods_set_enabled, cmd_mods::mods_updates, cmd_maps::map_player, cmd_maps::map_teleport, cmd_maps::map_pins_load, cmd_maps::map_pins_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running HotSwap");

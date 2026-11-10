@@ -7,6 +7,9 @@
   ],
   "permissions": [
     "core:event:default",
+    "allow-clips-command",
+    "allow-clips-open",
+    "allow-clips-status",
     "allow-log-ui",
     "allow-overlay-fit",
     "allow-overlay-input",

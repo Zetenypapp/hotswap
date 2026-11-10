@@ -11,6 +11,7 @@ const FEATURES = [
   ['maps', 'Maps', 'Interactive maps for supported games.', 'The Maps page and its code never load.'],
   ['mods', 'Mods page', 'Installing mods from Thunderstore, Nexus and SpaceDock.', 'The Mods page and its mod lists never load.'],
   ['discord', 'Discord', 'Who’s talking, Discord popups and the Discord tab in the overlay.', 'No connection to the Discord app for voice. Your Discord status has its own switch below.'],
+  ['clips', 'FTHR Clips', 'The Clips tab in the overlay: save clips, record and take screenshots with FTHR Clips.', 'No Clips tab, and HotSwap never connects to FTHR.'],
   ['stats', 'System stats', 'Graphs of your PC in the overlay, the stats widget and stats on the HUD.', 'No hardware readings at all.'],
   ['setOverlay', 'In-game overlay', 'Popups, the HUD, the cheat sheet and the overlay menu over your game.', 'The overlay window never opens.'],
   ['setSounds', 'Sounds', 'A short chime when a mod turns on or off.', ''],
@@ -23,7 +24,7 @@ const featOn = k => FEATURE_STATE[k] ? !!state[FEATURE_STATE[k]] : feat(k);
 // overlay is on in all of them but Boost only.
 const MODES = [
   ['all', 'Everything', 'All of HotSwap.', []],
-  ['boost', 'Boost only', 'Home and Boost. Nothing else loads.', ['library', 'game', 'maps', 'mods', 'discord', 'stats']],
+  ['boost', 'Boost only', 'Home and Boost. Nothing else loads.', ['library', 'game', 'maps', 'mods', 'discord', 'stats', 'clips']],
   ['overlay', 'Overlay only', 'Home and the in-game overlay with Discord, stats and Boost.', ['library', 'game', 'maps', 'mods']],
 ];
 const OWN_FEATURES = FEATURES.map(f => f[0]).filter(k => !FEATURE_STATE[k]);
@@ -66,6 +67,7 @@ function applyFeature(k) {
     lastMenu = ''; pushMenu();
   }
   if (k === 'stats') { pushStatsCfg(true); lastMenu = ''; pushMenu(); }
+  if (k === 'clips') { lastMenu = ''; pushMenu(); }
 }
 
 document.addEventListener('click', e => {

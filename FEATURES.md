@@ -144,6 +144,7 @@ Press **Insert** (or your own key) in a game for a full menu over it. The tabs a
 ![Discord voice in the overlay](docs/overlay-discord.jpg)
 
 - 💬 **Discord:** your voice call, if Discord voice is on: who's in it and who's talking, mute, deafen, leave, per-person volume, your mic and headphone volume, noise suppression, and switching voice channels.
+- 🪶 **FTHR Clips:** controls for [FTHR Clips](https://fthrclips.com), the free open-source clipping app: **Save clip**, **Record**, **Mark highlight** and **Screenshot**, with its live status (replay buffer on, recording). Needs FTHR 2.1 or newer with its **Stream Deck Bridge** plugin on (FTHR → Settings → Plugins). HotSwap uses that plugin's local, token-protected connection on your PC, so FTHR does all the capturing. It can be switched off in Settings → Features.
 ![System stats in the overlay](docs/overlay-system.jpg)
 
 - 📊 **System:** live graphs of your PC while you play. Pick what to see on HotSwap's Overlay page:

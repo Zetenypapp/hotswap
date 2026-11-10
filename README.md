@@ -37,6 +37,7 @@ Press **Insert** in a game for HotSwap's menu right over it:
 
 - 🎮 **Mods:** every mod as a card, with profiles, pause and all off
 - 💬 **Discord:** your voice call in game: who's talking, mute, deafen, volumes and channels
+- 🪶 **FTHR Clips:** save a clip, record, mark a highlight or take a screenshot with [FTHR Clips](https://fthrclips.com), through its Stream Deck Bridge plugin
 - 🏎️ **Boost:** shift gears on the rev-counter dial, Quick clean, and change any gear in Advanced
 - 📊 **System stats:** live graphs of your CPU, GPU, memory, temperatures, disk, network and the game itself
 
@@ -95,7 +96,7 @@ HotSwap is for **single-player and private games only**. It refuses to mod anyth
 HotSwap changes other programs' memory, so it's built to be careful with its own:
 
 - **Locked-down app window.** A strict Content Security Policy: only HotSwap's own script files run. No inline code, no `eval`, no plugins, and the app can only talk to itself and GitHub's API. Even if a mod description or news item contained malicious code, it couldn't run.
-- **Least privilege for every window.** The in-game overlay can only use the 9 commands it needs, the enemy radar only receives positions, and the map website only gets the map commands. Neither can launch games, write files or install mods.
+- **Least privilege for every window.** The in-game overlay can only use the 12 commands it needs, the enemy radar only receives positions, and the map website only gets the map commands. Neither can launch games, write files or install mods.
 - **Signed updates.** Every update is checked against HotSwap's signing key before it installs.
 - **Safe downloads.** Mod archives come over HTTPS, have size limits, and are unpacked with a zip library that refuses paths escaping the target folder (kept up to date for known zip security issues).
 - **Local only.** The game connections (Stormworks addon, Ren'Py, Godot and GTA scripts, web games' debug port) only listen on `127.0.0.1`, so nothing on your network can reach them, and the scripts only accept answers from HotSwap's own port.
@@ -118,6 +119,7 @@ Copyright © 2026 Zetenypapp
 ## 📜 Credits
 
 - Euro Truck Simulator 2 and American Truck Simulator mods: ported from [ETS2Trainer](https://github.com/Despical/ETS2Trainer) by Berke Akçen (Despical), GPL-3.0
+- FTHR Clips logo: used with the permission of [FTHR Clips](https://fthrclips.com)
 - Font: [Figtree](https://github.com/erikdkennedy/figtree), SIL Open Font License
 - Game news and store data: Steam Web API and storefront; deals: [CheapShark](https://www.cheapshark.com)
 - Game artwork is read from your own Steam install and is never bundled or redistributed

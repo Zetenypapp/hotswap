@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clips-status"
+description = "Enables the clips_status command without any pre-configured scope."
+commands.allow = ["clips_status"]
+
+[[permission]]
+identifier = "deny-clips-status"
+description = "Denies the clips_status command without any pre-configured scope."
+commands.deny = ["clips_status"]

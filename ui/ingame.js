@@ -33,7 +33,7 @@ function pushMenu() {
   const g = findGame(runningId());
   const mods = g && modsOf(g).length;
   if (!mods && !dcMenuOk()) { toggleMenu(false); return; }
-  const data = { ...(mods ? menuData(g) : dcMenuData()), noDc: !feat('discord'), noSys: !feat('stats'), noBoost: !feat('boost'), boost: boostGear(), boostGame: !!runningId(), boostStatus: BOOST_STATUS, boostGears: [0, 1, 2, 3, 4, 5].map(boostGearCfg), boostEdit: state.boostEdit || 1, accent: accentOf(state.pageColors?.overlay || state.accent).c }, sig = JSON.stringify(data);
+  const data = { ...(mods ? menuData(g) : dcMenuData()), noDc: !feat('discord'), noSys: !feat('stats'), noBoost: !feat('boost'), noClips: !feat('clips'), boost: boostGear(), boostGame: !!runningId(), boostStatus: BOOST_STATUS, boostGears: [0, 1, 2, 3, 4, 5].map(boostGearCfg), boostEdit: state.boostEdit || 1, accent: accentOf(state.pageColors?.overlay || state.accent).c }, sig = JSON.stringify(data);
   if (sig === lastMenu) return;
   lastMenu = sig;
   overlaySend({ kind: 'menu', open: true, data });

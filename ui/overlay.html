@@ -77,6 +77,7 @@
   .view.on { box-shadow: 0 0 0 2px #fff; opacity: 1; }
   .view.dc { background: #5865f2; }
   .view.sys { background: rgba(255, 255, 255, .1); color: var(--fg); }
+  .view.fthr { background: #fff; color: #0b0b0b; } /* FTHR's black-on-white logo, like Discord's blurple tile */
   /* System tab: live line graphs. */
   .sys-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 4px 18px 18px; }
   .sys-card { padding: 11px 13px 9px; border-radius: 14px; background: rgba(255, 255, 255, .05); min-width: 0; }
@@ -110,6 +111,38 @@
   .badv-sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .15s; }
   .badv-sw.on { background: var(--c, #f3b73f); }
   .badv-sw.on::after { left: 21px; }
+  /* Clips: FTHR Clips' controls (save a clip, record, highlight, screenshot). */
+  .cl { display: grid; gap: 12px; padding: 4px 22px 16px; }
+  .cl .sys-note { padding: 0; }
+  .cl-hero { position: relative; overflow: hidden; display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: center; padding: 20px 22px; border-radius: 20px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--k) 30%, rgba(20, 22, 28, .9)), rgba(20, 22, 28, .82) 70%); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--k) 40%, transparent); }
+  .fthr-ic { display: inline-block; width: 22px; height: 22px; flex: none; background: currentColor; -webkit-mask: url(fthr.png) center / contain no-repeat; mask: url(fthr.png) center / contain no-repeat; }
+  .cl-name { display: flex; align-items: center; gap: 10px; }
+  .cl-name .fthr-ic { width: 30px; height: 30px; }
+  .cl-hero b.big { font-size: 26px; font-weight: 900; letter-spacing: -.01em; }
+  .cl-hero p { margin: 4px 0 0; font-size: 13px; opacity: .72; max-width: 46ch; }
+  .cl-kick { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .8; margin-bottom: 6px; }
+  .cl-kick i { width: 9px; height: 9px; border-radius: 50%; background: var(--k); box-shadow: 0 0 0 4px color-mix(in srgb, var(--k) 25%, transparent); }
+  .cl-hero.rec .cl-kick i { animation: clrec 1.2s ease-in-out infinite; }
+  @keyframes clrec { 50% { opacity: .25; } }
+  .cl-save { width: 132px; height: 132px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center; align-content: center; gap: 6px; font: inherit; font-size: 15px; font-weight: 900; color: var(--ink);
+    background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--c) 70%, #fff), var(--c) 60%); box-shadow: 0 10px 30px color-mix(in srgb, var(--c) 45%, transparent), inset 0 -4px 0 rgba(0, 0, 0, .18); transition: transform .12s; }
+  .cl-save:hover { transform: scale(1.04); }
+  .cl-save:active { transform: scale(.97); }
+  .cl-save[disabled] { filter: grayscale(1); opacity: .45; cursor: default; transform: none; }
+  .cl-save svg { width: 34px; height: 34px; }
+  .cl-acts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .cl-act { display: grid; gap: 4px; justify-items: start; padding: 12px 14px; border: 0; border-radius: 14px; background: rgba(255, 255, 255, .07); color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+  .cl-act:hover { background: rgba(255, 255, 255, .13); }
+  .cl-act b { font-size: 14px; }
+  .cl-act span { font-size: 12px; opacity: .65; }
+  .cl-act.on { background: #e5484d; color: #fff; }
+  .cl-act.on span { opacity: .85; }
+  .cl-act[disabled] { opacity: .4; cursor: default; }
+  .cl-act.sel, .cl-save.sel { outline: 2px solid var(--c); outline-offset: 3px; }
+  .cl-msg { font-size: 13px; font-weight: 700; padding: 8px 12px; border-radius: 10px; background: rgba(255, 255, 255, .07); }
+  .cl-msg.err { background: rgba(229, 72, 77, .22); }
+  .cl-steps { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 13px; opacity: .85; }
   /* Boost: the same hero, dial and gear cards as HotSwap's Boost page (styles.css), a bit smaller. */
   .ob { display: grid; gap: 12px; padding: 4px 22px 16px; }
   .ob .sys-note { padding: 0; }
@@ -430,12 +463,12 @@
     sel = Math.max(0, Math.min(sel, mods.length - 1));
     const status = menu.paused ? 'Mods paused' : menu.connected ? 'Live in the game' : (menu.message || 'Connecting…');
     $('menu').innerHTML = `
-      <div class="m-head">${menu.discordOnly ? logo(34) : `<button class="view${view === 'mods' ? ' on' : ''}" data-view="mods" title="Mods">${logo(34)}</button>`}${menu.noDc ? '' : `<button class="view dc${view === 'discord' ? ' on' : ''}" data-view="discord" title="Discord">${DISCORD}</button>`}${menu.noSys ? '' : `<button class="view sys${view === 'system' ? ' on' : ''}" data-view="system" title="System">${CHART}</button>`}${menu.noBoost ? '' : `<button class="view sys${view === 'boost' ? ' on' : ''}" data-view="boost" title="Boost">${GAUGE}</button>`}
-        ${menu.discordOnly ? `<div class="m-title"><b>${view === 'system' ? 'System' : view === 'boost' ? 'Boost' : 'Discord'}</b><span>${esc(menu.game || 'No game running')}</span></div>` : `<div class="m-title"><b>${esc(menu.game)}</b><span><span class="dot${menu.connected && !menu.paused ? ' ok' : ''}"></span>${esc(status)} · ${menu.count} on</span></div>
+      <div class="m-head">${menu.discordOnly ? logo(34) : `<button class="view${view === 'mods' ? ' on' : ''}" data-view="mods" title="Mods">${logo(34)}</button>`}${menu.noDc ? '' : `<button class="view dc${view === 'discord' ? ' on' : ''}" data-view="discord" title="Discord">${DISCORD}</button>`}${menu.noClips ? '' : `<button class="view fthr${view === 'clips' ? ' on' : ''}" data-view="clips" title="FTHR Clips">${FTHR}</button>`}${menu.noSys ? '' : `<button class="view sys${view === 'system' ? ' on' : ''}" data-view="system" title="System">${CHART}</button>`}${menu.noBoost ? '' : `<button class="view sys${view === 'boost' ? ' on' : ''}" data-view="boost" title="Boost">${GAUGE}</button>`}
+        ${menu.discordOnly ? `<div class="m-title"><b>${view === 'system' ? 'System' : view === 'boost' ? 'Boost' : view === 'clips' ? 'FTHR Clips' : 'Discord'}</b><span>${esc(menu.game || 'No game running')}</span></div>` : `<div class="m-title"><b>${esc(menu.game)}</b><span><span class="dot${menu.connected && !menu.paused ? ' ok' : ''}"></span>${esc(status)} · ${menu.count} on</span></div>
         <button class="btn${menu.paused ? ' on' : ''}" data-cmd="pause">${menu.paused ? 'Resume' : 'Pause'}</button>
         <button class="btn danger" data-cmd="panic">All off</button>`}
         <button class="btn round" data-cmd="close" title="Close (${esc(menu.menuKey)})">✕</button></div>
-      ${view === 'boost' ? boostPanel() : view === 'system' ? systemPanel() : view === 'discord' ? discordPanel() : `<div class="m-bar">
+      ${view === 'clips' ? clipsPanel() : view === 'boost' ? boostPanel() : view === 'system' ? systemPanel() : view === 'discord' ? discordPanel() : `<div class="m-bar">
         <button class="tab${tab === 'all' ? ' on' : ''}" data-tab="all">All</button>
         ${menu.cats.map(c => `<button class="tab${tab === c.name ? ' on' : ''}" data-tab="${esc(c.name)}">${esc(c.name)}<span class="n">${c.mods.length}</span></button>`).join('')}
         <span class="sp"></span>
@@ -497,6 +530,61 @@
     if (menu && view === 'system' && !dragging) renderMenu();
     renderStatsWidget();
     if (hud) renderHud();
+  }
+  // Clips: FTHR Clips (a separate open-source clipping app) through its own local bridge. The
+  // status is read once a second while this tab shows; FTHR does the saving and says when it's done.
+  const CLIP = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="13.5" height="13" rx="3"/><path d="m16 10.2 5.5-3.2v10l-5.5-3.2"/></svg>';
+  // FTHR's own logo (used with their approval), drawn in the text colour like the other tab icons.
+  const FTHR = '<i class="fthr-ic" aria-hidden="true"></i>';
+  let clips = null, clipMsg = null, clipSel = 0, clipBusy = false;
+  const CLIP_ACTS = ['save_clip', 'toggle_recording', 'mark_highlight', 'save_screenshot'];
+  async function pollClips() {
+    if (!menu || view !== 'clips' || menu.noClips || clipBusy) return;
+    clipBusy = true;
+    const s = await invoke('clips_status').catch(() => null);
+    clipBusy = false;
+    if (JSON.stringify(s) !== JSON.stringify(clips)) { clips = s; if (menu && view === 'clips' && !dragging) renderMenu(); }
+  }
+  setInterval(pollClips, 1000);
+  async function clipDo(cmd) {
+    const done = { save_clip: 'Clip requested: FTHR is saving it', mark_highlight: 'Highlight marked', save_screenshot: 'Screenshot requested',
+      toggle_recording: clips?.recording === 'idle' ? 'Recording started' : 'Recording stopped' }[cmd];
+    try { await invoke('clips_command', { command: cmd }); clipMsg = { t: done }; }
+    catch (e) { clipMsg = { t: String(e), err: true }; }
+    const m = clipMsg;
+    setTimeout(() => { if (clipMsg === m) { clipMsg = null; if (view === 'clips') renderMenu(); } }, 3500);
+    renderMenu();
+    setTimeout(pollClips, 300);
+  }
+  function clipsPanel() {
+    const s = clips;
+    const msg = clipMsg ? `<div class="cl-msg${clipMsg.err ? ' err' : ''}">${esc(clipMsg.t)}</div>` : '';
+    const card = (kick, k, title, text, extra) => `<div class="cl"><section class="cl-hero" style="--k:${k}"><div><div class="cl-kick"><i></i>${kick}</div><b class="big cl-name">${FTHR}${title}</b><p>${text}</p>${extra || ''}</div></section>${msg}</div>`;
+    if (!s) return card('FTHR Clips', '#8a8f98', 'Looking for FTHR…', 'Checking whether FTHR Clips is running.');
+    if (s.state === 'missing') return card('Not installed', '#8a8f98', 'FTHR Clips', 'A free, open-source clipping app: instant replays, recordings and screenshots with no account. Get it from fthrclips.com, then its controls show up here.');
+    if (s.state === 'closed') return card('Not running', '#f3b73f', 'FTHR Clips is closed', 'Start it to save clips and record from here.', '<div style="margin-top:12px"><button class="btn on" data-clipopen>Open FTHR Clips</button></div>');
+    if (s.state === 'noplugin') return card('One step left', '#f3b73f', 'Turn on FTHR’s bridge', 'HotSwap talks to FTHR through its Stream Deck Bridge plugin (FTHR 2.1 or newer).',
+      '<ol class="cl-steps" style="margin-top:10px"><li>In FTHR, open Settings → Plugins</li><li>Install the Stream Deck Bridge plugin (fthr-stream-deck.zip) and keep it on</li></ol>');
+    const rec = s.recording !== 'idle', recNow = s.recording === 'recording';
+    const live = s.ready && s.capturing;
+    const kick = !s.ready ? 'Starting' : recNow ? 'Recording' : rec ? 'Recording · ' + esc(s.recording) : live ? 'Replay buffer on' : 'Not capturing';
+    const k = !s.ready ? '#8a8f98' : recNow ? '#e5484d' : live ? '#3fd49a' : '#f3b73f';
+    const text = !s.ready ? 'FTHR is getting ready.' : live ? 'Save the last moments as a clip, with FTHR’s replay length. FTHR shows when it’s saved.' : 'FTHR isn’t capturing right now. Start capture in FTHR to save replays.';
+    const sel = i => (clipSel === i ? ' sel' : '');
+    const off = s.ready ? '' : ' disabled';
+    return `<div class="cl">
+      <section class="cl-hero${recNow ? ' rec' : ''}" style="--k:${k}">
+        <div><div class="cl-kick"><i></i>${kick}</div><b class="big cl-name">${FTHR}FTHR Clips</b><p>${text}</p></div>
+        <button class="cl-save${sel(0)}" data-clip="save_clip"${s.ready && live ? '' : ' disabled'}>${CLIP}Save clip</button>
+      </section>
+      <div class="cl-acts">
+        <button class="cl-act${rec ? ' on' : ''}${sel(1)}" data-clip="toggle_recording"${off}><b>${rec ? 'Stop recording' : 'Record'}</b><span>${rec ? 'Saves the recording' : 'A full recording until you stop'}</span></button>
+        <button class="cl-act${sel(2)}" data-clip="mark_highlight"${s.ready && live ? '' : ' disabled'}><b>Mark highlight</b><span>Flags this moment</span></button>
+        <button class="cl-act${sel(3)}" data-clip="save_screenshot"${off}><b>Screenshot</b><span>With FTHR’s settings</span></button>
+      </div>
+      ${msg}
+      <p class="sys-note">Keys: arrows to pick, Enter to press. FTHR’s own hotkeys keep working too.</p>
+    </div>`;
   }
   const GAUGE = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 18a9 9 0 1 1 16 0"/><path d="m12 15 4-5"/></svg>';
   // Boost: the same dial as on HotSwap's Boost page; clicking a segment shifts right away.
@@ -603,10 +691,13 @@
       else if (v.dataset.leave) dcSend('SELECT_VOICE_CHANNEL', { channel_id: null });
       else if (v.dataset.vmode) { if (voice) { voice.mode = v.dataset.vmode; dcSend('SET_VOICE_SETTINGS', { mode: { type: v.dataset.vmode } }); } }
       else if (v.dataset.noise) { if (voice) { voice.noise = !voice.noise; dcSend('SET_VOICE_SETTINGS', { noise_suppression: voice.noise }); } }
-      else if (v.dataset.view) { view = v.dataset.view; try { localStorage.setItem('hs.ov.view', view); } catch {} }
+      else if (v.dataset.view) { view = v.dataset.view; try { localStorage.setItem('hs.ov.view', view); } catch {} if (view === 'clips') pollClips(); }
       return renderMenu();
     }
     if (t.closest('[data-bclean]')) { send({ type: 'boostClean' }); return; }
+    const cb = t.closest('[data-clip]');
+    if (cb) { if (!cb.disabled) { clipSel = CLIP_ACTS.indexOf(cb.dataset.clip); clipDo(cb.dataset.clip); } return; }
+    if (t.closest('[data-clipopen]')) { invoke('clips_open').then(() => { clipMsg = { t: 'Starting FTHR Clips…' }; renderMenu(); }, e => { clipMsg = { t: String(e), err: true }; renderMenu(); }); return; }
     const bt = t.closest('[data-btab]');
     if (bt) { boostTab = bt.dataset.btab; return renderMenu(); }
     const be = t.closest('[data-bedit]');
@@ -674,7 +765,7 @@
     if (!menu) return false;
     // The tabs along the top, in order (LT and RT on a controller).
     if (k === 'ViewNext' || k === 'ViewPrev') {
-      const views = [!menu.discordOnly && 'mods', !menu.noDc && 'discord', !menu.noSys && 'system', !menu.noBoost && 'boost'].filter(Boolean);
+      const views = [!menu.discordOnly && 'mods', !menu.noDc && 'discord', !menu.noClips && 'clips', !menu.noSys && 'system', !menu.noBoost && 'boost'].filter(Boolean);
       view = views[(views.indexOf(view) + (k === 'ViewNext' ? 1 : -1) + views.length) % views.length];
       try { localStorage.setItem('hs.ov.view', view); } catch {}
       renderMenu();
@@ -684,6 +775,16 @@
     if (view === 'boost' && boostTab === 'gears' && (k === 'ArrowLeft' || k === 'ArrowRight')) {
       menu.boost = Math.max(0, Math.min(5, (menu.boost || 0) + (k === 'ArrowRight' ? 1 : -1)));
       send({ type: 'boost', level: menu.boost });
+      renderMenu();
+      return true;
+    }
+    // Clips: arrows pick a button, Enter presses it.
+    if (view === 'clips' && clips?.state === 'ok') {
+      if (k === 'ArrowRight' || k === 'ArrowDown') clipSel = Math.min(3, clipSel + 1);
+      else if (k === 'ArrowLeft' || k === 'ArrowUp') clipSel = Math.max(0, clipSel - 1);
+      else if (k === 'Enter' || k === ' ') { const b = $('menu').querySelector(`[data-clip="${CLIP_ACTS[clipSel]}"]`); if (b && !b.disabled) clipDo(CLIP_ACTS[clipSel]); return true; }
+      else if (k === 'Escape') { send({ type: 'close' }); return true; }
+      else return false;
       renderMenu();
       return true;
     }
@@ -730,6 +831,8 @@
       if (menu?.noDc && view === 'discord') view = menu.discordOnly ? 'system' : 'mods';
       if (menu?.noSys && view === 'system') view = menu.discordOnly ? 'discord' : 'mods';
       if (menu?.noBoost && view === 'boost') view = menu.discordOnly ? 'discord' : 'mods';
+      if (menu?.noClips && view === 'clips') view = menu.discordOnly ? 'discord' : 'mods';
+      if (view === 'clips') pollClips();
       return renderMenu();
     }
     if (p.kind === 'theme') return;

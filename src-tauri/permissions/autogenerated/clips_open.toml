@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clips-open"
+description = "Enables the clips_open command without any pre-configured scope."
+commands.allow = ["clips_open"]
+
+[[permission]]
+identifier = "deny-clips-open"
+description = "Denies the clips_open command without any pre-configured scope."
+commands.deny = ["clips_open"]
