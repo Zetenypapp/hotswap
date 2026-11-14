@@ -1,10 +1,19 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "HotSwap",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "identifier": "app.hotswap.desktop",
   "build": {
-    "frontendDist": "../ui"
+    "frontendDist": "../ui",
+    "beforeDevCommand": {
+      "script": "src-tauri\\scripts\\build-engine.cmd debug",
+      "cwd": "..",
+      "wait": true
+    },
+    "beforeBuildCommand": {
+      "script": "src-tauri\\scripts\\build-engine.cmd release",
+      "cwd": ".."
+    }
   },
   "app": {
     "withGlobalTauri": true,
@@ -37,7 +46,9 @@
         "base-uri": "'none'",
         "form-action": "'none'"
       },
-      "dangerousDisableAssetCspModification": ["style-src"],
+      "dangerousDisableAssetCspModification": [
+        "style-src"
+      ],
       "assetProtocol": {
         "enable": true,
         "scope": []
@@ -60,7 +71,10 @@
     "icon": [
       "icons/icon.ico"
     ],
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "externalBin": [
+      "binaries/hotswap-engine"
+    ]
   },
   "plugins": {
     "updater": {

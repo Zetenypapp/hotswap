@@ -114,7 +114,7 @@ impl Watch {
         sys.processes()
             .values()
             .filter(|p| p.exe().is_some_and(|e| e.to_string_lossy().to_lowercase().starts_with(&dir)))
-            .filter(|p| p.kill())
+            .filter(|p| end(p.pid().as_u32()))
             .count()
     }
 
@@ -164,4 +164,25 @@ fn steam_running_app() -> Option<String> {
     }
     #[allow(unreachable_code)]
     None
+}
+
+/// Ends a process right away, like End task in Task Manager (sysinfo's kill() runs taskkill.exe
+/// for this, which security tools watch for).
+fn end(pid: u32) -> bool {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::{
+            Foundation::CloseHandle,
+            System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE},
+        };
+        let h = OpenProcess(PROCESS_TERMINATE, 0, pid);
+        if h.is_null() {
+            return false;
+        }
+        let ok = TerminateProcess(h, 1) != 0;
+        CloseHandle(h);
+        return ok;
+    }
+    #[allow(unreachable_code)]
+    false
 }

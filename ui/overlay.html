@@ -142,6 +142,13 @@
   .cl-act.sel, .cl-save.sel { outline: 2px solid var(--c); outline-offset: 3px; }
   .cl-msg { font-size: 13px; font-weight: 700; padding: 8px 12px; border-radius: 10px; background: rgba(255, 255, 255, .07); }
   .cl-msg.err { background: rgba(229, 72, 77, .22); }
+  .cl-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+  .cl-list li { display: flex; align-items: center; gap: 10px; padding: 7px 11px; border-radius: 10px; background: rgba(255, 255, 255, .06); }
+  .cl-list .ic { width: 20px; text-align: center; flex: none; }
+  .cl-list .t { display: grid; min-width: 0; flex: 1; }
+  .cl-list .t b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cl-list .t span { font-size: 11px; opacity: .6; }
+  .cl-list .ago { font-size: 12px; opacity: .6; flex: none; }
   .cl-steps { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 13px; opacity: .85; }
   /* Boost: the same hero, dial and gear cards as HotSwap's Boost page (styles.css), a bit smaller. */
   .ob { display: grid; gap: 12px; padding: 4px 22px 16px; }
@@ -556,6 +563,15 @@
     renderMenu();
     setTimeout(pollClips, 300);
   }
+  // The latest saved files (HotSwap's FTHR plugin only; FTHR's Stream Deck bridge doesn't list them).
+  function clipsList(s) {
+    if (s.plugin !== 'hotswap') return '';
+    if (!s.recent?.length) return '<p class="sys-note">No clips saved yet.</p>';
+    const ago = t => { const d = Math.max(0, Date.now() / 1000 - t); return d < 60 ? 'just now' : d < 3600 ? `${Math.floor(d / 60)} min ago` : d < 86400 ? `${Math.floor(d / 3600)} h ago` : `${Math.floor(d / 86400)} d ago`; };
+    const size = b => b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${Math.round(b / 1e6)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`;
+    const ic = { clip: '🎬', recording: '⏺', screenshot: '🖼' };
+    return `<div class="bdo-h">Latest saved</div><ul class="cl-list">${s.recent.map(f => `<li><span class="ic">${ic[f.kind] || '🎬'}</span><span class="t"><b>${esc(f.name)}</b><span>${esc(f.group)} · ${size(f.size)}</span></span><span class="ago">${ago(f.modified)}</span></li>`).join('')}</ul>`;
+  }
   function clipsPanel() {
     const s = clips;
     const msg = clipMsg ? `<div class="cl-msg${clipMsg.err ? ' err' : ''}">${esc(clipMsg.t)}</div>` : '';
@@ -569,7 +585,8 @@
     const live = s.ready && s.capturing;
     const kick = !s.ready ? 'Starting' : recNow ? 'Recording' : rec ? 'Recording · ' + esc(s.recording) : live ? 'Replay buffer on' : 'Not capturing';
     const k = !s.ready ? '#8a8f98' : recNow ? '#e5484d' : live ? '#3fd49a' : '#f3b73f';
-    const text = !s.ready ? 'FTHR is getting ready.' : live ? 'Save the last moments as a clip, with FTHR’s replay length. FTHR shows when it’s saved.' : 'FTHR isn’t capturing right now. Start capture in FTHR to save replays.';
+    const len = s.clipLength ? (s.clipLength >= 60 && s.clipLength % 60 === 0 ? `${s.clipLength / 60} minute${s.clipLength > 60 ? 's' : ''}` : `${s.clipLength} seconds`) : null;
+    const text = !s.ready ? 'FTHR is getting ready.' : live ? `Save the last ${len || 'moments'} as a clip. FTHR shows when it’s saved.` : 'FTHR isn’t capturing right now. Start capture in FTHR to save replays.';
     const sel = i => (clipSel === i ? ' sel' : '');
     const off = s.ready ? '' : ' disabled';
     return `<div class="cl">
@@ -583,6 +600,7 @@
         <button class="cl-act${sel(3)}" data-clip="save_screenshot"${off}><b>Screenshot</b><span>With FTHR’s settings</span></button>
       </div>
       ${msg}
+      ${clipsList(s)}
       <p class="sys-note">Keys: arrows to pick, Enter to press. FTHR’s own hotkeys keep working too.</p>
     </div>`;
   }

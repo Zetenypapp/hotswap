@@ -66,7 +66,9 @@ cd src-tauri
 cargo run
 ```
 
-Dev helpers: `hotswap.exe --scan` prints your detected library, `--home` prints the live Home data, `--trainer-peek` and `--machine-peek` inspect a running Satisfactory.
+`cargo tauri dev` builds both programs: the app and the mod engine (`hotswap-engine.exe`).
+
+Dev helpers run in the mod engine: `hotswap-engine.exe --scan` prints your detected library, `--home` prints the live Home data, `--trainer-peek` and `--machine-peek` inspect a running Satisfactory. `tools/defender-watch.ps1` shows what Microsoft Defender did to HotSwap's files.
 
 ## 🔧 Modifying HotSwap
 
@@ -79,7 +81,7 @@ Want to change something? **[ARCHITECTURE.md](ARCHITECTURE.md)** lists every fil
 **Change with care:**
 - 🎮 **Game support** (`ksp.rs`, `sn1.rs`, `sn2.rs`, `repo.rs`, `extra.rs`, `mono.rs`, `ue/`): these write into a running game's memory. A wrong class, field or value can crash the game or put a bad value into your save, so test on a throwaway save and keep backups. Game updates can rename things; HotSwap looks classes and fields up by name, so a renamed one just stops that mod rather than breaking the game.
 - 🧩 **Mod installers** (`modloader.rs`, `modfiles.rs`, `thunderstore.rs`, `spacedock.rs`): these add and delete files in your game folders. A mistake can remove mod files or leave a game that won't start until you verify its files in Steam.
-- ⌨️ **New engine commands:** a new `#[tauri::command]` has to be added in three places, or the interface's call is silently refused: the `generate_handler!` list in `main.rs`, `src-tauri/build.rs`, and `src-tauri/capabilities/default.json`.
+- ⌨️ **New engine commands:** a new `#[tauri::command]` has to be added in three places, or the interface's call is silently refused: the `generate_handler!` list in `app.rs`, `src-tauri/build.rs`, and `src-tauri/capabilities/default.json`.
 
 **Don't:**
 - 🛡️ Add mods for games with anti-cheat, or for multiplayer advantages. HotSwap is single-player only and deliberately refuses games with VAC, Easy Anti-Cheat, BattlEye and similar; that check lives in the library code and must stay.
@@ -103,6 +105,11 @@ HotSwap changes other programs' memory, so it's built to be careful with its own
 - **Anti-cheat aware.** Games with anti-cheat get no mods. The few exceptions (Unturned singleplayer, GTA V story mode) turn themselves off the moment you go online, and HotSwap stops touching a game for good if its anti-cheat loads.
 - **Logged, not silent.** Anything the security policy blocks is written to HotSwap's logs (Settings → Export logs).
 - **Scanned.** Every release is checked with Microsoft Defender before it's published.
+- **Mods in their own program.** Everything that touches game memory runs in a separate mod engine (`hotswap-engine.exe`), so the app itself never contains that code. HotSwap never changes Windows Security's settings.
+
+### Windows Security flagged HotSwap?
+
+HotSwap's mods change a running game's memory, which malware does too, so Microsoft Defender's AI can mistake the mod engine for malware, mostly right after an update. If it does, only mods stop; the overlay, Boost and the rest keep working. To allow it again: **Windows Security → Virus & threat protection → Protection history**, pick the HotSwap entry, then **Actions → Allow** (or Restore). HotSwap is open source, so anyone can check what it does.
 
 ## 🔒 Privacy
 

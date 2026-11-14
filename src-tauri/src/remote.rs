@@ -1,13 +1,17 @@
 //! Calling functions inside a running game: a short stub is written into the game's memory and run
 //! on a new thread there. Used by the Mono and IL2CPP readers to ask the runtime itself where
 //! classes and fields are, so nothing depends on a game version's memory layout.
+//!
+//! Code memory is never writable and runnable at the same time: a stub is written while its memory
+//! is read-write, then switched to run-only before it starts. Data the stub reads or writes lives
+//! in a separate read-write block.
 
 use crate::ue::mem::Proc;
 use std::collections::HashMap;
 use windows_sys::Win32::{
     Foundation::CloseHandle,
     System::{
-        Memory::{VirtualAllocEx, VirtualFreeEx, VirtualQueryEx, MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_PRIVATE, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE},
+        Memory::{VirtualAllocEx, VirtualFreeEx, VirtualProtectEx, VirtualQueryEx, MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_PRIVATE, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_READWRITE},
         Threading::{CreateRemoteThread, WaitForSingleObject},
     },
 };
@@ -29,13 +33,10 @@ pub struct Attach {
 
 /// Calls the function at `f` with up to 4 arguments and returns what it returned.
 pub fn call(p: &Proc, f: u64, args: &[Arg], attach: Option<Attach>) -> Result<u64, String> {
-    let h = p.raw_handle();
-    let mem = unsafe { VirtualAllocEx(h, std::ptr::null(), 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE) } as u64;
-    if mem == 0 {
-        return Err("couldn't allocate memory in the game".into());
-    }
-    let (result, thread_slot, strings) = (mem + 0x400, mem + 0x408, mem + 0x500);
-    // Strings go after the code; numbers are used as is.
+    let data = Buf::new(p, 0x1000).ok_or("couldn't allocate memory in the game")?;
+    let mem = data.at;
+    let (result, thread_slot, strings) = (mem, mem + 8, mem + 0x10);
+    // Strings go in the data block; numbers are used as is.
     let mut values = [0u64; 4];
     let mut next = strings;
     for (i, a) in args.iter().take(4).enumerate() {
@@ -45,7 +46,6 @@ pub fn call(p: &Proc, f: u64, args: &[Arg], attach: Option<Attach>) -> Result<u6
                 let mut bytes = s.as_bytes().to_vec();
                 bytes.push(0);
                 if next + bytes.len() as u64 > mem + 0x1000 || !p.write_bytes(next, &bytes) {
-                    unsafe { VirtualFreeEx(h, mem as _, 0, MEM_RELEASE) };
                     return Err("couldn't write a string".into());
                 }
                 let at = next;
@@ -76,24 +76,38 @@ pub fn call(p: &Proc, f: u64, args: &[Arg], attach: Option<Attach>) -> Result<u6
         code.extend([0xFF, 0xD0]); // call rax
     }
     code.extend([0x48, 0x83, 0xC4, 0x28, 0x31, 0xC0, 0xC3]); // add rsp, 0x28; xor eax, eax; ret
-    let out = if !p.write_bytes(mem, &code) {
-        Err("couldn't write the call stub".to_string())
-    } else {
-        let thread = unsafe { CreateRemoteThread(h, std::ptr::null(), 0, Some(std::mem::transmute(mem as usize)), std::ptr::null(), 0, std::ptr::null_mut()) };
-        if thread.is_null() {
-            Err(format!("couldn't start the call ({})", std::io::Error::last_os_error()))
-        } else {
-            let waited = unsafe { WaitForSingleObject(thread, 3000) };
-            unsafe { CloseHandle(thread) };
-            if waited != 0 {
-                // The stub may still run: leave its memory alone.
-                return Err("the game didn't finish the call in time".into());
-            }
-            p.read::<u64>(result).ok_or_else(|| "couldn't read the result".into())
+    if let Err(e) = run(p, &code, 3000) {
+        // Still running: leave its data alone too.
+        if e.timed_out {
+            std::mem::forget(data);
         }
-    };
-    unsafe { VirtualFreeEx(h, mem as _, 0, MEM_RELEASE) };
-    out
+        return Err(e.message);
+    }
+    p.read::<u64>(result).ok_or_else(|| "couldn't read the result".into())
+}
+
+pub struct RunError {
+    pub message: String,
+    /// The stub may still be running (its memory is left allocated).
+    pub timed_out: bool,
+}
+
+/// Runs a stub of x64 code on a new thread in the game and waits up to `wait_ms` for it.
+pub fn run(p: &Proc, code: &[u8], wait_ms: u32) -> Result<(), RunError> {
+    let err = |message: String| RunError { message, timed_out: false };
+    let stub = Buf::code(p, code).ok_or_else(|| err("couldn't write the call stub".into()))?;
+    let thread = unsafe { CreateRemoteThread(p.raw_handle(), std::ptr::null(), 0, Some(std::mem::transmute(stub.at as usize)), std::ptr::null(), 0, std::ptr::null_mut()) };
+    if thread.is_null() {
+        return Err(err(format!("couldn't start the call ({})", std::io::Error::last_os_error())));
+    }
+    let waited = unsafe { WaitForSingleObject(thread, wait_ms) };
+    unsafe { CloseHandle(thread) };
+    if waited != 0 {
+        // Still running: never free code that's executing.
+        std::mem::forget(stub);
+        return Err(RunError { message: "the game didn't finish the call in time".into(), timed_out: true });
+    }
+    Ok(())
 }
 
 /// A small read-write buffer in the game, freed when dropped.
@@ -108,10 +122,12 @@ impl<'a> Buf<'a> {
         (at != 0).then_some(Buf { p, at })
     }
 
-    /// Memory the game can also run code from.
-    pub fn exec(p: &'a Proc, size: usize) -> Option<Buf<'a>> {
-        let at = unsafe { VirtualAllocEx(p.raw_handle(), std::ptr::null(), size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE) } as u64;
-        (at != 0).then_some(Buf { p, at })
+    /// Code the game can run: written while read-write, then made run-only (not writable).
+    pub fn code(p: &'a Proc, bytes: &[u8]) -> Option<Buf<'a>> {
+        let buf = Buf::new(p, bytes.len().max(16))?;
+        let mut old = 0;
+        let ok = p.write_bytes(buf.at, bytes) && unsafe { VirtualProtectEx(p.raw_handle(), buf.at as _, bytes.len().max(16), PAGE_EXECUTE_READ, &mut old) } != 0;
+        ok.then_some(buf)
     }
 }
 

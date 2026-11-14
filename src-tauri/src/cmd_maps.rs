@@ -26,12 +26,13 @@ pub(crate) async fn map_show(app: AppHandle, game: String, x: f64, y: f64, w: f6
 
 /// Everything the HotSwap map draws, read live from the running game.
 #[tauri::command]
-pub(crate) async fn map_world(watch: State<'_, watch::Watch>, game: String) -> Result<world::World, String> {
+pub(crate) async fn map_world(watch: State<'_, watch::Watch>, engine: State<'_, engine_host::Engine>, game: String) -> Result<serde_json::Value, String> {
     if game != trainer::SATISFACTORY {
         return Err("No map for this game".into());
     }
     let pid = watch.pid_of(&game).ok_or("Start the game to see your world")?;
-    tauri::async_runtime::spawn_blocking(move || ue::objects::Ue::attach(pid).map(|ue| world::scan(&ue)))
+    let engine = engine.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || engine.world(pid))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -82,13 +83,13 @@ pub(crate) fn map_hide(app: AppHandle) {
 
 /// The player's x, y, z and yaw while a supported game is running and connected.
 #[tauri::command]
-pub(crate) fn map_player(trainer: State<trainer::Trainer>) -> Option<[f64; 4]> {
+pub(crate) fn map_player(trainer: State<engine_host::Engine>) -> Option<[f64; 4]> {
     trainer.position()
 }
 
 /// Teleports the player. Without a height, drops them from high above (fall damage is off for a bit).
 #[tauri::command]
-pub(crate) fn map_teleport(trainer: State<trainer::Trainer>, x: f64, y: f64, z: Option<f64>) -> Result<(), String> {
+pub(crate) fn map_teleport(trainer: State<engine_host::Engine>, x: f64, y: f64, z: Option<f64>) -> Result<(), String> {
     if ![x, y, z.unwrap_or(0.0)].iter().all(|v| v.is_finite() && v.abs() < 1e6) {
         return Err("Out of the map".into());
     }

@@ -4,13 +4,7 @@
 //! can't do, like adding items through the game's own inventory code.
 
 use super::objects::Ue;
-use windows_sys::Win32::{
-    Foundation::CloseHandle,
-    System::{
-        Memory::{VirtualAllocEx, VirtualFreeEx, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE},
-        Threading::{CreateRemoteThread, WaitForSingleObject},
-    },
-};
+use crate::remote::{self, Buf};
 
 /// A script function and where its parameters go.
 pub struct Func {
@@ -37,13 +31,9 @@ impl Ue {
     /// Runs `obj->ProcessEvent(func, params)` in the game and returns the parameter block afterwards
     /// (return values are written back into it). Waits up to 2 seconds.
     pub fn call(&self, process_event: u64, obj: u64, func: &Func, params: &[u8]) -> Result<Vec<u8>, String> {
-        let h = self.p.raw_handle();
-        let size = 0x100 + func.size.max(params.len() as u64) as usize;
-        let mem = unsafe { VirtualAllocEx(h, std::ptr::null(), size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE) } as u64;
-        if mem == 0 {
-            return Err("couldn't allocate memory in the game".into());
-        }
-        let block = mem + 0x100;
+        // The parameter block is plain read-write memory; the stub goes in its own run-only memory.
+        let data = Buf::new(&self.p, func.size.max(params.len() as u64) as usize).ok_or("couldn't allocate memory in the game")?;
+        let block = data.at;
         let mut code: Vec<u8> = Vec::new();
         code.extend([0x48, 0x83, 0xEC, 0x28]); // sub rsp, 0x28
         code.extend([0x48, 0xB9]); // mov rcx, obj
@@ -59,26 +49,18 @@ impl Ue {
         code.extend([0x31, 0xC0, 0xC3]); // xor eax, eax; ret
         let mut padded = params.to_vec();
         padded.resize(func.size.max(params.len() as u64) as usize, 0);
-        let ok = self.p.write_bytes(mem, &code) && self.p.write_bytes(block, &padded);
-        let result = if !ok {
-            Err("couldn't write the call stub".to_string())
-        } else {
-            let thread = unsafe { CreateRemoteThread(h, std::ptr::null(), 0, Some(std::mem::transmute(mem as usize)), std::ptr::null(), 0, std::ptr::null_mut()) };
-            if thread.is_null() {
-                Err(format!("couldn't start the call ({})", std::io::Error::last_os_error()))
-            } else {
-                let waited = unsafe { WaitForSingleObject(thread, 2000) };
-                unsafe { CloseHandle(thread) };
-                if waited != 0 {
-                    // Still running: leave the memory allocated rather than free code that's executing.
-                    return Err("the game didn't finish the call in time".into());
-                }
-                let mut out = vec![0u8; padded.len()];
-                self.p.read_into(block, &mut out);
-                Ok(out)
+        if !self.p.write_bytes(block, &padded) {
+            return Err("couldn't write the parameters".into());
+        }
+        if let Err(e) = remote::run(&self.p, &code, 2000) {
+            // Still running: leave its parameters alone too.
+            if e.timed_out {
+                std::mem::forget(data);
             }
-        };
-        unsafe { VirtualFreeEx(h, mem as _, 0, MEM_RELEASE) };
-        result
+            return Err(e.message);
+        }
+        let mut out = vec![0u8; padded.len()];
+        self.p.read_into(block, &mut out);
+        Ok(out)
     }
 }

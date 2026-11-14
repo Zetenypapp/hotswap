@@ -258,13 +258,39 @@ fn recorder(name: &str) -> bool {
     RECORDERS.contains(&name.to_lowercase().as_str())
 }
 
-/// Apps that must never be closed: Windows itself, Steam (games need it), HotSwap.
-const NEVER: &[&str] = &[
-    "explorer.exe", "dwm.exe", "csrss.exe", "winlogon.exe", "svchost.exe", "lsass.exe", "services.exe", "smss.exe", "wininit.exe",
-    "steam.exe", "steamwebhelper.exe", "steamservice.exe", "hotswap.exe", "msedgewebview2.exe", "audiodg.exe", "sihost.exe",
-    "ctfmon.exe", "fontdrvhost.exe", "searchhost.exe", "startmenuexperiencehost.exe", "shellexperiencehost.exe", "textinputhost.exe",
-    "runtimebroker.exe", "taskmgr.exe", "conhost.exe", "securityhealthsystray.exe", "msmpeng.exe", "nissrv.exe",
-];
+/// Apps Boost never closes, freezes or slows down: Steam (games need it), the web view apps like
+/// HotSwap are drawn with, and HotSwap itself.
+const NEVER: &[&str] = &["steam.exe", "steamwebhelper.exe", "steamservice.exe", "msedgewebview2.exe", "hotswap.exe", "hotswap-engine.exe"];
+
+/// Windows itself is off-limits too, by rule rather than by name: every program in the Windows
+/// folder, and everything running as a background service (session 0, before anyone signs in).
+fn off_limits(p: &sysinfo::Process) -> bool {
+    let windir = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into()).to_lowercase() + r"\";
+    p.session_id().is_none_or(|s| s.as_u32() == 0)
+        || p.exe().is_none_or(|e| e.to_string_lossy().to_lowercase().starts_with(&windir))
+        || NEVER.contains(&p.name().to_string_lossy().to_lowercase().as_str())
+}
+
+/// Asks an app to close the way clicking its X does (each of its windows gets the normal close
+/// message), so it can save first. Nothing is forced.
+fn close_app(pid: u32) {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::{
+            Foundation::{BOOL, HWND, LPARAM},
+            UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, IsWindowVisible, PostMessageW, WM_CLOSE},
+        };
+        unsafe extern "system" fn each(hwnd: HWND, pid: LPARAM) -> BOOL {
+            let mut owner = 0u32;
+            GetWindowThreadProcessId(hwnd, &mut owner);
+            if owner == pid as u32 && IsWindowVisible(hwnd) != 0 {
+                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            }
+            1
+        }
+        EnumWindows(Some(each), pid as LPARAM);
+    }
+}
 
 /// Runs a console program without a window and returns its output.
 fn run(exe: &str, args: &[&str]) -> Option<String> {
@@ -851,7 +877,7 @@ impl Extras {
         if adv.hide_hotswap {
             if let Some(win) = app.get_webview_window("main").filter(|w| w.is_visible().unwrap_or(false)) {
                 let _ = win.hide();
-                crate::webview_memory(&win, true);
+                crate::app::webview_memory(&win, true);
                 e.hid_hotswap = true;
                 lines.push("HotSwap tucked away in the tray".to_string());
             }
@@ -881,7 +907,7 @@ impl Extras {
             if self.eco.contains(&pid) || game.contains(&pid) {
                 continue;
             }
-            if self.eco_names.iter().any(|n| p.name().to_string_lossy().eq_ignore_ascii_case(n)) && set_eco(pid, true) {
+            if self.eco_names.iter().any(|n| p.name().to_string_lossy().eq_ignore_ascii_case(n)) && !off_limits(p) && set_eco(pid, true) {
                 self.eco.insert(pid);
             }
         }
@@ -904,7 +930,7 @@ impl Extras {
         }
         if self.hid_hotswap {
             if let Some(win) = app.get_webview_window("main").filter(|w| !w.is_visible().unwrap_or(true)) {
-                crate::webview_memory(&win, false);
+                crate::app::webview_memory(&win, false);
                 let _ = win.show();
             }
         }
@@ -1090,7 +1116,7 @@ impl Boost {
             let names: Vec<String> = cfg.close.iter().map(|n| n.to_lowercase()).filter(|n| !NEVER.contains(&n.as_str()) && !(cfg.protect_recorders && recorder(n))).collect();
             let (mut freed, mut done) = (0u64, Vec::new());
             for name in &names {
-                let procs: Vec<_> = sys.processes().values().filter(|p| p.name().to_string_lossy().to_lowercase() == *name && !a.pids.contains(&p.pid().as_u32())).collect();
+                let procs: Vec<_> = sys.processes().values().filter(|p| p.name().to_string_lossy().to_lowercase() == *name && !a.pids.contains(&p.pid().as_u32()) && !off_limits(p)).collect();
                 if procs.is_empty() {
                     continue;
                 }
@@ -1098,8 +1124,10 @@ impl Boost {
                 if let Some(exe) = procs.iter().find_map(|p| p.exe().map(|e| e.to_path_buf())) {
                     a.closed.push(exe);
                 }
-                // Without /F: apps get the normal close message and can save first.
-                let _ = run("taskkill", &["/IM", name]);
+                // Apps get the normal close message and can save first.
+                for p in &procs {
+                    close_app(p.pid().as_u32());
+                }
                 done.push(name.trim_end_matches(".exe").to_string());
             }
             if !done.is_empty() {
@@ -1126,7 +1154,7 @@ impl Boost {
             for p in sys.processes().values() {
                 let name = p.name().to_string_lossy().to_lowercase();
                 let pid = p.pid().as_u32();
-                if freeze.contains(&name) && !a.pids.contains(&pid) && suspend(pid, true) {
+                if freeze.contains(&name) && !a.pids.contains(&pid) && !off_limits(p) && suspend(pid, true) {
                     a.frozen.push((pid, p.exe().map(|e| e.to_path_buf()).unwrap_or_default()));
                     if !frozen_names.contains(&name) {
                         frozen_names.push(name);
@@ -1190,13 +1218,12 @@ pub(crate) async fn boost_apps(protect: Option<bool>) -> Vec<App> {
         let sys = processes();
         let mut by: std::collections::HashMap<String, u64> = Default::default();
         for p in sys.processes().values() {
-            let Some(exe) = p.exe() else { continue };
             // Windows' own programs stay out of the list.
-            if exe.to_string_lossy().to_lowercase().starts_with(r"c:\windows\") {
+            if off_limits(p) {
                 continue;
             }
             let name = p.name().to_string_lossy().to_lowercase();
-            if NEVER.contains(&name.as_str()) || !name.ends_with(".exe") || (protect && recorder(&name)) {
+            if !name.ends_with(".exe") || (protect && recorder(&name)) {
                 continue;
             }
             *by.entry(name).or_default() += p.memory();
@@ -1235,7 +1262,7 @@ pub(crate) async fn boost_clean(boost: tauri::State<'_, Boost>) -> Result<Cleane
         for p in sys.processes().values() {
             let name = p.name().to_string_lossy().to_lowercase();
             let pid = p.pid().as_u32();
-            if game.contains(&pid) || NEVER.contains(&name.as_str()) || (protect && recorder(&name)) || p.exe().is_some_and(|e| e.to_string_lossy().to_lowercase().starts_with(r"c:\windows\")) {
+            if game.contains(&pid) || off_limits(p) || (protect && recorder(&name)) {
                 continue;
             }
             #[cfg(windows)]

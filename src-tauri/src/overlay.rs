@@ -1,7 +1,10 @@
 //! The in-game overlay: one transparent window over the game for notes, the cheat sheet, the HUD
 //! and the menu, plus the radar window. It never touches the game itself.
 
-use super::*;
+#[allow(unused_imports)]
+use crate::*;
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Where a window of size w x h goes on the main monitor: "top" (centered), "top-left",
 /// "top-right", "bottom-left" or "bottom-right" (logical pixels; bottom stays clear of the taskbar).

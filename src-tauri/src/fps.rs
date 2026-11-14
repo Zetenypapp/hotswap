@@ -234,22 +234,101 @@ fn start() -> Result<(), u32> {
 
 /// Asks Windows (with its admin prompt) to add this user to the Performance Log Users group, which
 /// may read graphics events without admin rights, like Xbox Game Bar's FPS counter asks once.
-/// Takes effect after signing out and in again.
+/// Takes effect after signing out and in again. The prompt runs HotSwap itself with
+/// `--fps-allow <your account's SID>`, which does only that (allow_elevated), through Windows' API.
 #[tauri::command]
 pub fn fps_allow() -> Result<(), String> {
-    let user = format!("{}\\{}", std::env::var("USERDOMAIN").unwrap_or_default(), std::env::var("USERNAME").map_err(|e| e.to_string())?);
-    // S-1-5-32-559 is Performance Log Users in every Windows language.
-    let script = format!("Add-LocalGroupMember -SID S-1-5-32-559 -Member '{}' -ErrorAction SilentlyContinue", user.replace('\'', "''"));
-    let encoded = base64_utf16(&script);
-    let mut cmd = std::process::Command::new("powershell");
-    cmd.args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &format!("Start-Process powershell -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '-NoProfile -EncodedCommand {encoded}'")]);
     #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    unsafe {
+        use windows_sys::Win32::{
+            Foundation::{CloseHandle, WAIT_OBJECT_0},
+            System::Threading::{GetExitCodeProcess, WaitForSingleObject},
+            UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW},
+        };
+        let sid = user_sid().ok_or("Couldn't read your Windows account")?;
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let wide = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
+        let (verb, file, args) = (wide("runas"), wide(&exe.to_string_lossy()), wide(&format!("--fps-allow {sid}")));
+        let mut info: SHELLEXECUTEINFOW = std::mem::zeroed();
+        info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+        info.fMask = SEE_MASK_NOCLOSEPROCESS;
+        info.lpVerb = verb.as_ptr();
+        info.lpFile = file.as_ptr();
+        info.lpParameters = args.as_ptr();
+        if ShellExecuteExW(&mut info) == 0 || info.hProcess.is_null() {
+            return Err("Windows didn't allow it".into());
+        }
+        let mut code = 1u32;
+        let done = WaitForSingleObject(info.hProcess, 60_000) == WAIT_OBJECT_0 && GetExitCodeProcess(info.hProcess, &mut code) != 0;
+        CloseHandle(info.hProcess);
+        return if done && code == 0 { Ok(()) } else { Err("Windows didn't allow it".into()) };
     }
-    let ok = cmd.status().map_err(|e| e.to_string())?.success();
-    if ok { Ok(()) } else { Err("Windows didn't allow it".into()) }
+    #[allow(unreachable_code)]
+    Err("Windows only".into())
+}
+
+/// This account's SID, e.g. "S-1-5-21-…".
+#[cfg(windows)]
+fn user_sid() -> Option<String> {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, LocalFree},
+        Security::{Authorization::ConvertSidToStringSidW, GetTokenInformation, TokenUser, TOKEN_QUERY, TOKEN_USER},
+        System::Threading::{GetCurrentProcess, OpenProcessToken},
+    };
+    unsafe {
+        let mut token = std::ptr::null_mut();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
+            return None;
+        }
+        let mut buf = vec![0u8; 256];
+        let mut len = 0u32;
+        let ok = GetTokenInformation(token, TokenUser, buf.as_mut_ptr().cast(), buf.len() as u32, &mut len) != 0;
+        CloseHandle(token);
+        if !ok {
+            return None;
+        }
+        let user = &*(buf.as_ptr() as *const TOKEN_USER);
+        let mut text = std::ptr::null_mut();
+        if ConvertSidToStringSidW(user.User.Sid, &mut text) == 0 {
+            return None;
+        }
+        let n = (0..).take_while(|&i| *text.add(i) != 0).count();
+        let sid = String::from_utf16_lossy(std::slice::from_raw_parts(text, n));
+        LocalFree(text.cast());
+        Some(sid)
+    }
+}
+
+/// The elevated half of fps_allow (`hotswap --fps-allow <SID>`): adds that account to Performance
+/// Log Users (S-1-5-32-559, the same group in every Windows language). Exit code 0 when it's in.
+#[cfg(windows)]
+pub fn allow_elevated(sid: &str) -> i32 {
+    use windows_sys::Win32::{
+        Foundation::LocalFree,
+        NetworkManagement::NetManagement::{NetLocalGroupAddMembers, LOCALGROUP_MEMBERS_INFO_0},
+        Security::{Authorization::ConvertStringSidToSidW, LookupAccountSidW},
+    };
+    // Only an account SID, nothing else.
+    if !sid.starts_with("S-1-5-") || sid.len() > 184 || !sid.bytes().all(|b| b.is_ascii_digit() || b == b'-' || b == b'S') {
+        return 2;
+    }
+    let wide = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
+    unsafe {
+        let (mut user, mut group) = (std::ptr::null_mut(), std::ptr::null_mut());
+        if ConvertStringSidToSidW(wide(sid).as_ptr(), &mut user) == 0 || ConvertStringSidToSidW(wide("S-1-5-32-559").as_ptr(), &mut group) == 0 {
+            return 3;
+        }
+        // The group's name in this Windows' language.
+        let (mut name, mut domain) = ([0u16; 256], [0u16; 256]);
+        let (mut nlen, mut dlen, mut kind) = (256u32, 256u32, 0);
+        let found = LookupAccountSidW(std::ptr::null(), group, name.as_mut_ptr(), &mut nlen, domain.as_mut_ptr(), &mut dlen, &mut kind) != 0;
+        let member = LOCALGROUP_MEMBERS_INFO_0 { lgrmi0_sid: user };
+        // 0 = added, 1378 = already a member.
+        let r = if found { NetLocalGroupAddMembers(std::ptr::null(), name.as_ptr(), 0, (&member as *const LOCALGROUP_MEMBERS_INFO_0).cast(), 1) } else { 4 };
+        LocalFree(user);
+        LocalFree(group);
+        if r == 0 || r == 1378 { 0 } else { 5 }
+    }
 }
 
 /// "ok", "starting", "denied" or "failed", for Settings.
@@ -259,19 +338,6 @@ pub fn fps_status() -> &'static str {
 }
 
 /// PowerShell's -EncodedCommand: the script as UTF-16LE in base64.
-fn base64_utf16(s: &str) -> String {
-    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let bytes: Vec<u8> = s.encode_utf16().flat_map(|c| c.to_le_bytes()).collect();
-    let mut out = String::new();
-    for c in bytes.chunks(3) {
-        let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
-        for i in 0..4 {
-            out.push(if i <= c.len() { T[(n >> (18 - 6 * i) & 63) as usize] as char } else { '=' });
-        }
-    }
-    out
-}
-
 /// Dev aid (`hotswap --fps <exe name>`): the app's frame rate once a second for ten seconds.
 pub fn test(exe: &str) -> String {
     let sys = sysinfo::System::new_all();

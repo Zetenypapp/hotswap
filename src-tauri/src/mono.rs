@@ -55,10 +55,10 @@ impl Mono {
     fn other_images(&mut self) -> &[u64] {
         if self.others.is_none() {
             let mut out = Vec::new();
-            if let (Some(code), Some(list)) = (Buf::exec(&self.p, 64), Buf::new(&self.p, 8 * 1025)) {
-                // rcx = assembly, rdx = list: if list.count < 1024 { list.items[count++] = assembly }
-                let cb = [0x48, 0x8B, 0x02, 0x48, 0x3D, 0x00, 0x04, 0x00, 0x00, 0x73, 0x0C, 0x48, 0x89, 0x4C, 0xC2, 0x08, 0x48, 0xFF, 0xC0, 0x48, 0x89, 0x02, 0xC3, 0xC3];
-                if self.p.write_bytes(code.at, &cb) && self.call("mono_assembly_foreach", &[Arg::N(code.at), Arg::N(list.at)]).is_ok() {
+            // rcx = assembly, rdx = list: if list.count < 1024 { list.items[count++] = assembly }
+            let cb = [0x48, 0x8B, 0x02, 0x48, 0x3D, 0x00, 0x04, 0x00, 0x00, 0x73, 0x0C, 0x48, 0x89, 0x4C, 0xC2, 0x08, 0x48, 0xFF, 0xC0, 0x48, 0x89, 0x02, 0xC3, 0xC3];
+            if let (Some(code), Some(list)) = (Buf::code(&self.p, &cb), Buf::new(&self.p, 8 * 1025)) {
+                if self.call("mono_assembly_foreach", &[Arg::N(code.at), Arg::N(list.at)]).is_ok() {
                     let n = self.p.read::<u64>(list.at).unwrap_or(0).min(1024);
                     for i in 0..n {
                         let Some(asm) = self.p.ptr(list.at + 8 + i * 8) else { continue };

@@ -2,7 +2,9 @@
 
 A map of every file and what it does. HotSwap has two halves:
 
-- **The engine** (`src-tauri/src`, Rust) does the real work: it finds your games, reads and writes game memory, installs mods, and talks to Discord.
+- **The engine** (`src-tauri/src`, Rust) does the real work: it finds your games, reads and writes game memory, installs mods, and talks to Discord. It's built into two programs:
+  - **`hotswap.exe`**, the app. It never reads or writes another program's memory.
+  - **`hotswap-engine.exe`**, the mod engine. The app starts it when a game with mods runs, and all game memory code runs there. If a security tool removes it, only mods stop.
 - **The interface** (`ui`, plain HTML, CSS and JavaScript) is what you see. It runs in Windows' built-in WebView2 and asks the engine to do things through commands.
 
 ## ⚙️ Engine: `src-tauri/src`
@@ -11,10 +13,16 @@ A map of every file and what it does. HotSwap has two halves:
 
 | File | What it does |
 |---|---|
-| `main.rs` | Starts the app: settings, the main window, tray icon, hotkeys, library scanning, launching games, updates, and the list of commands the interface can call. |
+| `lib.rs` | Lists every file below; each of the two programs only contains the code it uses. |
+| `main.rs` | `hotswap.exe`: starts the app (`app.rs`). Also the admin step of Settings → FPS counter → Allow. |
+| `app.rs` | The app: settings, the main window, tray icon, hotkeys, library scanning, launching games, updates, and the list of commands the interface can call. |
+| `bin/hsengine.rs` | `hotswap-engine.exe`: runs the mod engine (`engine.rs`), or a dev aid (`dev.rs`) when started with a `--flag`. |
+| `engine.rs` | The mod engine's side: takes the game and mods from the app over its input, runs the trainer, and sends back status, radar and the player's position. |
+| `engine_host.rs` | The app's side: starts the mod engine, restarts it if it stops, passes its events to the interface, and says so when it's missing. |
+| `dev.rs` | Dev aids such as `hotswap-engine --scan` or `--ue-classes`, for development only. |
 | `overlay.rs` | The in-game overlay window (notes, cheat sheet, HUD and menu) and the radar window; hands focus back to the game and closes itself when idle. |
 | `watch.rs` | Notices which installed game is running, and tells the interface when that changes. |
-| `trainer.rs` | Runs the mods: attaches to the running game and keeps applying the values you've set. |
+| `trainer.rs` | Runs the mods (in the mod engine): attaches to the running game and keeps applying the values you've set. |
 | `stats.rs` | System stats: CPU, memory, disk, network, the running game's use, GPU temperature, power, clock and fan (NVIDIA or AMD driver), and CPU sensors via LibreHardwareMonitor. |
 | `logs.rs` | HotSwap's log file (rotates at 5 MB), crash logging, and Export logs (full, or under 5 MB for Discord). |
 
@@ -44,7 +52,7 @@ A map of every file and what it does. HotSwap has two halves:
 |---|---|
 | `mono.rs` | Reads and changes Unity (Mono) games by asking the game's own runtime where things are. |
 | `il2cpp.rs` | The same for Unity games built with IL2CPP (GameAssembly.dll's exported API). |
-| `remote.rs` | Runs a function inside the game on a short-lived thread (used by the Mono and IL2CPP readers), and heap search helpers. |
+| `remote.rs` | Runs a function inside the game on a short-lived thread (used by the Mono, IL2CPP and Unreal readers), and heap search helpers. Code memory is never writable and runnable at the same time. |
 | `boost.rs` | Game Boost: gears of real system changes (priority, power plans, Efficiency mode, freezing, refresh rate, Windows settings) applied while a game runs and undone after, with crash recovery; Quick clean. |
 | `catalog.rs` | Downloads the signed mod list (catalog/mods.json), checks it against the update key, drops anything that would run code. |
 | `engines.rs` | Mods described as data (`spec` in ui/data.js) on any engine HotSwap reads by name; engine detection for the library scan. |

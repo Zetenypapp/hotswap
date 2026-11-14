@@ -11,7 +11,6 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, Emitter};
 
 pub const SATISFACTORY: &str = "526870";
 
@@ -71,7 +70,7 @@ impl Trainer {
         self.0.lock().unwrap().teleport = Some(to);
     }
 
-    pub fn start(&self, app: AppHandle, pid_of: impl Fn(&str) -> Option<u32> + Send + 'static, install_of: impl Fn(&str) -> Option<std::path::PathBuf> + Send + 'static) {
+    pub fn start(&self, emit: impl Fn(&str, serde_json::Value) + Send + 'static, pid_of: impl Fn(&str) -> Option<u32> + Send + 'static, install_of: impl Fn(&str) -> Option<std::path::PathBuf> + Send + 'static) {
         let me = self.clone();
         thread::spawn(move || {
             let mut session: Option<Session> = None;
@@ -190,7 +189,7 @@ impl Trainer {
                         }))
                         .unwrap_or_else(|_| Some(Err("Lost track of the game, reconnecting".into())));
                         if let Some(r) = repo.as_ref().and_then(|s| s.radar.clone()) {
-                            let _ = app.emit("radar", r);
+                            emit("radar", serde_json::to_value(r).unwrap_or_default());
                         }
                         match result {
                             Some(Ok(true)) => Status { game: game.clone(), connected: true, message: "Connected".into() },
@@ -397,7 +396,7 @@ impl Trainer {
                 };
                 if status != last {
                     log(&format!("status connected={} msg={}", status.connected, status.message));
-                    let _ = app.emit("trainer-status", &status);
+                    emit("trainer-status", serde_json::to_value(&status).unwrap_or_default());
                     last = status;
                 }
                 // The radar needs smooth updates; everything else is fine twice a second.

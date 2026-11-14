@@ -171,6 +171,10 @@ function renderSettings() {
       ${invoke ? `<div class="set-row"><div class="txt"><b>Export logs</b><span>Packs HotSwap’s log and a short system summary into a zip in your Downloads, for bug reports. <b>For Discord</b> keeps only the newest lines so it stays under 5 MB. Logs hold game names and folder paths, never your Discord login or messages.</span></div><button class="btn" data-exportlogs="small">For Discord</button><button class="btn" data-exportlogs="full">Full</button></div>` : ''}
       <div class="set-row"><div class="txt"><b>Found a bug or want a game added?</b><span>Opens a GitHub issue with your HotSwap version already filled in.</span></div>
         <div class="btnrow"><a class="btn" href="${esc(bugUrl())}" ${ext}>Report a bug</a><a class="btn" href="${esc(requestUrl())}" ${ext}>Request a game</a></div></div>
+    </div>
+    <div class="set-group" id="winsec"><h2>Windows Security flagged HotSwap?</h2>
+      <div class="set-row"><div class="txt"><b>Why it happens</b><span>HotSwap’s mods change a running game’s memory, which is also something malware does, so Microsoft Defender’s AI can mistake HotSwap’s mod engine (hotswap-engine.exe) for malware, mostly right after an update. HotSwap is open source, and every release is scanned with Microsoft Defender before it’s published. The mod engine is a separate program on purpose: if Windows removes it, only mods stop, and the overlay, Boost and everything else keep working.</span></div></div>
+      <div class="set-row"><div class="txt"><b>Allow it again</b><span>Open <b>Windows Security → Virus &amp; threat protection → Protection history</b>, pick the HotSwap entry and choose <b>Actions → Allow</b> (or Restore). If the file is gone, install HotSwap again from GitHub. HotSwap never changes Windows Security’s settings itself: that’s always your choice.</span></div><a class="btn" href="https://github.com/Zetenypapp/hotswap/releases/latest" ${ext}>Get HotSwap</a></div>
     </div>`,
   };
   $('setBody').innerHTML = `

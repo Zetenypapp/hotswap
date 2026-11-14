@@ -26,7 +26,20 @@ fn build_gta_asi() {
     println!("cargo:rustc-env=HOTSWAP_GTA_ASI={}", target.join("release").join("hotswap_gta.dll").display());
 }
 
+/// tauri.conf.json bundles the mod engine (externalBin), and Tauri checks that the file exists on
+/// every build. scripts/build-engine.cmd puts the real one there before `cargo tauri dev/build`;
+/// for plain cargo builds (CI, tests) an empty stand-in is enough, and the app treats an empty
+/// engine as missing.
+fn engine_placeholder() {
+    let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries").join("hotswap-engine-x86_64-pc-windows-msvc.exe");
+    if !p.exists() {
+        let _ = std::fs::create_dir_all(p.parent().unwrap());
+        let _ = std::fs::write(&p, b"");
+    }
+}
+
 fn main() {
+    engine_placeholder();
     build_gta_asi();
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(COMMANDS)))
         .expect("failed to run tauri-build");
