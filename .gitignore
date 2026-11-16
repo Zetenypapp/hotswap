@@ -3,3 +3,6 @@ src-tauri/gen/
 src-tauri/build.log
 gta-asi/target/
 src-tauri/binaries/
+minecraft-mod/build/
+minecraft-mod/.gradle/
+minecraft-mod/run/

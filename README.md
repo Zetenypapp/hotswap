@@ -26,6 +26,7 @@ Every other game still shows up in your library with art, playtime and launching
 - 🎨 **Make it yours:** colors for every part, page and text, plus Boost only and Overlay only modes ([details](FEATURES.md#-make-it-yours))
 - 🧩 **Mod loader:** install community mods from ficsit.app, Thunderstore, Nexus Mods and SpaceDock
 - 🗺️ **Live maps** for Satisfactory and Subnautica, with your position and teleport
+- ⛏️ **Minecraft map** (Java Edition) through the small **HotSwap Link** Fabric mod: the world fills in as you explore, a seed preview of the rest in single-player, your position and pins
 - 📚 **Your whole library** from Steam, Epic and GOG, with news, deals and playtime on Home
 - 🛡️ **Safe by design:** no mods for anti-cheat games, signed updates, a locked-down app ([Security](#️-security))
 

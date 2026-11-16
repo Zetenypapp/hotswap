@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mc-worlds"
+description = "Enables the mc_worlds command without any pre-configured scope."
+commands.allow = ["mc_worlds"]
+
+[[permission]]
+identifier = "deny-mc-worlds"
+description = "Denies the mc_worlds command without any pre-configured scope."
+commands.deny = ["mc_worlds"]

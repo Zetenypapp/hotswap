@@ -21,6 +21,7 @@ pub mod extra;
 pub mod farming;
 pub mod fps;
 pub mod fthr;
+pub mod minecraft;
 pub mod gog;
 pub mod home;
 pub mod il2cpp;

@@ -12,38 +12,47 @@ const WEB_MAPS = ['526870'];
 let mapOpen = null, mapShown = false; // app ID of the map being shown on the Maps page
 let mapMode = 'local'; // 'local' = HotSwap's own map, 'web' = Satisfactory Calculator
 
+// Minecraft isn't a store game: its map comes from the HotSwap Link mod (mcmap.js).
+const MC_MAP = { appId: 'minecraft', name: 'Minecraft' };
+
 function renderMaps() {
   if (typeof LocalMap === 'undefined') return lazyPage('mapsBody', 'map.js');
+  if (mapOpen === 'minecraft' && typeof McMap === 'undefined') return lazyPage('mapsBody', 'mcmap.js');
   setAmbient(null);
   const list = MAP_GAMES.map(id => LIB.find(g => String(g.appId) === id) || buildGame({ appId: +id, name: MAP_NAMES[id] }));
-  const open = list.find(g => String(g.appId) === mapOpen);
+  const mc = Object.assign(buildGame({ appId: 0, name: 'Minecraft' }), MC_MAP);
+  const open = mapOpen === 'minecraft' ? mc : list.find(g => String(g.appId) === mapOpen);
   // Re-renders happen on every app event; leave a live map alone instead of rebuilding it.
   const key = open ? `${open.appId}:${mapMode}` : '';
   if (key && $('mapsBody').dataset.key === key) return;
   $('mapsBody').dataset.key = key;
-  if (!open || mapMode !== 'local') LocalMap.unmount();
+  if (!open || mapMode !== 'local' || open === mc) LocalMap.unmount();
+  if (open !== mc && typeof McMap !== 'undefined') McMap.unmount();
   $('mapsBody').innerHTML = open ? `
     <div class="lib-head map-head"><button class="chip" data-mapback>‹ All maps</button><h1>${esc(open.name)}</h1>
       ${WEB_MAPS.includes(String(open.appId)) ? `<div class="seg-tabs"><button class="chip${mapMode === 'local' ? ' on' : ''}" data-mapmode="local">HotSwap map</button><button class="chip${mapMode === 'web' ? ' on' : ''}" data-mapmode="web">Detailed map</button></div>` : ''}
-      <span class="meta">${mapMode === 'web' ? 'By Satisfactory Calculator (their site, their ads).' : WEB_MAPS.includes(String(open.appId)) ? 'Live from your game. Right-click to teleport or pin.' : 'Made from your game\'s terrain files. Right-click to drop a pin.'}</span></div>
+      <span class="meta">${open === mc ? 'Fills in as you explore, through the HotSwap Link mod. Right-click to pin.' : mapMode === 'web' ? 'By Satisfactory Calculator (their site, their ads).' : WEB_MAPS.includes(String(open.appId)) ? 'Live from your game. Right-click to teleport or pin.' : 'Made from your game\'s terrain files. Right-click to drop a pin.'}</span></div>
     <div id="mapHost" class="map-host">${mapMode === 'web' ? '<span>Loading map…</span>' : ''}</div>` : `
     <div class="lib-head"><h1>Maps</h1><span class="meta">Resources, collectibles and your factory, live. Pin spots and teleport.</span></div>
     <div class="lib-grid">${list.map(g => `<button class="lib-item" data-map="${g.appId}"><span class="art">${capsule(g)}</span>
       <span class="nm">${esc(g.name)}</span><span class="sub">Interactive map${RUNNING === g.id ? ' · live' : ''}</span></button>`).join('')}
+      <button class="lib-item" data-map="minecraft"><span class="art">${capsule(mc)}</span>
+      <span class="nm">Minecraft</span><span class="sub">Java Edition · with HotSwap Link</span></button>
       ${SOON_MAPS.map(id => LIB.find(g => String(g.appId) === id) || buildGame({ appId: +id, name: MAP_NAMES[id] })).map(g => `<button class="lib-item soon-item" disabled><span class="art">${capsule(g)}</span>
       <span class="nm">${esc(g.name)}</span><span class="sub">Coming soon</span></button>`).join('')}</div>
     <p class="meta" style="margin-top:22px">The HotSwap map is drawn from your running game. The detailed map is <a href="https://satisfactory-calculator.com" ${ext}>Satisfactory Calculator</a>, shown as-is.</p>`;
   if (open && mapMode === 'local') {
     const host = $('mapHost');
     host.style.height = Math.max(300, innerHeight - host.getBoundingClientRect().top - 16) + 'px';
-    LocalMap.mount(host, String(open.appId));
+    if (open === mc) McMap.mount(host);
+    else LocalMap.mount(host, String(open.appId));
   }
 }
 
 // The map is a separate web view laid over #mapHost, so keep it matched to that box and hide it
 // whenever the page (or the palette, which it would cover) says so.
 function syncMap() {
-  if (state.view !== 'maps' && $('mapsBody').dataset.key && typeof LocalMap !== 'undefined') { LocalMap.unmount(); $('mapsBody').dataset.key = ''; }
+  if (state.view !== 'maps' && $('mapsBody').dataset.key && typeof LocalMap !== 'undefined') { LocalMap.unmount(); if (typeof McMap !== 'undefined') McMap.unmount(); $('mapsBody').dataset.key = ''; }
   if (!invoke) return;
   const host = $('mapHost');
   if (state.view !== 'maps' || !mapOpen || mapMode !== 'web' || !host || pal) {

@@ -30,6 +30,7 @@ A map of every file and what it does. HotSwap has two halves:
 
 | File | What it does |
 |---|---|
+| `minecraft.rs` | The Minecraft map: reads the HotSwap Link mod (position, chunk colours, seed previews) and keeps each world's map as region pictures. |
 | `cmd_maps.rs` | Commands for the Maps page: the web map, the HotSwap map's world and background, your position, teleport and pins. |
 | `cmd_mods.rs` | Commands for the Mods page: browsing, installing, switching off and removing mods from every mod site. |
 | `cmd_discord.rs` | Commands for Discord: your profile status and Discord voice. |
@@ -130,6 +131,7 @@ A map of every file and what it does. HotSwap has two halves:
 | `events.js` | Every click, key and form input in the main window. |
 | `icons.js` | Small icons used across the pages. |
 | `boot.js` | Starts the interface; loaded last. |
+| `mcmap.js` | The Minecraft map; only loaded when you open it. |
 | `map.js` | The HotSwap map for Satisfactory; only loaded when you open Maps. |
 | `mods.js` | The Mods page; only loaded when you open Mods. |
 | `map-overlay.js` | Adds your position and pins on top of the Satisfactory Calculator web map. |

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "hotswap-link",
+  "version": "${version}",
+  "name": "HotSwap Link",
+  "description": "Shows your Minecraft world on HotSwap's map: your position, the terrain as you explore, mobs around you and, in single-player, a preview from your seed. On a Fabric server it can also share the explored map, seed previews and player positions - each off until the admin turns it on.",
+  "authors": ["Zetenypapp"],
+  "contact": { "homepage": "https://github.com/Zetenypapp/hotswap", "sources": "https://github.com/Zetenypapp/hotswap" },
+  "license": "GPL-3.0-only",
+  "icon": "assets/hotswap-link/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.hotswap.link.HotSwapLinkCommon"],
+    "client": ["dev.hotswap.link.HotSwapLink"]
+  },
+  "depends": {
+    "fabricloader": ">=0.20.0",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-lifecycle-events-v1": "*",
+    "fabric-networking-api-v1": "*"
+  }
+}
