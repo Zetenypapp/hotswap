@@ -829,3 +829,48 @@ body.mini .minibox { display: flex; flex-direction: column; height: 100%; backgr
 .swatch.tacc::after { content: "A"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; font-weight: 900; color: var(--accent); }
 .swatch.tdef.on { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--fg); }
 .swatch.tacc.on { box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 2px var(--bg), 0 0 0 4px var(--fg); }
+
+/* Session insights (insights.js): recap, scorecard, update note, mod feedback, save backups */
+.recap { margin: 18px 0 4px; max-width: 1012px; display: grid; gap: 12px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--g) 35%, transparent); }
+.recap-head { display: flex; align-items: center; gap: 12px; }
+.recap-head .txt { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.recap-head .txt b { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recap-k .bdot { display: inline-block; margin-right: 7px; vertical-align: 1px; }
+.recap .bsug { display: grid; gap: 8px; }
+.recap-k { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--g); }
+.recap .bapps-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.recap .dim, .bcard .dim { margin: 0; color: var(--muted); font-size: 13px; font-weight: 500; }
+.sc-row { display: grid; grid-template-columns: auto 160px 1fr; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; background: var(--glass); }
+.sc-row + .sc-row, .sc-row + .dim { margin-top: 8px; }
+.sc-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-gears { display: flex; flex-wrap: wrap; gap: 8px; }
+.sc-gear { padding: 7px 11px; border-radius: 12px; background: rgba(0, 0, 0, .25); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--g) 40%, transparent); display: grid; gap: 1px; min-width: 104px; }
+.sc-gear span { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--g); }
+.sc-gear b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.sc-gear b small { font-size: 11px; color: var(--dim); font-weight: 700; }
+.sc-gear em { font-style: normal; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sc-gear i { font-style: normal; font-weight: 800; }
+.sc-gear i.up { color: var(--accent); }
+.sc-gear i.down { color: #ffb3b5; }
+.sc-foot { margin-top: 10px !important; font-size: 12px !important; color: var(--dim) !important; }
+.ac-note.upd { display: flex; width: fit-content; }
+.ac-btn { margin-left: 6px; border: 0; border-radius: 6px; padding: 1px 8px; background: color-mix(in srgb, var(--accent) 30%, transparent); color: inherit; font: inherit; font-weight: 800; }
+.ac-btn:hover { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.votes { display: inline-flex; gap: 2px; margin-left: 6px; }
+.vote { width: 24px; height: 24px; border: 0; border-radius: 7px; display: grid; place-items: center; background: none; color: var(--dim); transition: background .15s, color .15s; }
+.vote:hover { background: var(--glass-2); color: var(--fg); }
+.vote.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.vote.no.on { color: #ffb3b5; background: color-mix(in srgb, var(--danger) 18%, transparent); }
+.bk-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 600; }
+.bk-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.bk-list li > span:last-child { display: inline-flex; align-items: center; gap: 8px; }
+.bk-list .btn.sm { height: 24px; padding: 0 8px; font-size: 11px; }
+.btn.danger.on { background: var(--danger); color: #fff; }
+.cg-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.cg-row { display: flex; align-items: center; gap: 6px; }
+.cg-name { flex: 1; min-width: 0; max-width: 360px; height: 32px; padding: 0 10px; border: 0; border-radius: 9px; background: var(--glass); color: var(--fg); font: inherit; font-weight: 600; }
+.cg-name:focus { outline: none; box-shadow: inset 0 0 0 1px var(--glass-3); background: var(--glass-2); }
+.welcome, .engine-card { margin: 18px 0 4px; display: grid; gap: 10px; }
+.engine-card { margin: 0 0 12px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+.welcome .modes, .engine-card .set-row { padding-left: 0; padding-right: 0; }
+.welcome .set-row, .engine-card .set-row { padding: 4px 0; }

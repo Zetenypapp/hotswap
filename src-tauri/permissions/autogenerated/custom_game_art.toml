@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-custom-game-art"
+description = "Enables the custom_game_art command without any pre-configured scope."
+commands.allow = ["custom_game_art"]
+
+[[permission]]
+identifier = "deny-custom-game-art"
+description = "Denies the custom_game_art command without any pre-configured scope."
+commands.deny = ["custom_game_art"]

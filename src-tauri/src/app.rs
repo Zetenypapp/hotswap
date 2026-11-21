@@ -170,6 +170,8 @@ fn scan_library(app: AppHandle, watch: State<watch::Watch>, launches: State<Laun
         let _ = app.asset_protocol_scope().allow_directory(&cache, true);
     }
     watch.set_targets(scan.games.iter().filter_map(|g| g.watch_target()).collect());
+    watch.set_minecraft(scan.games.iter().any(|g| g.id == crate::others::MINECRAFT));
+    let _ = app.asset_protocol_scope().allow_directory(crate::others::art_dir(), false);
     *launches.0.lock().unwrap() = scan.games.iter().map(|g| (g.id.clone(), g.launch.clone())).collect();
     scan
 }
@@ -322,7 +324,7 @@ fn version_key(v: &semver::Version) -> (u64, u64, u64, u64) {
 }
 
 /// How a version is shown: 0.3.5+1 as 0.3.5.1.
-fn shown_version(v: &str) -> String {
+pub(crate) fn shown_version(v: &str) -> String {
     v.replacen('+', ".", 1)
 }
 
@@ -514,6 +516,7 @@ pub fn run() {
             app.state::<watch::Watch>().start(app.handle().clone());
             pad::start(app.handle().clone());
             app.state::<engine_host::Engine>().start(app.handle().clone());
+            app.state::<engine_host::Engine>().startup(app.handle());
             build_tray(app)?;
             logs::write("app", &format!("HotSwap {} started (low memory mode {}, {})", app.package_info().version, LOW_MEMORY.load(Ordering::Relaxed), if start_hidden { "in the tray" } else { "window shown" }));
             fit_window(app, !start_hidden);
@@ -526,7 +529,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            load_data, save_data, scan_library, running_game, launch_game, set_hotkeys, fetch_home, fetch_source, log_ui, export_logs, close_game, trainer_set, setup_check, catalog::catalog_remote, boost::boost_apps, boost::boost_set, boost::boost_clean, boost::boost_hw, trainer_action, set_close_to_tray, get_autostart, set_autostart, cmd_maps::map_show, cmd_maps::map_hide, cmd_maps::map_world, cmd_maps::map_background, check_update, install_update, app_version, overlay::overlay_notify, overlay::overlay_close, overlay::overlay_menu, overlay::overlay_input, overlay::overlay_ready, overlay::overlay_fit, cmd_mods::mods_release, cmd_mods::ts_search, cmd_mods::ts_list, cmd_mods::ts_install, cmd_mods::ts_install_file, cmd_mods::ts_set_enabled, cmd_mods::ts_remove, cmd_discord::voice_start, cmd_discord::voice_options, cmd_discord::voice_stop, cmd_discord::voice_state, cmd_discord::voice_send, system_stats, system_stats_full, fps::fps_allow, fps::fps_status, fthr::clips_status, fthr::clips_command, fthr::clips_open, cmd_discord::discord_presence, overlay::radar_show, set_mini, cmd_mods::fmods_list, cmd_mods::fmods_set_enabled, cmd_mods::fmods_remove, cmd_mods::fmods_install, cmd_mods::fmods_downloads, cmd_mods::fmods_pick, cmd_mods::nexus_search, cmd_mods::mods_state, cmd_mods::mods_search, cmd_mods::mods_install, cmd_mods::mods_uninstall, cmd_mods::mods_set_enabled, cmd_mods::mods_updates, cmd_maps::map_player, cmd_maps::map_teleport, cmd_maps::map_pins_load, cmd_maps::map_pins_save, minecraft::mc_sync, minecraft::mc_status, minecraft::mc_live, minecraft::mc_structures, minecraft::mc_regions, minecraft::mc_worlds, minecraft::mc_generate
+            load_data, save_data, scan_library, running_game, launch_game, set_hotkeys, fetch_home, fetch_source, log_ui, export_logs, close_game, trainer_set, setup_check, catalog::catalog_remote, boost::boost_apps, boost::boost_set, boost::boost_clean, boost::boost_hw, trainer_action, set_close_to_tray, get_autostart, set_autostart, cmd_maps::map_show, cmd_maps::map_hide, cmd_maps::map_world, cmd_maps::map_background, check_update, install_update, app_version, overlay::overlay_notify, overlay::overlay_close, overlay::overlay_menu, overlay::overlay_input, overlay::overlay_ready, overlay::overlay_fit, cmd_mods::mods_release, cmd_mods::ts_search, cmd_mods::ts_list, cmd_mods::ts_install, cmd_mods::ts_install_file, cmd_mods::ts_set_enabled, cmd_mods::ts_remove, cmd_discord::voice_start, cmd_discord::voice_options, cmd_discord::voice_stop, cmd_discord::voice_state, cmd_discord::voice_send, system_stats, system_stats_full, fps::fps_allow, fps::fps_status, fthr::clips_status, fthr::clips_command, fthr::clips_open, fthr::clips_settings, cmd_discord::discord_presence, overlay::radar_show, set_mini, cmd_mods::fmods_list, cmd_mods::fmods_set_enabled, cmd_mods::fmods_remove, cmd_mods::fmods_install, cmd_mods::fmods_downloads, cmd_mods::fmods_pick, cmd_mods::nexus_search, cmd_mods::mods_state, cmd_mods::mods_search, cmd_mods::mods_install, cmd_mods::mods_uninstall, cmd_mods::mods_set_enabled, cmd_mods::mods_updates, cmd_maps::map_player, cmd_maps::map_teleport, cmd_maps::map_pins_load, cmd_maps::map_pins_save, minecraft::mc_sync, minecraft::mc_status, minecraft::mc_live, minecraft::mc_structures, minecraft::mc_regions, minecraft::mc_worlds, minecraft::mc_generate, backup::save_backup, backup::save_backups, backup::save_backup_open, backup::save_backup_pick, backup::save_backup_restore, others::custom_game_add, others::custom_game_remove, others::custom_game_rename, others::custom_game_art, engine_host::engine_state, engine_host::engine_install, engine_host::engine_remove
         ])
         .run(tauri::generate_context!())
         .expect("error while running HotSwap");

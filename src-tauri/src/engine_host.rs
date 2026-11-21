@@ -1,4 +1,4 @@
-//! The app's side of the mod engine (engine.rs, hotswap-engine.exe next to hotswap.exe): starts it
+//! The app's side of the mod engine (engine.rs, hotswap-engine.exe, its own download since 0.5.0): starts it
 //! when a game with mods is chosen, sends it what the interface sets, passes its events on to the
 //! interface, and starts it again if it stops. If the engine can't start (say a security tool
 //! removed it), the game's status line says so and everything else keeps working.
@@ -40,8 +40,14 @@ struct Inner {
 #[derive(Clone, Default)]
 pub struct Engine(Arc<Inner>);
 
+/// The engine: in release builds the downloaded one (engine_dir), in dev builds the one cargo builds
+/// next to the app.
 pub fn exe() -> Option<PathBuf> {
-    Some(std::env::current_exe().ok()?.with_file_name("hotswap-engine.exe"))
+    if cfg!(debug_assertions) {
+        let me = std::env::current_exe().ok()?;
+        return [me.with_file_name("hotswap-engine.exe"), me.with_file_name("hsengine.exe")].into_iter().find(|p| p.is_file());
+    }
+    Some(engine_dir()?.join("hotswap-engine.exe"))
 }
 
 impl Engine {
@@ -127,11 +133,12 @@ impl Engine {
             }
             *last = Some(Instant::now());
         }
-        let path = exe().filter(|p| std::fs::metadata(p).is_ok_and(|m| m.len() > 0));
-        let Some(path) = path else {
-            crate::logs::write("engine", "hotswap-engine.exe is missing");
-            return self.status(MISSING);
-        };
+        let Some(app) = self.0.app.get() else { return };
+        if let Some(problem) = engine_problem(app) {
+            crate::logs::write("engine", problem);
+            return self.status(problem);
+        }
+        let Some(path) = exe() else { return };
         let mut cmd = Command::new(&path);
         cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
         #[cfg(windows)]
@@ -191,9 +198,166 @@ impl Engine {
             *self.0.pos.lock().unwrap() = None;
             crate::logs::write("engine", "hotswap-engine.exe stopped");
             if self.0.game.lock().unwrap().is_some() {
-                let gone = exe().is_none_or(|p| !p.exists());
-                self.status(if gone { MISSING } else { "HotSwap's mod engine stopped. Starting it again…" });
+                let problem = self.0.app.get().and_then(engine_problem);
+                self.status(problem.unwrap_or("HotSwap's mod engine stopped. Starting it again…"));
             }
         }
+    }
+}
+
+/* ---------- The engine as its own download (0.5.0) ----------
+   The installer carries no game-memory code: people who want mods get hotswap-engine.exe from the
+   release that matches their HotSwap, checked against HotSwap's update key before it's saved. */
+
+const RELEASES: &str = "https://github.com/Zetenypapp/hotswap/releases/download";
+const MAX_ENGINE: u64 = 64 << 20;
+pub const NOT_INSTALLED: &str = "Mods need HotSwap's mod engine, a separate download. Get it on this page or in Settings → Features.";
+const UPDATING: &str = "HotSwap's mod engine is updating to match this version of HotSwap…";
+
+/// Where the downloaded engine lives: HotSwap's local data folder (%LOCALAPPDATA%\<identifier>\engine).
+fn engine_dir() -> Option<PathBuf> {
+    Some(PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("app.hotswap.desktop").join("engine"))
+}
+
+/// The engine's version, written next to it when it's installed.
+fn installed_version() -> Option<String> {
+    std::fs::read_to_string(engine_dir()?.join("version.txt")).ok().map(|v| v.trim().to_string())
+}
+
+fn wanted_version(app: &AppHandle) -> String {
+    crate::app::shown_version(&app.package_info().version.to_string())
+}
+
+/// Why the engine can't run right now, if it can't. Dev builds use the one cargo built.
+fn engine_problem(app: &AppHandle) -> Option<&'static str> {
+    if exe().is_some_and(|p| std::fs::metadata(p).is_ok_and(|m| m.len() > 0)) {
+        return (!cfg!(debug_assertions) && installed_version().as_deref() != Some(wanted_version(app).as_str())).then_some(UPDATING);
+    }
+    Some(if cfg!(debug_assertions) || engine_dir().is_some_and(|d| d.join("version.txt").exists()) { MISSING } else { NOT_INSTALLED })
+}
+
+/// Downloads `hotswap-engine.exe` and its signature from `base`, and returns the exe once the
+/// signature matches HotSwap's update key.
+fn fetch_verified(base: &str, key_b64: &str) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let get = |url: &str, max: u64| -> Result<Vec<u8>, String> {
+        let mut buf = Vec::new();
+        ureq::get(url).timeout(Duration::from_secs(180)).call().map_err(|e| format!("couldn't download it ({e})"))?
+            .into_reader().take(max).read_to_end(&mut buf).map_err(|e| e.to_string())?;
+        Ok(buf)
+    };
+    let data = get(&format!("{base}/hotswap-engine.exe"), MAX_ENGINE + 1)?;
+    if data.len() as u64 > MAX_ENGINE || !data.starts_with(b"MZ") {
+        return Err("the download isn't the mod engine".into());
+    }
+    let sig = String::from_utf8(get(&format!("{base}/hotswap-engine.exe.sig"), 64 << 10)?).map_err(|_| "bad signature file")?;
+    crate::catalog::verify_with(key_b64, &data, &sig)?;
+    Ok(data)
+}
+
+impl Engine {
+    /// Stops the running engine (to replace or remove it). The 2-second loop starts it again when needed.
+    fn stop(&self) {
+        if let Some((_, mut c, _)) = self.0.child.lock().unwrap().take() {
+            let _ = c.kill();
+            let _ = c.wait();
+        }
+        *self.0.last_try.lock().unwrap() = None;
+    }
+
+    /// Downloads the engine for this version of HotSwap and puts it in place.
+    fn install(&self, app: &AppHandle) -> Result<(), String> {
+        if cfg!(debug_assertions) {
+            return Err("Dev builds use the engine cargo builds".into());
+        }
+        let data = fetch_verified(&format!("{RELEASES}/v{}", wanted_version(app)), &crate::catalog::key_of(app))?;
+        let dir = engine_dir().ok_or("No local data folder")?;
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let part = dir.join("hotswap-engine.part");
+        std::fs::write(&part, &data).map_err(|e| e.to_string())?;
+        self.stop();
+        let exe = dir.join("hotswap-engine.exe");
+        let _ = std::fs::remove_file(&exe);
+        std::fs::rename(&part, &exe).map_err(|e| e.to_string())?;
+        std::fs::write(dir.join("version.txt"), wanted_version(app)).map_err(|e| e.to_string())?;
+        crate::logs::write("engine", &format!("installed the mod engine {} ({} KB)", wanted_version(app), data.len() / 1024));
+        Ok(())
+    }
+
+    /// At start: a 0.4.x install had the engine next to the app, so mods keep working with a fresh
+    /// one; anyone who has the engine gets the one matching this version after an update.
+    pub fn startup(&self, app: &AppHandle) {
+        if cfg!(debug_assertions) {
+            return;
+        }
+        let old = std::env::current_exe().ok().map(|e| e.with_file_name("hotswap-engine.exe")).filter(|o| o.exists());
+        if let Some(o) = &old {
+            let _ = std::fs::remove_file(o);
+        }
+        let had = old.is_some() || engine_dir().is_some_and(|d| d.exists());
+        if had && engine_problem(app).is_some() {
+            let (me, app) = (self.clone(), app.clone());
+            std::thread::spawn(move || {
+                let r = me.install(&app);
+                if let Err(e) = &r {
+                    crate::logs::write("engine", &format!("couldn't update the mod engine: {e}"));
+                }
+                let _ = app.emit("engine", engine_state_of(&app));
+            });
+        }
+    }
+}
+
+fn engine_state_of(app: &AppHandle) -> Value {
+    let problem = engine_problem(app);
+    json!({
+        "installed": problem.is_none() || problem == Some(UPDATING),
+        "ready": problem.is_none(),
+        "dev": cfg!(debug_assertions),
+        "version": installed_version(),
+        "message": problem,
+    })
+}
+
+#[tauri::command]
+pub fn engine_state(app: AppHandle) -> Value {
+    engine_state_of(&app)
+}
+
+#[tauri::command]
+pub async fn engine_install(app: AppHandle, engine: tauri::State<'_, Engine>) -> Result<Value, String> {
+    let engine = engine.inner().clone();
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || engine.install(&a)).await.map_err(|e| e.to_string())??;
+    Ok(engine_state_of(&app))
+}
+
+#[tauri::command]
+pub fn engine_remove(app: AppHandle, engine: tauri::State<'_, Engine>) -> Result<Value, String> {
+    if cfg!(debug_assertions) {
+        return Err("Dev builds use the engine cargo builds".into());
+    }
+    engine.stop();
+    if let Some(d) = engine_dir().filter(|d| d.exists()) {
+        std::fs::remove_dir_all(d).map_err(|e| e.to_string())?;
+    }
+    crate::logs::write("engine", "removed the mod engine");
+    Ok(engine_state_of(&app))
+}
+
+#[cfg(test)]
+mod tests {
+    /// End to end against a local server: `HS_ENGINE_TEST=http://127.0.0.1:8765 cargo test --lib engine_download -- --ignored`
+    /// with hotswap-engine.exe and its .sig (signed with HotSwap's key) served there.
+    #[test]
+    #[ignore]
+    fn engine_download() {
+        let conf: serde_json::Value = serde_json::from_str(&std::fs::read_to_string("tauri.conf.json").unwrap()).unwrap();
+        let key = conf["plugins"]["updater"]["pubkey"].as_str().unwrap();
+        let base = std::env::var("HS_ENGINE_TEST").unwrap();
+        let data = super::fetch_verified(&base, key).expect("signed engine");
+        assert!(data.starts_with(b"MZ"));
+        // A file whose signature doesn't match is refused.
+        assert!(super::fetch_verified(&format!("{base}/bad"), key).is_err());
     }
 }

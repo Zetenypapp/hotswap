@@ -10,7 +10,7 @@
 //! it asks, and emptying it makes games load slower.
 
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, path::PathBuf, process::Command, sync::Mutex, time::Duration};
+use std::{collections::{HashMap, HashSet}, path::PathBuf, process::Command, sync::Mutex, time::Duration};
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -70,6 +70,8 @@ pub struct Config {
     battery_eco: bool,
     /// Recording and streaming apps are left alone (RECORDERS).
     protect_recorders: bool,
+    /// Apps playing sound (a video, music, a call) stay out of Efficiency mode while they play.
+    keep_playing: bool,
 }
 
 impl Config {
@@ -127,8 +129,9 @@ struct Extras {
     mouse_before: Option<[i32; 3]>,
     #[serde(skip)]
     eco_names: Vec<String>,
+    /// Processes put in Efficiency mode: pid -> process name.
     #[serde(skip)]
-    eco: HashSet<u32>,
+    eco: HashMap<u32, String>,
     /// The monitor (device name) switched to its highest refresh rate; reset to its normal mode after.
     display: Option<String>,
     #[serde(skip)]
@@ -326,6 +329,9 @@ struct Saved {
     /// Frozen apps (process, executable): resumed if still the same process.
     #[serde(default)]
     frozen: Vec<(u32, PathBuf)>,
+    /// Apps in Efficiency mode (process, name): put back if still the same process.
+    #[serde(default)]
+    eco: Vec<(u32, String)>,
 }
 
 fn saved_file(app: &AppHandle) -> Option<PathBuf> {
@@ -340,8 +346,9 @@ fn save_state(app: &AppHandle, a: &Active) {
         reg: a.extras.as_ref().map(|e| e.reg.clone()).unwrap_or_default(),
         display: a.extras.as_ref().and_then(|e| e.display.clone()),
         frozen: a.frozen.clone(),
+        eco: a.extras.as_ref().map(|e| e.eco.iter().map(|(p, n)| (*p, n.clone())).collect()).unwrap_or_default(),
     };
-    if s.power_before.is_none() && s.added_plan.is_none() && s.reg.is_empty() && s.display.is_none() && s.frozen.is_empty() {
+    if s.power_before.is_none() && s.added_plan.is_none() && s.reg.is_empty() && s.display.is_none() && s.frozen.is_empty() && s.eco.is_empty() {
         let _ = std::fs::remove_file(f);
     } else if let Ok(j) = serde_json::to_string(&s) {
         let _ = std::fs::write(f, j);
@@ -380,6 +387,14 @@ pub fn recover(app: &AppHandle) {
         for (pid, exe) in &s.frozen {
             if sys.process(sysinfo::Pid::from_u32(*pid)).and_then(|p| p.exe()).is_some_and(|e| e == exe) {
                 suspend(*pid, false);
+            }
+        }
+    }
+    if !s.eco.is_empty() {
+        let sys = processes();
+        for (pid, name) in &s.eco {
+            if sys.process(sysinfo::Pid::from_u32(*pid)).is_some_and(|p| p.name().to_string_lossy() == name.as_str()) {
+                set_eco(*pid, false);
             }
         }
     }
@@ -786,6 +801,54 @@ fn set_eco(pid: u32, on: bool) -> bool {
     false
 }
 
+/// Names (lowercase) of the apps playing sound right now: an active audio session on any output.
+fn playing_names() -> HashSet<String> {
+    let pids: Vec<sysinfo::Pid> = playing_pids().into_iter().map(sysinfo::Pid::from_u32).collect();
+    if pids.is_empty() {
+        return HashSet::new();
+    }
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(ProcessesToUpdate::Some(&pids), true, ProcessRefreshKind::nothing());
+    sys.processes().values().map(|p| p.name().to_string_lossy().to_lowercase()).collect()
+}
+
+#[cfg(windows)]
+fn playing_pids() -> Vec<u32> {
+    use windows::core::Interface;
+    use windows::Win32::{Media::Audio::*, System::Com::*};
+    let mut out = Vec::new();
+    unsafe {
+        let init = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
+        (|| -> windows::core::Result<()> {
+            let en: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+            let devices = en.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE)?;
+            for i in 0..devices.GetCount()? {
+                let Ok(mgr) = devices.Item(i).and_then(|d| d.Activate::<IAudioSessionManager2>(CLSCTX_ALL, None)) else { continue };
+                let list = mgr.GetSessionEnumerator()?;
+                for j in 0..list.GetCount()? {
+                    let Ok(s) = list.GetSession(j) else { continue };
+                    if s.GetState().ok() == Some(AudioSessionStateActive) {
+                        if let Ok(pid) = s.cast::<IAudioSessionControl2>().and_then(|s| s.GetProcessId()) {
+                            out.push(pid);
+                        }
+                    }
+                }
+            }
+            Ok(())
+        })()
+        .ok();
+        if init {
+            CoUninitialize();
+        }
+    }
+    out
+}
+
+#[cfg(not(windows))]
+fn playing_pids() -> Vec<u32> {
+    Vec::new()
+}
+
 fn processes() -> System {
     let mut sys = System::new();
     sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing().with_exe(UpdateKind::Always).with_memory());
@@ -897,20 +960,36 @@ impl Extras {
     }
 
     /// Puts the listed apps' processes in Efficiency mode, including ones started since last time.
-    fn eco_refresh(&mut self, game: &[u32]) {
+    fn eco_refresh(&mut self, game: &[u32], keep_playing: bool) -> bool {
+        let before = self.eco.len();
         if self.eco_names.is_empty() {
-            return;
+            return false;
         }
+        let playing = if keep_playing { playing_names() } else { HashSet::new() };
+        let woke = self.eco_wake(&playing);
         let sys = processes();
         for p in sys.processes().values() {
             let pid = p.pid().as_u32();
-            if self.eco.contains(&pid) || game.contains(&pid) {
+            if self.eco.contains_key(&pid) || game.contains(&pid) {
                 continue;
             }
-            if self.eco_names.iter().any(|n| p.name().to_string_lossy().eq_ignore_ascii_case(n)) && !off_limits(p) && set_eco(pid, true) {
-                self.eco.insert(pid);
+            let name = p.name().to_string_lossy().to_lowercase();
+            if self.eco_names.iter().any(|n| name.eq_ignore_ascii_case(n)) && !playing.contains(&name) && !off_limits(p) && set_eco(pid, true) {
+                self.eco.insert(pid, p.name().to_string_lossy().to_string());
             }
         }
+        woke || self.eco.len() != before
+    }
+
+    /// Takes apps that started playing sound out of Efficiency mode (every process of that app: the
+    /// sound comes from one, the video or game in the tab from another). True if any changed.
+    fn eco_wake(&mut self, playing: &HashSet<String>) -> bool {
+        let wake: Vec<u32> = self.eco.iter().filter(|(_, n)| playing.contains(&n.to_lowercase())).map(|(p, _)| *p).collect();
+        for pid in &wake {
+            set_eco(*pid, false);
+            self.eco.remove(pid);
+        }
+        !wake.is_empty()
     }
 
     fn undo(self, app: &AppHandle) {
@@ -943,7 +1022,7 @@ impl Extras {
         if let Some(m) = self.mouse_before {
             set_mouse(m);
         }
-        for pid in self.eco {
+        for (pid, _) in self.eco {
             set_eco(pid, false);
         }
     }
@@ -1010,6 +1089,7 @@ impl Boost {
             for tick in 1u64.. {
                 std::thread::sleep(Duration::from_secs(3));
                 let boost = app.state::<Boost>();
+                let keep_playing = boost.cfg.lock().unwrap().keep_playing;
                 let mut guard = boost.active.lock().unwrap();
                 match guard.as_mut() {
                     Some(a) if a.game == game => {
@@ -1017,8 +1097,13 @@ impl Boost {
                         let mut changed = None;
                         if let Some(e) = a.extras.as_mut() {
                             changed = e.refresh_display(&pids);
-                            if tick % 3 == 0 {
-                                e.eco_refresh(&pids);
+                            let changed_eco = if tick % 3 == 0 {
+                                e.eco_refresh(&pids, keep_playing)
+                            } else {
+                                keep_playing && !e.eco.is_empty() && e.eco_wake(&playing_names())
+                            };
+                            if changed_eco {
+                                save_state(&app, a);
                             }
                         }
                         if let Some(line) = changed {
@@ -1191,7 +1276,7 @@ impl Boost {
                     w.eco_apps.retain(|n| !recorder(n));
                 }
                 let (mut e, l) = Extras::apply(app, &w, &a.pids);
-                e.eco_refresh(&a.pids);
+                e.eco_refresh(&a.pids, cfg.keep_playing);
                 lines.extend(l);
                 a.extras = Some(e);
             }
@@ -1291,4 +1376,13 @@ pub(crate) async fn boost_clean(boost: tauri::State<'_, Boost>) -> Result<Cleane
 #[tauri::command]
 pub(crate) fn boost_set(app: AppHandle, boost: tauri::State<Boost>, cfg: Config) {
     boost.set(&app, cfg);
+}
+#[cfg(test)]
+mod audio_tests {
+    /// Prints the apps playing sound now: cargo test --lib playing_now -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn playing_now() {
+        println!("playing: {:?}", super::playing_names());
+    }
 }

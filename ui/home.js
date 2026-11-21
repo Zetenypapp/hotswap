@@ -137,6 +137,7 @@ function renderHome() {
 
   $('homeBody').innerHTML = `
     <div class="hello"><h1>${hi}</h1><p>Pick up where you left off, or see what's new with your games.</p></div>
+    ${welcomeCard()}${insightCard(false)}
     ${homeEdit ? `<div class="hp-bar"><span><b>Customising Home.</b> Drag panels to move them, drag a corner to resize, and give any panel its own source.</span>
       ${hidden.map(p => `<button class="chip" data-hpshow="${p.id}">+ ${esc(HOME_NAMES[p.id] || p.title || 'Panel')}</button>`).join('')}
       <button class="chip" data-hpadd>+ New panel</button><button class="btn" data-hpreset>Reset</button><button class="btn accent" data-hpdone>Done</button></div>` : ''}

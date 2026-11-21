@@ -21,6 +21,14 @@ pub struct Art {
     header: Option<String>,
 }
 
+impl Art {
+    /// One picture for everything (games you add, with a picture you picked).
+    pub fn picture(path: &Path) -> Art {
+        let p = Some(path.to_string_lossy().to_string());
+        Art { icon: p.clone(), capsule: p.clone(), header: p.clone(), hero: p, ..Default::default() }
+    }
+}
+
 /// How to start a game.
 #[derive(Clone, Default)]
 pub enum Launch {
@@ -58,6 +66,8 @@ pub struct Game {
     pub engine: Option<&'static str>,
     /// Steam lists it as single-player.
     pub single_player: bool,
+    /// The installed build (Steam's buildid, Epic's version), to notice game updates. Empty if unknown.
+    pub build: String,
     pub art: Art,
     #[serde(skip)]
     pub install: PathBuf,
@@ -105,11 +115,12 @@ pub fn kind_of(steam_type: Option<&str>, name: &str) -> &'static str {
     }
 }
 
-/// Every installed game from Steam, Epic and GOG.
+/// Every installed game from Steam, Epic and GOG, plus Minecraft (others.rs).
 pub fn scan() -> Scan {
     let mut scan = scan_steam();
     scan.games.extend(crate::epic::scan());
     scan.games.extend(crate::gog::scan());
+    scan.games.extend(crate::others::scan());
     scan.games.sort_by(|a, b| b.last_played.cmp(&a.last_played).then_with(|| a.name.cmp(&b.name)));
     scan
 }
@@ -152,6 +163,7 @@ fn scan_steam() -> Scan {
                 anticheat: Vec::new(),
                 engine: None,
                 single_player: false,
+                build: kv.get("buildid").cloned().unwrap_or_default(),
                 art: find_art(&cache, app_id),
                 install: if install_dir.is_empty() { PathBuf::new() } else { lib.join("steamapps").join("common").join(install_dir) },
                 launch: Launch::Url(format!("steam://rungameid/{app_id}")),

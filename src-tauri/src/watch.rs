@@ -1,5 +1,5 @@
 //! Detects which installed game is running: Steam's RunningAppID first, then any
-//! process whose executable lives inside a game's install folder. Emits
+//! process whose executable lives inside a game's install folder, then Minecraft's Java (others.rs). Emits
 //! `game-running` with the game ID (or null) whenever that changes.
 
 use std::{
@@ -9,6 +9,7 @@ use std::{
     time::Duration,
 };
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+use crate::others::{self, MINECRAFT};
 use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Clone, Default)]
@@ -16,6 +17,8 @@ pub struct Watch {
     /// (game ID, lowercased install folder ending in a backslash)
     targets: Arc<Mutex<Vec<(String, String)>>>,
     running: Arc<Mutex<Option<String>>>,
+    /// Minecraft is in the library, and its Java process while it runs.
+    minecraft: Arc<Mutex<(bool, Option<u32>)>>,
 }
 
 impl Watch {
@@ -31,6 +34,10 @@ impl Watch {
             })
             .collect();
         *self.targets.lock().unwrap() = list;
+    }
+
+    pub fn set_minecraft(&self, on: bool) {
+        *self.minecraft.lock().unwrap() = (on, None);
     }
 
     /// Install folder of a scanned game.
@@ -78,6 +85,9 @@ impl Watch {
     }
 
     fn find_pid(&self, id: &str, any: bool) -> Option<u32> {
+        if id == MINECRAFT {
+            return self.minecraft.lock().unwrap().1;
+        }
         let (_, dir) = self.targets.lock().unwrap().iter().find(|(gid, _)| gid == id).cloned()?;
         let mut sys = System::new();
         sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing().with_exe(UpdateKind::Always).with_memory());
@@ -97,6 +107,9 @@ impl Watch {
 
     /// Every process running from the game's install folder (games can have several).
     pub fn pids_in(&self, id: &str) -> Vec<u32> {
+        if id == MINECRAFT {
+            return self.minecraft.lock().unwrap().1.into_iter().collect();
+        }
         let Some((_, dir)) = self.targets.lock().unwrap().iter().find(|(gid, _)| gid == id).cloned() else { return vec![] };
         let mut sys = System::new();
         sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing().with_exe(UpdateKind::Always));
@@ -108,6 +121,9 @@ impl Watch {
 
     /// Ends every process running from the game's install folder. Returns how many were ended.
     pub fn kill(&self, id: &str) -> usize {
+        if id == MINECRAFT {
+            return self.minecraft.lock().unwrap().1.filter(|&p| end(p)).map_or(0, |_| 1);
+        }
         let Some((_, dir)) = self.targets.lock().unwrap().iter().find(|(gid, _)| gid == id).cloned() else { return 0 };
         let mut sys = System::new();
         sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing().with_exe(UpdateKind::Always));
@@ -120,7 +136,8 @@ impl Watch {
 
     fn detect(&self, sys: &mut System) -> Option<String> {
         let targets = self.targets.lock().unwrap().clone();
-        if targets.is_empty() {
+        let mc = self.minecraft.lock().unwrap().0;
+        if targets.is_empty() && !mc {
             return None;
         }
         sys.refresh_processes_specifics(
@@ -148,6 +165,13 @@ impl Watch {
             let exe = exe.to_string_lossy().to_lowercase();
             if let Some((id, _)) = targets.iter().find(|(_, dir)| exe.starts_with(dir.as_str())) {
                 return Some(id.clone());
+            }
+        }
+        if mc {
+            let pid = sys.processes().values().find(|p| others::is_minecraft(p)).map(|p| p.pid().as_u32());
+            self.minecraft.lock().unwrap().1 = pid;
+            if pid.is_some() {
+                return Some(MINECRAFT.into());
             }
         }
         None

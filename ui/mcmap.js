@@ -15,6 +15,8 @@ const McMap = (() => {
   // Structures per region ("x,z" -> list), asked one region at a time around the view.
   let structs = new Map(), structBusy = false, structFail = '';
   let trail = [], pins = [];
+// Structures marked as looted, per world and dimension: "set:x,z". Saved with the pins.
+let done = new Set();
   const prefs = loadPrefs();
 
   function loadPrefs() {
@@ -288,7 +290,12 @@ const McMap = (() => {
   }
 
   async function loadPins() {
-    try { pins = JSON.parse((await invoke('map_pins_load')) || '{}')[pinKey()] || []; } catch { pins = []; }
+    try {
+      const all = JSON.parse((await invoke('map_pins_load')) || '{}');
+      pins = all[pinKey()] || [];
+      done = new Set(all[pinKey() + '|done'] || []);
+    } catch { pins = []; done = new Set(); }
+    dirty = true;
     renderPins();
   }
   const pinKey = () => `minecraft:${safe(world || '')}|${safe(dim)}`;
@@ -296,8 +303,26 @@ const McMap = (() => {
     let all = {};
     try { all = JSON.parse((await invoke('map_pins_load')) || '{}'); } catch {}
     all[pinKey()] = pins;
+    all[pinKey() + '|done'] = [...done];
     try { await invoke('map_pins_save', { data: JSON.stringify(all) }); } catch (e) { toast('Could not save pins', String(e)); }
     renderPins(); dirty = true;
+  }
+
+  const doneKey = f => `${f.set}:${f.x},${f.z}`;
+  // Marks (or unmarks) a structure as looted, with an Undo bar for a few seconds.
+  let undoBar = null;
+  function setDone(f, on, quiet) {
+    const k = doneKey(f);
+    if (on) done.add(k); else done.delete(k);
+    savePins();
+    if (quiet) return;
+    undoBar?.remove();
+    const bar = undoBar = document.createElement('div');
+    bar.style.cssText = 'position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;padding:8px 10px 8px 14px;border-radius:12px;background:rgba(11,13,16,.92);color:#fff;font-size:13px;z-index:5;box-shadow:0 6px 24px rgba(0,0,0,.4)';
+    bar.innerHTML = `<span>${on ? '✓ Marked as looted' : 'Unmarked'}: ${esc(typeName(f.t))}</span><button class="btn" style="padding:4px 12px">Undo</button>`;
+    bar.querySelector('button').onclick = () => { setDone(f, !on, true); bar.remove(); };
+    host.append(bar);
+    setTimeout(() => { if (undoBar === bar) { bar.remove(); undoBar = null; } }, 6000);
   }
 
   /* ---------- drawing ---------- */
@@ -355,15 +380,16 @@ const McMap = (() => {
           if (prefs.hide[f.set]) continue;
           const px = sx(f.x), py = sy(f.z);
           if (px < -16 || py < -16 || px > w + 16 || py > h + 16) continue;
-          const r = big ? 11 : 7, size = sizeOf(f);
-          ctx.fillStyle = 'rgba(11,13,16,.78)';
+          const r = big ? 11 : 7, size = sizeOf(f), looted = done.has(doneKey(f));
+          ctx.fillStyle = looted ? 'rgba(46,170,96,.92)' : 'rgba(11,13,16,.78)';
           ctx.beginPath(); ctx.arc(px, py, r, 0, 7); ctx.fill();
-          if (size) { ctx.strokeStyle = SIZEC[size]; ctx.lineWidth = big ? 3 : 2; ctx.stroke(); }
+          if (looted) { ctx.strokeStyle = '#7dffb0'; ctx.lineWidth = big ? 3 : 2; ctx.stroke(); }
+          else if (size) { ctx.strokeStyle = SIZEC[size]; ctx.lineWidth = big ? 3 : 2; ctx.stroke(); }
           ctx.font = `${big ? 13 : 9}px system-ui`; ctx.fillStyle = '#fff';
           ctx.fillText(setInfo(f.set)[0], px, py + 1);
           if (f.tag === 'ship') { ctx.font = `${big ? 11 : 8}px system-ui`; ctx.fillText('🚀', px + r * 0.9, py - r * 0.9); }
           if (view.s >= 0.5) {
-            const label = [size, typeName(f.t), tagText(f)].filter(Boolean).join(' · ');
+            const label = [looted ? '✓ looted' : '', size, typeName(f.t), tagText(f)].filter(Boolean).join(' · ');
             ctx.font = '600 11px system-ui'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.8)';
             ctx.strokeText(label, px, py + 20); ctx.fillStyle = '#fff'; ctx.fillText(label, px, py + 20);
           }
@@ -638,6 +664,7 @@ const McMap = (() => {
     const at = near || place || { x, z };
     const extra = place ? [sizeOf(place), tagText(place), place.pieces ? `${place.pieces} pieces, ${place.height} tall` : ''].filter(Boolean).join(' · ') : '';
     menu.innerHTML = `<div class="lm-mt"><b>${near ? esc(near.name) : place ? `${setInfo(place.set)[0]} ${esc(typeName(place.t))}` : 'Map spot'}</b>${extra ? `<span>${esc(extra)}</span>` : ''}<span>${fmt(at.x)}, ${fmt(at.z)}${here() ? ` · ${fmt(Math.hypot(at.x - st.x, at.z - st.z))} blocks away` : ''}</span></div>
+      ${place ? (done.has(doneKey(place)) ? '<button data-m="undone">Undo looted</button>' : '<button data-m="done">✓ Mark as looted</button>') : ''}
       ${near ? '<button data-m="del">Delete pin</button>' : '<button data-m="pin">Drop a pin here</button>'}
       <button data-m="copy">Copy coordinates</button><button data-m="center">Center here</button>`;
     menu.style.left = Math.min(px, cv.clientWidth - 220) + 'px'; menu.style.top = Math.min(py, cv.clientHeight - 160) + 'px';
@@ -645,6 +672,7 @@ const McMap = (() => {
     menu.addEventListener('click', ev => {
       const m = ev.target.closest('[data-m]')?.dataset.m;
       if (m === 'pin') addPin(at.x, at.z);
+      if (m === 'done' || m === 'undone') setDone(place, m === 'done');
       if (m === 'del') { pins = pins.filter(p => p !== near); savePins(); }
       if (m === 'copy') navigator.clipboard?.writeText(`${at.x} ${near?.y ?? '~'} ${at.z}`).then(() => toast('Copied', 'Paste it in chat or a /tp command')).catch(() => {});
       if (m === 'center') { setFollow(false); view.cx = at.x; view.cz = at.z; dirty = true; }

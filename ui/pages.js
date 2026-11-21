@@ -74,6 +74,8 @@ document.addEventListener('click', e => {
   const m = e.target.closest('[data-map]');
   if (m) { mapOpen = m.dataset.map; if (!WEB_MAPS.includes(mapOpen)) mapMode = 'local'; renderMaps(); syncMap(); }
   if (e.target.closest('[data-mapback]')) { mapOpen = null; renderMaps(); syncMap(); }
+  const om = e.target.closest('[data-openmap]');
+  if (om) { mapOpen = om.dataset.openmap; if (!WEB_MAPS.includes(mapOpen)) mapMode = 'local'; go('maps'); syncMap(); }
   const mm = e.target.closest('[data-mapmode]');
   if (mm) { mapMode = mm.dataset.mapmode; renderMaps(); syncMap(); }
 });
@@ -163,8 +165,11 @@ function renderSettings() {
       <div class="set-row"><div class="txt"><b>Steam install</b><span>${esc(STEAM.root || 'Not found.')}</span></div><button class="btn" id="rescanBtn">Rescan</button></div>
       <div class="set-row"><div class="txt"><b>Other stores</b><span>${(() => {
         const n = s => LIB.filter(g => g.source === s).length;
-        return `Epic Games: ${n('epic') ? `${n('epic')} found` : 'none installed'}. GOG: ${n('gog') ? `${n('gog')} found` : 'none installed'}.`;
+        return `Epic Games: ${n('epic') ? `${n('epic')} found` : 'none installed'}. GOG: ${n('gog') ? `${n('gog')} found` : 'none installed'}. Minecraft: Java Edition: ${n('other') ? 'found (Modrinth, the official launcher, Prism or CurseForge)' : 'not found'}.`;
       })()}</span></div></div>
+      ${invoke ? `<div class="set-row"><div class="txt"><b>Games you added</b><span>For games from Xbox, EA, Ubisoft, Battle.net, itch.io or anywhere else: pick the game's .exe. Everything running from its folder counts as the game, so it needs a folder of its own.</span>
+        ${LIB.some(g => g.source === 'custom') ? `<div class="cg-list">${LIB.filter(g => g.source === 'custom').map(g => `<span class="cg-row"><input class="cg-name" data-cgname="${esc(g.id)}" value="${esc(g.name)}" maxlength="80" aria-label="Name"><button class="btn sm" data-cgart="${esc(g.id)}">Picture</button><button class="bsug-x" data-rmgame="${esc(g.id)}" title="Remove from HotSwap" aria-label="Remove ${esc(g.name)}">×</button></span>`).join('')}</div>` : ''}</div>
+        <button class="btn" data-addgame>Add a game</button></div>` : ''}
       ${STEAM.root ? `<div class="set-row"><div class="txt"><b>Games and software</b><span>${gamesOnly().length} games and ${softwareOnly().length} software, sorted using Steam's own app labels${LIB.some(g => !g.steamType) ? ', with a list of common tools as a backup' : ''}.</span></div></div>` : ''}
       ${STEAM.libraries.length ? `<div class="set-row"><div class="txt"><b>Library folders</b><span>${STEAM.libraries.map(esc).join('<br>')}</span></div></div>` : ''}
     </div>
@@ -212,6 +217,9 @@ function profileControl(g) {
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>${menu}</div>`;
 }
 
+// The Maps page entry for a game with a map (the map's key in renderMaps), if Maps is on.
+const mapKey = g => !feat('maps') ? null : g.id === 'minecraft' ? 'minecraft' : MAP_GAMES.includes(String(g.appId)) ? String(g.appId) : null;
+
 function renderGame() {
   const g = game();
   if (!g) { go('home'); return; }
@@ -233,11 +241,13 @@ function renderGame() {
       ].filter(Boolean).join(' · ')}</div>
       ${g.anticheat.length ? `<div class="ac-note"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5z"/></svg>Uses ${esc(g.anticheat.join(' and '))}. Modding it can get your account banned.</div>` : ''}
       ${g.offline ? `<div class="ac-note"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5z"/></svg>${g.offlineNote ? esc(g.offlineNote) : `Singleplayer only. Online servers use ${esc(g.onlineAnticheat.join(' and ') || 'anti-cheat')}: mods turn off by themselves the moment you join one.`}</div>` : ''}
-      ${g.experimental && !g.anticheat.length ? `<div class="ac-note exp" title="Tell us how they work: Settings → Report a bug"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M9 2h6v2h-1v5.5l5.6 9.4A2 2 0 0 1 17.9 22H6.1a2 2 0 0 1-1.7-3.1L10 9.5V4H9z"/></svg>Experimental: these mods are new and not tested in the game yet.</div>` : ''}</div>
+      ${g.experimental && !g.anticheat.length ? `<div class="ac-note exp" title="Tell us how they work: Settings → Report a bug"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M9 2h6v2h-1v5.5l5.6 9.4A2 2 0 0 1 17.9 22H6.1a2 2 0 0 1-1.7-3.1L10 9.5V4H9z"/></svg>Experimental: these mods are new and not tested in the game yet. Tried one? Use the thumbs next to it.</div>` : ''}${buildNote(g)}</div>
     <div class="gh-actions">
       ${total ? `${profileControl(g)}
       <button class="roundbtn" id="resetBtn" aria-label="Turn off all mods" title="Turn off all mods"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>` : ''}
       ${total && !g.anticheat.length ? `<button class="roundbtn${gameEditing() ? ' on' : ''}" id="gameEditBtn" aria-pressed="${gameEditing()}" aria-label="Customise this page" title="Customise this page"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 6h10M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>` : ''}
+      ${mapKey(g) ? `<button class="pbtn" data-openmap="${mapKey(g)}" title="Open its map"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>Open map</button>` : ''}
+      ${g.source === 'custom' && invoke ? `<button class="roundbtn" data-cgart="${esc(g.id)}" aria-label="Choose a picture" title="Choose a picture"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg></button>` : ''}
       <button class="roundbtn${state.panel ? ' on' : ''}" id="panelBtn" aria-pressed="${state.panel}" aria-label="Side panel" title="Side panel"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button>
       ${RUNNING === g.id && !live && invoke
         ? `<button class="play" id="injectBtn" title="Start HotSwap in the running game: mods, hotkeys and the session timer"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Inject</button>`
@@ -287,7 +297,7 @@ function modRow(g, m, clash, locked) {
   const keys = keyChip(g, m, 'up', clash) + (m.type === 'slider' ? keyChip(g, m, 'down', clash) : '');
   const pinned = !!state.pinned[g.id]?.[m.id];
   return `<div class="row${isActive(g, m) ? ' active' : ''}${locked ? ' locked' : ''}" data-mod="${m.id}">
-    <div class="label"><svg class="bolt" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span class="mname"${modName(g, m) !== m.name ? ` title="${esc(m.name)}"` : ''}>${esc(modName(g, m))}</span>${info}${m.live ? '' : '<span class="soon">Soon</span>'}${modDot(g, m)}
+    <div class="label"><svg class="bolt" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span class="mname"${modName(g, m) !== m.name ? ` title="${esc(m.name)}"` : ''}>${esc(modName(g, m))}</span>${info}${m.live ? '' : '<span class="soon">Soon</span>'}${modDot(g, m)}${voteBtns(g, m)}
       <button class="pin${pinned ? ' on' : ''}" data-pin="${m.id}" aria-pressed="${pinned}" aria-label="${pinned ? 'Unpin' : 'Pin to top'}" title="${pinned ? 'Unpin' : 'Pin to top'}"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M15 3l6 6-3 1-4 4 1 5-2 2-4-4-5 5H3v-1l5-5-4-4 2-2 5 1 4-4z"/></svg></button></div>
     ${ctl}<div class="keys">${keys}</div></div>`;
 }
@@ -345,7 +355,7 @@ function renderMods() {
   }).join('');
   const more = hidden ? `<button class="gl-hidden" data-gledit>${hidden} hidden mod${hidden > 1 ? 's' : ''} · Customise to show</button>` : '';
   $('mods').classList.toggle('compact', state.rowSize === 'compact');
-  $('mods').innerHTML = setupCard(g) + (editing ? gameEditBar(g) : lockbar) + (cats || `<p class="noresults">No mods match “${esc(q)}”.</p>`) + more;
+  $('mods').innerHTML = engineCard(g) + setupCard(g) + (editing ? gameEditBar(g) : lockbar) + (cats || `<p class="noresults">No mods match “${esc(q)}”.</p>`) + more;
 }
 
 function renderPanel() {
@@ -368,6 +378,7 @@ function renderPanel() {
   if (live && sessionStart) rows.unshift(`<li class="now-row"><span>Now playing</span><span>${duration(Date.now() - sessionStart)}</span></li>`);
   $('sessionsMeta').textContent = [g.playtime ? `${hours(g.playtime)} on Steam` : '', total ? `${duration(total)} with HotSwap` : ''].filter(Boolean).join(' · ');
   $('sessions').innerHTML = rows.length ? rows.join('') : '<p class="empty">Sessions show up here after you play with HotSwap open.</p>';
+  renderBackups(g);
   const ta = $('notes');
   if (document.activeElement !== ta) ta.value = state.notes[g.id] || '';
 }

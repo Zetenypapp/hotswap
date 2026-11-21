@@ -140,6 +140,7 @@ document.addEventListener('click', e => {
     }
     case 'setBoostReopen': state.boostReopen = !state.boostReopen; save(); syncBoost(); render(); break;
     case 'boostCleanBtn': boostClean(); break;
+    case 'setBoostPlaying': state.boostPlaying = state.boostPlaying === false; save(); syncBoost(); render(); break;
     case 'setBoostProtect': state.boostProtect = state.boostProtect === false; BOOST_APPS = null; save(); syncBoost(); render(); break;
     case 'setBoostBattery': state.boostBattery = state.boostBattery === false; save(); syncBoost(); render(); break;
     case 'boostPick': case 'ecoPick': case 'freezePick': {

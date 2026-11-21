@@ -220,10 +220,12 @@ The starting points:
 
 ### And
 
+- **Scorecard:** the game's average FPS and 1% low in each gear, from your own sessions, measured every 2 seconds and shown right away, so you can see what a gear really does (compared with Off once you've played a session on Off). Needs the FPS counter
 - **A gear per game:** shift in the overlay while a game runs and HotSwap remembers that gear for it
 - **Easy on battery:** laptops stay at Eco on battery, and shift back up when plugged in
 - **What it's doing:** a live list under the dial, e.g. "Power plan: High performance · Frozen: EpicGamesLauncher"
 - **Quick clean:** a one-off button that asks background apps to hand back memory they aren't using, and says how much was freed
+- **Apps playing sound stay at full speed:** a browser playing a video, music or a call is never put in Efficiency mode while it plays (HotSwap asks Windows which apps have sound playing). Can be turned off on the Boost page
 - **Recording apps protected:** OBS, Streamlabs, XSplit, Medal, NVIDIA ShadowPlay, AMD ReLive, Bandicam, Twitch Studio and ShareX are never closed, frozen, slowed or cleaned, and high game priority stays at above normal while one runs. Can be turned off.
 
 No fake "RAM cleaning": Windows already gives games free memory instantly, and emptying it makes games load slower. Boost only changes Windows settings and the game's priority, using the same standard Windows calls as Task Manager. It never touches the game's memory.
@@ -289,7 +291,7 @@ Browse, install, switch off and remove community mods from inside HotSwap:
 
 ## 📚 The app
 
-- 🎮 **Your real library:** finds installed Steam, Epic and GOG games, with artwork read from Steam's local cache, and the engine each game is made with
+- 🎮 **Your real library:** finds installed Steam, Epic and GOG games, and Minecraft: Java Edition from the Modrinth App, the official launcher, Prism or CurseForge (seen running however you start it, so Boost, stats and the live session work for it). Any other game (Xbox, EA, Ubisoft, Battle.net, itch.io...) with **+ Add a game** on the Library page: pick its .exe, give it a picture, rename or remove it in Settings → Library, with artwork read from Steam's local cache, and the engine each game is made with
 - 🧰 **Games vs software:** tools like OBS or 3DMark are sorted out using Steam's own app labels
 - 🛡️ **Anti-cheat aware:** games with VAC, Easy Anti-Cheat, BattlEye or EA Javelin get no mods
 - ▶️ **Real Play button:** launches through the game's store and detects when it's running, however you started it
@@ -301,8 +303,14 @@ Browse, install, switch off and remove community mods from inside HotSwap:
 - 🪟 **Mini mode:** a small always-on-top window with just the running game's mods
 - 📰 **Live Home:** developer news for your games, Steam deals (via CheapShark), top sellers, new releases, and your own sources
 - ⏱️ **Playtime and sessions:** Steam hours plus time played with HotSwap
+- 🧾 **Live session and recap:** while a game runs, Home and the Boost page show it live: FPS and 1% low now, the session average, CPU, GPU, memory, the gear and your mods, with tips on what to change (a gear that ran smoother in this game, a maxed-out graphics card or processor, stutters, full memory, heat) and a button to do it. After the game closes, the same card shows the recap
+- 💾 **Save backups:** when a session with mods starts, the game's save folder is zipped into HotSwap's own folder (the newest 5 kept; your saves are only read). Known folders for the main games, or pick it once; Back up now, Restore (the saves there now are backed up first; not while the game runs) and Open folder on the game page
+- 🔄 **Game updated note:** when a game with mods updated since you last played it with HotSwap, its page (and a popup when it starts) says mods may need a check
+- 👍 **Tell us if it works:** experimental mods you've used get thumbs up and down, which open a ready-filled GitHub issue
 - 🔍 **Ctrl+K palette:** jump to any game, page, mod or action
+- 🗺️ **Open map** on the pages of games with a map: Satisfactory, Subnautica and Minecraft
 - 📊 **Stats widget:** your PC's stats on the Home page and in the overlay
+- 🧩 **Pick what you want:** a welcome on first start to choose Everything, Boost only or Overlay only. Mods need the **mod engine**, a separate signed download you get on a game's page or in Settings → Features (and can remove there); it updates itself with HotSwap
 - 📦 **Mod lists between releases:** new games and fixes arrive from the repo's signed `catalog/mods.json`, checked against HotSwap's update key, without an app update
 - 🔄 **Auto-updates:** signed updates from GitHub releases, installed with one click
 - 🧾 **Logs:** Settings → Export logs packs everything needed for a bug report

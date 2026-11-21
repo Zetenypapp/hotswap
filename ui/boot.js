@@ -7,6 +7,7 @@ document.addEventListener('securitypolicyviolation', e => invoke?.('log_ui', { m
 (async () => {
   if (!appWin) $('winctl').hidden = true;
   await loadState();
+  await loadEngine();
   syncBoost();
   await loadRemoteCatalog();
   await scanLibrary();

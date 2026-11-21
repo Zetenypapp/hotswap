@@ -15,7 +15,7 @@ fn cache_dir(app: &AppHandle) -> Option<PathBuf> {
 }
 
 /// HotSwap's update key, from tauri.conf.json (base64 of a minisign public key file).
-fn key_of(app: &AppHandle) -> String {
+pub(crate) fn key_of(app: &AppHandle) -> String {
     app.config().plugins.0.get("updater").and_then(|u| u.get("pubkey")).and_then(|k| k.as_str()).unwrap_or("").to_string()
 }
 

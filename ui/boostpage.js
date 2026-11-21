@@ -84,6 +84,8 @@ function renderBoost() {
     <div class="bhero-r">${boostDial(level)}</div>
   </section>
 
+  ${insightCard(true)}
+
   <div class="bgears">${[0, 1, 2, 3, 4, 5].map(n => {
     const g = boostGearCfg(n);
     return `<button class="bgear${n === level ? ' on' : ''}" data-gear="${n}" style="--g:${gearColor(n)}">
@@ -105,11 +107,14 @@ function renderBoost() {
     <section class="bcard">
       <h2>Safety</h2>
       <div class="bsafe"><div class="txt"><b>Protect recording apps</b><span>OBS, Streamlabs, XSplit, Medal, ShadowPlay, ReLive, Bandicam, Twitch Studio and ShareX are never closed, frozen, slowed or cleaned.</span></div>${sw('setBoostProtect', state.boostProtect !== false)}</div>
+      <div class="bsafe"><div class="txt"><b>Keep apps playing sound at full speed</b><span>A browser playing a video, music or a call is never put in Efficiency mode while it plays. It slows down again a few seconds after the sound stops.</span></div>${sw('setBoostPlaying', state.boostPlaying !== false)}</div>
       <div class="bsafe"><div class="txt"><b>Easy on battery</b><span>On a laptop’s battery, Boost stays at Eco.</span></div>${sw('setBoostBattery', state.boostBattery !== false)}</div>
       <div class="bsafe"><div class="txt"><b>Reopen closed apps</b><span>Starts them again when you quit the game or shift down.</span></div>${sw('setBoostReopen', state.boostReopen)}</div>
       ${Object.keys(state.boostGames || {}).length ? `<div class="bsafe col"><div class="txt"><b>Games with their own gear</b></div><div class="bapps-chips">${Object.entries(state.boostGames).map(([id, n]) => `<button class="bchip" data-gamegear="${esc(id)}" title="Use the gear for every game again" style="--g:${gearColor(n)}"><i class="gdot"></i>${esc(findGame(id)?.name || id)}: ${BOOST_GEARS[n].name} ×</button>`).join('')}</div></div>` : ''}
     </section>
   </div>
+
+  ${scorecard()}
 
   <section class="bcard">
     <h2>Your apps</h2>

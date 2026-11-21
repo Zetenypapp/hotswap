@@ -5,6 +5,7 @@
 //! Each program only contains the code it uses.
 
 pub mod app;
+pub mod backup;
 pub mod appinfo;
 pub mod boost;
 pub mod bridge;
@@ -22,6 +23,7 @@ pub mod farming;
 pub mod fps;
 pub mod fthr;
 pub mod minecraft;
+pub mod others;
 pub mod gog;
 pub mod home;
 pub mod il2cpp;

@@ -1,6 +1,6 @@
 [package]
 name = "hotswap"
-version = "0.4.9"
+version = "0.5.0-beta.1"
 description = "HotSwap desktop app"
 license = "GPL-3.0-or-later"
 edition = "2021"
@@ -53,6 +53,8 @@ minisign-verify = "0.3"
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
 windows-core = "0.62"
+# Already in the build through webview2-com; Boost asks Windows which apps are playing sound.
+windows = { version = "0.62", features = ["Win32_Media_Audio", "Win32_System_Com"] }
 winreg = "0.52"
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_Diagnostics_Debug", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Memory", "Win32_Security", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Performance", "Win32_System_LibraryLoader", "Win32_Graphics_Gdi", "Win32_UI_Accessibility", "Win32_System_Diagnostics_Etw", "Win32_System_Time", "Win32_UI_Shell", "Win32_System_Registry", "Win32_NetworkManagement_NetManagement", "Win32_Security_Authorization"] }
 

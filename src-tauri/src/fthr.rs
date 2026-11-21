@@ -2,8 +2,8 @@
 //! HotSwap's own FTHR plugin (coming with FTHR's plugin list) listens on 127.0.0.1 and writes its port
 //! and a per-session token to ~/.fthr/hotswap-bridge.json. Without it, FTHR 2.1's Stream Deck
 //! Bridge plugin works too (~/.fthr/stream-deck-bridge.json), with the same protocol: GET /status,
-//! POST /command, each with a Bearer token. HotSwap's plugin adds GET /recent (latest saved files)
-//! and the replay length.
+//! POST /command, each with a Bearer token. HotSwap's plugin adds the replay length and
+//! POST /settings (FTHR's quick capture settings).
 //! Nothing here touches FTHR's capture engine: every command goes through FTHR's own guarded handlers.
 
 use serde_json::{json, Value};
@@ -42,7 +42,7 @@ fn running() -> bool {
 struct Bridge {
     port: u16,
     token: String,
-    /// HotSwap's own plugin (has /recent), not FTHR's Stream Deck one.
+    /// HotSwap's own plugin (has /settings), not FTHR's Stream Deck one.
     ours: bool,
 }
 
@@ -104,7 +104,6 @@ pub fn clips_status() -> Value {
     // A file can be left from an earlier run, or its plugin was just turned off: the first that answers.
     for b in bridges() {
         let Ok((200, v)) = request(&b, "GET", "/status", None) else { continue };
-        let recent = if b.ours { request(&b, "GET", "/recent", None).ok().filter(|r| r.0 == 200).map(|r| recent_files(&r.1["files"])) } else { None };
         return json!({
             "state": "ok",
             "plugin": if b.ours { "hotswap" } else { "streamdeck" },
@@ -112,22 +111,55 @@ pub fn clips_status() -> Value {
             "capturing": v["capturing"].as_bool().unwrap_or(false),
             "recording": v["recording"].as_str().unwrap_or("idle"),
             "clipLength": v["clip_length"].as_f64(),
-            "recent": recent,
+            // Only HotSwap's plugin 1.1+ sends these: the replay settings and their choices.
+            "settings": if b.ours && v["settings"].is_object() { settings(&v["settings"]) } else { Value::Null },
         });
     }
     json!({ "state": "noplugin" })
 }
 
-/// The plugin's latest files, passed on with only the fields the overlay shows.
-fn recent_files(v: &Value) -> Vec<Value> {
-    let text = |x: &Value| x.as_str().unwrap_or("").chars().take(160).collect::<String>();
-    v.as_array().into_iter().flatten().take(8).map(|f| json!({
-        "name": text(&f["name"]),
-        "group": text(&f["group"]),
-        "kind": match f["kind"].as_str() { Some(k @ ("clip" | "recording" | "screenshot")) => k, _ => "clip" },
-        "size": f["size"].as_u64().unwrap_or(0),
-        "modified": f["modified"].as_u64().unwrap_or(0),
-    })).collect()
+/// The plugin's replay settings, passed on as plain values only.
+fn settings(v: &Value) -> Value {
+    let one = |x: &Value| match x {
+        Value::Number(_) => x.clone(),
+        Value::String(s) => json!(s.chars().take(16).collect::<String>()),
+        _ => Value::Null,
+    };
+    let keys = ["clip_length", "framerate", "resolution", "quality"];
+    json!({
+        "current": keys.iter().map(|k| (k.to_string(), one(&v["current"][k]))).collect::<serde_json::Map<_, _>>(),
+        "options": keys.iter().map(|k| (k.to_string(), json!(v["options"][k].as_array().into_iter().flatten().take(16).map(one).collect::<Vec<_>>()))).collect::<serde_json::Map<_, _>>(),
+        "restartPending": v["restart_pending"].as_bool().unwrap_or(false),
+    })
+}
+
+/// Changes one replay setting (`key` = clip_length/framerate/resolution/quality), or with
+/// `apply` restarts capture so the changes take effect. The plugin checks the value is one of FTHR's.
+#[tauri::command]
+pub fn clips_settings(key: Option<String>, value: Option<Value>, apply: bool) -> Result<(), String> {
+    let mut body = serde_json::Map::new();
+    if let (Some(k), Some(v)) = (key, value) {
+        if !["clip_length", "framerate", "resolution", "quality"].contains(&k.as_str()) {
+            return Err("Unknown setting".into());
+        }
+        body.insert(k, v);
+    }
+    if apply {
+        body.insert("apply".into(), json!(true));
+    }
+    if body.is_empty() {
+        return Ok(());
+    }
+    let body = Value::Object(body).to_string();
+    let b = bridges().into_iter().find(|b| b.ours).ok_or("Needs HotSwap's FTHR plugin 1.1")?;
+    match request(&b, "POST", "/settings", Some(&body))? {
+        (200, _) => {
+            crate::logs::write("clips", &format!("FTHR Clips settings: {body}"));
+            Ok(())
+        }
+        (404, _) => Err("Update HotSwap's FTHR plugin to change settings".into()),
+        (code, v) => Err(v["error"].as_str().map(str::to_string).unwrap_or_else(|| format!("FTHR answered {code}"))),
+    }
 }
 
 #[tauri::command]

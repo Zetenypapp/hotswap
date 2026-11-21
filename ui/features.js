@@ -46,6 +46,7 @@ function featuresSettings() {
     <div class="modes">${MODES.map(([k, name, what]) => `<button class="mode${mode === k ? ' on' : ''}" data-featmode="${k}"><b>${name}</b><span>${what}</span></button>`).join('')}</div>
     <div class="set-tip">${mode ? '' : '<b>Custom:</b> your own mix of features below. '}Pick a mode for a lighter HotSwap, or switch single features below.</div>
   </div>
+  ${ENGINE ? `<div class="set-group"><h2>Mods</h2>${engineRow()}</div>` : ''}
   <div class="set-group"><h2>Features</h2>
     <div class="set-row"><div class="txt"><b>Turn off what you don’t use</b><span>Switched off features don’t load or run at all, so HotSwap uses less memory, network and CPU. ${n ? `${n} off right now.` : 'Everything is on.'}</span></div>
       <div class="btnrow"><button class="btn" data-featall="0" title="Only mods, hotkeys, the overlay and update checks">Minimal</button><button class="btn" data-featall="1">All on</button></div></div>
@@ -101,3 +102,56 @@ document.addEventListener('click', e => {
 
 // Shown on the Overlay page in place of a switched off feature's settings.
 const featOffNote = name => `<div class="set-group"><h2>${name}</h2><div class="set-tip">${name} is turned off in Settings → Features.</div></div>`;
+
+/* ---------- The mod engine: its own download (engine_host.rs) ---------- */
+// { installed, ready, dev, version, message } from engine_state; null outside the app.
+let ENGINE = null, ENGINE_BUSY = false;
+const ENGINE_WHY = 'Mods for single-player games run in HotSwap’s mod engine, a separate download. It changes game memory, which Windows Security sometimes mistakes for malware: if it ever removes it, only mods stop. Boost, the overlay, Discord, maps and everything else never need it.';
+
+async function loadEngine() {
+  if (!invoke) return;
+  ENGINE = await invoke('engine_state').catch(() => null);
+  listen?.('engine', e => { ENGINE = e.payload; render(); });
+}
+
+function engineRow() {
+  const e = ENGINE;
+  if (!e) return '';
+  let status, btn = '';
+  if (ENGINE_BUSY) { status = 'Downloading and checking its signature…'; btn = '<span class="spin"></span>'; }
+  else if (e.dev) status = 'Dev build: uses the engine cargo builds.';
+  else if (e.ready) { status = `Installed${e.version ? ` (${esc(e.version)})` : ''}.`; btn = '<button class="btn" data-engine="remove">Remove</button>'; }
+  else if (e.installed) { status = esc(e.message || 'Needs an update.'); btn = '<button class="btn accent" data-engine="install">Download again</button>'; }
+  else { status = 'Not installed.'; btn = '<button class="btn accent" data-engine="install">Get the mod engine</button>'; }
+  return `<div class="set-row"><div class="txt"><b>Mod engine: ${status}</b><span>${ENGINE_WHY}</span></div>${btn}</div>`;
+}
+
+// On a game page with mods, until the engine is there.
+function engineCard(g) {
+  if (!ENGINE || ENGINE.ready || ENGINE.dev || !hasLiveMods(g)) return '';
+  return `<section class="bcard engine-card"><h2>Mods need the mod engine</h2>${engineRow()}</section>`;
+}
+
+// First start: pick what you want.
+function welcomeCard() {
+  if (state.welcomed !== false) return '';
+  const mode = currentMode();
+  return `<section class="bcard welcome"><h2>Welcome to HotSwap</h2>
+    <p class="dim">Pick what you want. Switched off parts don’t load at all, and you can change it any time in Settings → Features.</p>
+    <div class="modes">${MODES.map(([k, name, what]) => `<button class="mode${mode === k ? ' on' : ''}" data-featmode="${k}"><b>${name}</b><span>${what}</span></button>`).join('')}</div>
+    ${feat('game') ? engineRow() : ''}
+    <div class="bk-btns"><button class="btn accent" data-welcomed>Done</button></div></section>`;
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-engine],[data-welcomed]');
+  if (!t) return;
+  if ('welcomed' in t.dataset) { state.welcomed = true; save(); render(); return; }
+  if (ENGINE_BUSY) return;
+  const how = t.dataset.engine;
+  ENGINE_BUSY = true; render();
+  invoke(how === 'install' ? 'engine_install' : 'engine_remove')
+    .then(s => { ENGINE = s; toast('Mod engine', how === 'install' ? 'installed' : 'removed'); })
+    .catch(err => toast(how === 'install' ? 'Couldn’t get the mod engine' : 'Couldn’t remove it', String(err)))
+    .finally(() => { ENGINE_BUSY = false; render(); });
+});

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-engine-state"
+description = "Enables the engine_state command without any pre-configured scope."
+commands.allow = ["engine_state"]
+
+[[permission]]
+identifier = "deny-engine-state"
+description = "Denies the engine_state command without any pre-configured scope."
+commands.deny = ["engine_state"]

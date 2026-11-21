@@ -51,6 +51,7 @@ pub fn scan() -> Vec<Game> {
             anticheat: detect_anticheat(&Default::default(), &install),
             engine: crate::engines::detect(&install),
             single_player: false,
+            build: s("AppVersionString"),
             art: Art::default(),
             install,
             launch: Launch::Url(url),

@@ -18,12 +18,13 @@ A map of every file and what it does. HotSwap has two halves:
 | `app.rs` | The app: settings, the main window, tray icon, hotkeys, library scanning, launching games, updates, and the list of commands the interface can call. |
 | `bin/hsengine.rs` | `hotswap-engine.exe`: runs the mod engine (`engine.rs`), or a dev aid (`dev.rs`) when started with a `--flag`. |
 | `engine.rs` | The mod engine's side: takes the game and mods from the app over its input, runs the trainer, and sends back status, radar and the player's position. |
-| `engine_host.rs` | The app's side: starts the mod engine, restarts it if it stops, passes its events to the interface, and says so when it's missing. |
+| `engine_host.rs` | The app's side: downloads the mod engine (its own signed download since 0.5.0) and keeps it matching the app's version, starts it, restarts it if it stops, passes its events to the interface, and says so when it's missing. |
 | `dev.rs` | Dev aids such as `hotswap-engine --scan` or `--ue-classes`, for development only. |
 | `overlay.rs` | The in-game overlay window (notes, cheat sheet, HUD and menu) and the radar window; hands focus back to the game and closes itself when idle. |
 | `watch.rs` | Notices which installed game is running, and tells the interface when that changes. |
 | `trainer.rs` | Runs the mods (in the mod engine): attaches to the running game and keeps applying the values you've set. |
 | `stats.rs` | System stats: CPU, memory, disk, network, the running game's use, GPU temperature, power, clock and fan (NVIDIA or AMD driver), and CPU sensors via LibreHardwareMonitor. |
+| `backup.rs` | Save backups: zips a game's save folder into HotSwap's own backups folder (newest 5 kept), and the folder picker. |
 | `logs.rs` | HotSwap's log file (rotates at 5 MB), crash logging, and Export logs (full, or under 5 MB for Discord). |
 
 ### Commands for the pages
@@ -44,6 +45,7 @@ A map of every file and what it does. HotSwap has two halves:
 | `vdf.rs` | Reads Valve's text config files (`.vdf`, `.acf`). |
 | `epic.rs` | Finds installed Epic Games Store games. |
 | `gog.rs` | Finds installed GOG games. |
+| `others.rs` | Games outside the stores: ones you add by their .exe (custom_games.json), and Minecraft: Java Edition (Modrinth, official, Prism, CurseForge), spotted running by its Java command line. |
 | `home.rs` | Fetches the Home page's news, deals, top sellers and new releases. |
 | `sources.rs` | Custom Home panel sources: recognises feeds, sites with feeds, JSON lists and websites. |
 
@@ -127,6 +129,7 @@ A map of every file and what it does. HotSwap has two halves:
 | `hotkeys.js` | Reacts to hotkey presses and records new key bindings. |
 | `updates.js` | Checks for and installs HotSwap updates. |
 | `extras.js` | Status dots, the cheat sheet, Export logs, share codes, What's new and mini mode. |
+| `insights.js` | Samples the running game's FPS per Boost gear for the Boost scorecard, the session recap on Home, the game-updated note, save backups on the game page, and thumbs on experimental mods. |
 | `palette.js` | The Ctrl+K command palette. |
 | `events.js` | Every click, key and form input in the main window. |
 | `icons.js` | Small icons used across the pages. |
@@ -144,4 +147,5 @@ A map of every file and what it does. HotSwap has two halves:
 |---|---|
 | `src-tauri/build.rs` | Lists the commands the interface is allowed to call. |
 | `src-tauri/capabilities/` | Which windows may use which commands. |
+| `src-tauri/installer/` | The installer: Tauri's template plus a "Game mods" page (get the mod engine or not), and its pictures (`art/`, turned into BMPs by `docs/installer_art.py`). |
 | `src-tauri/assets/sm_bridge.lua` | The Scrap Mechanic Lua bridge (unused while Scrap Mechanic is off). |

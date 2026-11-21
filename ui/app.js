@@ -101,6 +101,8 @@ async function loadState() {
   try {
     const raw = invoke ? await invoke('load_data', { name: 'state' }) : localStorage.getItem('hotswap');
     if (raw) state = { ...DEFAULTS, ...JSON.parse(raw.replace(/^﻿/, '')) };
+    // The welcome (features.js) shows on a first start only, never to people who already use HotSwap.
+    state.welcomed ??= !!raw;
   } catch { /* first launch or unreadable file: keep defaults */ }
   // Log lines saved while app.js was briefly mis-encoded have a mangled arrow.
   state.log.forEach(l => { l.msg = l.msg.replace(/â†’/g, '→'); });
@@ -126,7 +128,7 @@ function save() {
 }
 
 /* ---------- Library ---------- */
-const SOURCES = { steam: 'Steam', epic: 'Epic Games', gog: 'GOG' };
+const SOURCES = { steam: 'Steam', epic: 'Epic Games', gog: 'GOG', other: 'Own launcher', custom: 'Added by you' };
 
 function buildGame(raw) {
   const appId = raw.appId || 0;
@@ -137,7 +139,7 @@ function buildGame(raw) {
   const g = {
     id: raw.id || String(appId), appId, source: raw.source || 'steam', name: raw.name,
     lastPlayed: raw.lastPlayed || 0, size: raw.sizeOnDisk || 0, playtime: raw.playtime || 0,
-    software: raw.kind === 'software', steamType: raw.steamType || null, engine: raw.engine || null,
+    software: raw.kind === 'software', build: raw.build || '', steamType: raw.steamType || null, engine: raw.engine || null,
     // Games whose anti-cheat only runs online can have singleplayer-only mods (`offline` in the catalog).
     anticheat: c?.offline ? [] : raw.anticheat || [], offline: c?.offline ? c.offline : null, onlineAnticheat: c?.offline ? raw.anticheat || [] : [],
     offlineNote: c?.offlineNote || null, hostOnly: !!c?.hostOnly, setup: c?.setup || null,
@@ -303,7 +305,7 @@ function syncBoost() {
   // Each gear's settings, with "your own apps" filled in from the one shared list.
   const gears = [0, 1, 2, 3, 4, 5].map(n => { const g = boostGearCfg(n); return { ...g, eco_apps: g.eco_mine ? state.boostEcoApps || [] : [] }; });
   const on = feat('boost');
-  invoke?.('boost_set', { cfg: { level: on ? state.boostLevel || 0 : 0, close: state.boostClose || [], freeze: state.boostFreeze || [], reopen: !!state.boostReopen, gears, per_game: on ? state.boostGames || {} : {}, battery_eco: state.boostBattery !== false, protect_recorders: state.boostProtect !== false } }).catch(console.error);
+  invoke?.('boost_set', { cfg: { level: on ? state.boostLevel || 0 : 0, close: state.boostClose || [], freeze: state.boostFreeze || [], reopen: !!state.boostReopen, gears, per_game: on ? state.boostGames || {} : {}, battery_eco: state.boostBattery !== false, protect_recorders: state.boostProtect !== false, keep_playing: state.boostPlaying !== false } }).catch(console.error);
 }
 // A gear's settings: its preset, with the user's changes on top (Custom starts from the old
 // single Advanced set, if there was one).
@@ -516,7 +518,7 @@ function renderLibrary() {
   const nGames = gamesOnly().length;
   $('libBody').innerHTML = `
     <div class="lib-head"><h1>Library</h1><span class="meta">${nGames} ${nGames === 1 ? 'game' : 'games'}${soft.length ? ` + ${soft.length} software` : ''}${STEAM.libraries.length ? ` across ${STEAM.libraries.length} Steam ${STEAM.libraries.length === 1 ? 'folder' : 'folders'}` : ''}</span>
-      <div class="chips">${filters.map(([k, l]) => `<button class="chip${state.libFilter === k ? ' on' : ''}" data-libfilter="${k}">${l}</button>`).join('')}</div></div>
+      <div class="chips">${filters.map(([k, l]) => `<button class="chip${state.libFilter === k ? ' on' : ''}" data-libfilter="${k}">${l}</button>`).join('')}${invoke ? '<button class="chip" data-addgame title="Any game from Xbox, EA, Ubisoft, Battle.net, itch.io or anywhere else: pick its .exe">+ Add a game</button>' : ''}</div></div>
     <div class="lib-grid">${list.map(g => {
       const n = activeCount(g), total = modsOf(g).length;
       return `<button class="lib-item" data-game="${g.id}"><span class="art">${capsule(g)}${n ? `<span class="modded">${n} active</span>` : ''}</span>

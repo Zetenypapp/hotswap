@@ -134,6 +134,14 @@
   .cl-acts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .cl-act { display: grid; gap: 4px; justify-items: start; padding: 12px 14px; border: 0; border-radius: 14px; background: rgba(255, 255, 255, .07); color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
   .cl-act:hover { background: rgba(255, 255, 255, .13); }
+.cl-set { display: flex; align-items: center; gap: 12px; margin: 6px 0; }
+.cl-set > span { width: 110px; flex: none; font-size: 12px; opacity: .7; }
+.cl-set > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.cl-set .chip { padding: 5px 10px; border-radius: 999px; border: 0; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; color: inherit; background: rgba(255, 255, 255, .08); }
+.cl-set .chip:hover { background: rgba(255, 255, 255, .16); }
+.cl-set .chip.on { background: var(--c, #3fd49a); color: #0b0d10; }
+.cl-apply { display: flex; align-items: center; gap: 12px; margin: 10px 0 4px; padding: 10px 12px; border-radius: 12px; background: rgba(243, 183, 63, .14); font-size: 12px; }
+.cl-apply span { flex: 1; }
   .cl-act b { font-size: 14px; }
   .cl-act span { font-size: 12px; opacity: .65; }
   .cl-act.on { background: #e5484d; color: #fff; }
@@ -142,13 +150,6 @@
   .cl-act.sel, .cl-save.sel { outline: 2px solid var(--c); outline-offset: 3px; }
   .cl-msg { font-size: 13px; font-weight: 700; padding: 8px 12px; border-radius: 10px; background: rgba(255, 255, 255, .07); }
   .cl-msg.err { background: rgba(229, 72, 77, .22); }
-  .cl-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
-  .cl-list li { display: flex; align-items: center; gap: 10px; padding: 7px 11px; border-radius: 10px; background: rgba(255, 255, 255, .06); }
-  .cl-list .ic { width: 20px; text-align: center; flex: none; }
-  .cl-list .t { display: grid; min-width: 0; flex: 1; }
-  .cl-list .t b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cl-list .t span { font-size: 11px; opacity: .6; }
-  .cl-list .ago { font-size: 12px; opacity: .6; flex: none; }
   .cl-steps { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 13px; opacity: .85; }
   /* Boost: the same hero, dial and gear cards as HotSwap's Boost page (styles.css), a bit smaller. */
   .ob { display: grid; gap: 12px; padding: 4px 22px 16px; }
@@ -563,14 +564,27 @@
     renderMenu();
     setTimeout(pollClips, 300);
   }
-  // The latest saved files (HotSwap's FTHR plugin only; FTHR's Stream Deck bridge doesn't list them).
-  function clipsList(s) {
-    if (s.plugin !== 'hotswap') return '';
-    if (!s.recent?.length) return '<p class="sys-note">No clips saved yet.</p>';
-    const ago = t => { const d = Math.max(0, Date.now() / 1000 - t); return d < 60 ? 'just now' : d < 3600 ? `${Math.floor(d / 60)} min ago` : d < 86400 ? `${Math.floor(d / 3600)} h ago` : `${Math.floor(d / 86400)} d ago`; };
-    const size = b => b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${Math.round(b / 1e6)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`;
-    const ic = { clip: '🎬', recording: '⏺', screenshot: '🖼' };
-    return `<div class="bdo-h">Latest saved</div><ul class="cl-list">${s.recent.map(f => `<li><span class="ic">${ic[f.kind] || '🎬'}</span><span class="t"><b>${esc(f.name)}</b><span>${esc(f.group)} · ${size(f.size)}</span></span><span class="ago">${ago(f.modified)}</span></li>`).join('')}</ul>`;
+  // Without HotSwap's own plugin (FTHR's Stream Deck bridge) there are no capture settings: say where to get it.
+  const clipsHint = s => s.plugin === 'hotswap' ? '' : '<p class="sys-note">Add HotSwap’s plugin to FTHR (Settings → Integrations in FTHR, or fthrclips.com) to change capture settings here.</p>';
+  // Replay settings (HotSwap's FTHR plugin 1.1+): FTHR's own choices; changes wait for Apply,
+  // which restarts capture like FTHR's Apply button.
+  function clipsSettings(s) {
+    const st = s.settings;
+    if (!st) return '';
+    const fmt = { clip_length: v => v >= 60 ? `${v / 60}m` : `${v}s`, framerate: v => `${v}`, resolution: v => v === 'source' ? 'Source' : v, quality: v => v[0].toUpperCase() + v.slice(1) };
+    const names = { clip_length: 'Replay length', framerate: 'Frame rate', resolution: 'Resolution', quality: 'Quality' };
+    const row = k => `<div class="cl-set"><span>${names[k]}</span><div>${(st.options[k] || []).map(v => `<button class="chip${v === st.current[k] ? ' on' : ''}" data-clset="${k}" data-v="${esc(JSON.stringify(v))}">${esc(fmt[k](v))}</button>`).join('')}${st.current[k] === 'custom' ? '<button class="chip on" disabled>Custom</button>' : ''}</div></div>`;
+    const recording = s.recording !== 'idle';
+    return `<div class="bdo-h">Capture settings</div>${Object.keys(names).map(row).join('')}
+      ${st.restartPending ? `<div class="cl-apply"><span>${recording ? 'Stop the recording to apply.' : 'Applying restarts capture: the current replay buffer is cleared.'}</span><button class="btn on" data-clapply${recording ? ' disabled' : ''}>Apply</button></div>` : ''}`;
+  }
+  async function clipSet(key, value, apply) {
+    try { await invoke('clips_settings', { key, value, apply: !!apply }); clipMsg = apply ? { t: 'Applying: FTHR restarts capture' } : null; }
+    catch (e) { clipMsg = { t: String(e), err: true }; }
+    const m = clipMsg;
+    if (m) setTimeout(() => { if (clipMsg === m) { clipMsg = null; if (view === 'clips') renderMenu(); } }, 3500);
+    renderMenu();
+    setTimeout(pollClips, 200);
   }
   function clipsPanel() {
     const s = clips;
@@ -579,8 +593,8 @@
     if (!s) return card('FTHR Clips', '#8a8f98', 'Looking for FTHR…', 'Checking whether FTHR Clips is running.');
     if (s.state === 'missing') return card('Not installed', '#8a8f98', 'FTHR Clips', 'A free, open-source clipping app: instant replays, recordings and screenshots with no account. Get it from fthrclips.com, then its controls show up here.');
     if (s.state === 'closed') return card('Not running', '#f3b73f', 'FTHR Clips is closed', 'Start it to save clips and record from here.', '<div style="margin-top:12px"><button class="btn on" data-clipopen>Open FTHR Clips</button></div>');
-    if (s.state === 'noplugin') return card('One step left', '#f3b73f', 'Turn on FTHR’s bridge', 'HotSwap talks to FTHR through its Stream Deck Bridge plugin (FTHR 2.1 or newer).',
-      '<ol class="cl-steps" style="margin-top:10px"><li>In FTHR, open Settings → Plugins</li><li>Install the Stream Deck Bridge plugin (fthr-stream-deck.zip) and keep it on</li></ol>');
+    if (s.state === 'noplugin') return card('One step left', '#f3b73f', 'Add HotSwap to FTHR', 'HotSwap talks to FTHR through a small HotSwap plugin for FTHR (FTHR 2.1 or newer).',
+      '<ol class="cl-steps" style="margin-top:10px"><li>Get the HotSwap plugin from FTHR’s Integrations page (fthrclips.com)</li><li>In FTHR: Settings → Plugins → Choose ZIP…, then Install plugin, and keep it on</li></ol>');
     const rec = s.recording !== 'idle', recNow = s.recording === 'recording';
     const live = s.ready && s.capturing;
     const kick = !s.ready ? 'Starting' : recNow ? 'Recording' : rec ? 'Recording · ' + esc(s.recording) : live ? 'Replay buffer on' : 'Not capturing';
@@ -600,7 +614,8 @@
         <button class="cl-act${sel(3)}" data-clip="save_screenshot"${off}><b>Screenshot</b><span>With FTHR’s settings</span></button>
       </div>
       ${msg}
-      ${clipsList(s)}
+      ${clipsSettings(s)}
+      ${clipsHint(s)}
       <p class="sys-note">Keys: arrows to pick, Enter to press. FTHR’s own hotkeys keep working too.</p>
     </div>`;
   }
@@ -715,6 +730,9 @@
     if (t.closest('[data-bclean]')) { send({ type: 'boostClean' }); return; }
     const cb = t.closest('[data-clip]');
     if (cb) { if (!cb.disabled) { clipSel = CLIP_ACTS.indexOf(cb.dataset.clip); clipDo(cb.dataset.clip); } return; }
+    const cs = t.closest('[data-clset]');
+    if (cs) { clipSet(cs.dataset.clset, JSON.parse(cs.dataset.v), false); return; }
+    if (t.closest('[data-clapply]')) { if (!t.closest('[data-clapply]').disabled) clipSet(null, null, true); return; }
     if (t.closest('[data-clipopen]')) { invoke('clips_open').then(() => { clipMsg = { t: 'Starting FTHR Clips…' }; renderMenu(); }, e => { clipMsg = { t: String(e), err: true }; renderMenu(); }); return; }
     const bt = t.closest('[data-btab]');
     if (bt) { boostTab = bt.dataset.btab; return renderMenu(); }

@@ -164,3 +164,21 @@ function renderMini() {
       <button class="ghost" id="winClose" aria-label="Close" title="Close"><svg width="12" height="12" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1.4"/></svg></button></div>
     <div class="mlist">${mods.length ? mods.map(row).join('') : `<p class="empty">${esc(g.name)} has no mods yet.</p>`}</div>`;
 }
+
+/* ---------- Games you add by their .exe (others.rs): Library and Settings -> Library ---------- */
+document.addEventListener('click', e => {
+  const add = e.target.closest('[data-addgame]'), rm = e.target.closest('[data-rmgame]'), art = e.target.closest('[data-cgart]');
+  if (art) invoke('custom_game_art', { id: art.dataset.cgart }).then(async picked => { if (picked) { await scanLibrary(); render(); } }).catch(err => toast('Picture', String(err)));
+  if (add) invoke('custom_game_add').then(async id => {
+    if (!id) return;
+    await scanLibrary();
+    toast('Added', findGame(id)?.name || '');
+    go('game', id);
+  }).catch(err => toast('Couldn’t add it', String(err)));
+  else if (rm) invoke('custom_game_remove', { id: rm.dataset.rmgame }).then(async () => { await scanLibrary(); render(); });
+});
+document.addEventListener('change', e => {
+  const n = e.target.closest('[data-cgname]');
+  if (n) invoke('custom_game_rename', { id: n.dataset.cgname, name: n.value })
+    .then(async () => { await scanLibrary(); render(); }).catch(err => toast('Rename', String(err)));
+});

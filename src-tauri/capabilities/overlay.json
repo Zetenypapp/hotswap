@@ -10,6 +10,7 @@
     "allow-clips-command",
     "allow-clips-open",
     "allow-clips-status",
+    "allow-clips-settings",
     "allow-log-ui",
     "allow-overlay-fit",
     "allow-overlay-input",

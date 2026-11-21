@@ -106,11 +106,11 @@ HotSwap changes other programs' memory, so it's built to be careful with its own
 - **Anti-cheat aware.** Games with anti-cheat get no mods. The few exceptions (Unturned singleplayer, GTA V story mode) turn themselves off the moment you go online, and HotSwap stops touching a game for good if its anti-cheat loads.
 - **Logged, not silent.** Anything the security policy blocks is written to HotSwap's logs (Settings → Export logs).
 - **Scanned.** Every release is checked with Microsoft Defender before it's published.
-- **Mods in their own program.** Everything that touches game memory runs in a separate mod engine (`hotswap-engine.exe`), so the app itself never contains that code. HotSwap never changes Windows Security's settings.
+- **Mods in their own program, and their own download.** Everything that touches game memory runs in a separate mod engine (`hotswap-engine.exe`), which isn't in the installer: you get it in the app when you want mods, checked against HotSwap's signing key before it's saved. The app itself never contains that code, and people who only use Boost, the overlay or maps never get it. HotSwap never changes Windows Security's settings.
 
 ### Windows Security flagged HotSwap?
 
-HotSwap's mods change a running game's memory, which malware does too, so Microsoft Defender's AI can mistake the mod engine for malware, mostly right after an update. If it does, only mods stop; the overlay, Boost and the rest keep working. To allow it again: **Windows Security → Virus & threat protection → Protection history**, pick the HotSwap entry, then **Actions → Allow** (or Restore). HotSwap is open source, so anyone can check what it does.
+HotSwap's mods change a running game's memory, which malware does too, so Microsoft Defender's AI can mistake the mod engine for malware, mostly right after an update. If it does, only mods stop; the overlay, Boost and the rest keep working, and you can download the engine again in Settings → Features. To allow it again: **Windows Security → Virus & threat protection → Protection history**, pick the HotSwap entry, then **Actions → Allow** (or Restore). HotSwap is open source, so anyone can check what it does.
 
 ## 🔒 Privacy
 
