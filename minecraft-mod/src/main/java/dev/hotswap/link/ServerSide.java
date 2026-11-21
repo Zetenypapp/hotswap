@@ -57,6 +57,9 @@ final class ServerSide {
 	private static final Set<UUID> subs = ConcurrentHashMap.newKeySet();
 	private static final Map<UUID, Long> sentRev = new ConcurrentHashMap<>();
 	private static final Set<UUID> genBusy = ConcurrentHashMap.newKeySet();
+	private static final Set<UUID> structBusy = ConcurrentHashMap.newKeySet();
+	/** The whole config file, for the per-structure *_location switches. */
+	private static volatile Properties props = new Properties();
 
 	private static final AtomicLong rev = new AtomicLong();
 	private record Stored(long rev, Net.Tile tile) {}
@@ -79,6 +82,7 @@ final class ServerSide {
 			subs.remove(handler.player.getUUID());
 			sentRev.remove(handler.player.getUUID());
 			genBusy.remove(handler.player.getUUID());
+			structBusy.remove(handler.player.getUUID());
 		});
 
 		ServerPlayNetworking.registerGlobalReceiver(Net.Hello.TYPE, (p, ctx) -> {
@@ -126,6 +130,28 @@ final class ServerSide {
 			t.start();
 		});
 
+		// Structures run on the server thread (that's where this handler is), one region per player at a time.
+		ServerPlayNetworking.registerGlobalReceiver(Net.StructReq.TYPE, (p, ctx) -> {
+			ServerPlayer player = ctx.player();
+			if (server == null || !cfg.mapAllowed() || !located("overall")) {
+				ServerPlayNetworking.send(player, new Net.StructData(p.id(), List.of(), "Locating structures is off on this server", ""));
+				return;
+			}
+			if (Math.abs(p.rx()) > 1 << 16 || Math.abs(p.rz()) > 1 << 16 || !structBusy.add(player.getUUID())) {
+				ServerPlayNetworking.send(player, new Net.StructData(p.id(), List.of(), "busy", ""));
+				return;
+			}
+			try {
+				List<Structures.Found> found = Structures.region(server, p.dim(), p.rx(), p.rz(), ServerSide::located);
+				ServerPlayNetworking.send(player, new Net.StructData(p.id(), found == null ? List.of() : found, found == null ? "No such dimension" : "", Structures.fingerprint(server, switches())));
+			} catch (Exception e) {
+				HotSwapLinkCommon.LOG.warn("Locating structures failed", e);
+				ServerPlayNetworking.send(player, new Net.StructData(p.id(), List.of(), "Locating failed", ""));
+			} finally {
+				structBusy.remove(player.getUUID());
+			}
+		});
+
 		ServerTickEvents.END_SERVER_TICK.register(s -> {
 			if (server == null || !shares()) return;
 			ticks++;
@@ -138,6 +164,48 @@ final class ServerSide {
 	private static boolean shares() {
 		return cfg.mapAllowed() && cfg.sharedMap();
 	}
+
+	/** The *_location switches that are off, in a stable order (for the structures fingerprint). */
+	private static String switches() {
+		Properties p = props;
+		return p.stringPropertyNames().stream().filter(k -> k.endsWith("_location") && "false".equalsIgnoreCase(p.getProperty(k).trim()))
+			.sorted().collect(java.util.stream.Collectors.joining(","));
+	}
+
+	/** Whether a structure set (or "overall") may be located: on unless the config says false. */
+	static boolean located(String set) {
+		Properties p = props;
+		java.util.function.Predicate<String> on = k -> !"false".equalsIgnoreCase(p.getProperty(k, "true").trim());
+		return on.test("overall_location") && (set.equals("overall") || on.test(set + "_location"));
+	}
+
+	private static final String LOCATIONS = """
+		# --- locating structures ---
+		# overall_location: false hides every structure. Each other line hides one kind.
+		# Modded structures follow overall_location.
+		overall_location=true
+		villages_location=true
+		pillager_outposts_location=true
+		woodland_mansions_location=true
+		desert_pyramids_location=true
+		jungle_temples_location=true
+		swamp_huts_location=true
+		igloos_location=true
+		ocean_monuments_location=true
+		ocean_ruins_location=true
+		shipwrecks_location=true
+		buried_treasures_location=true
+		ruined_portals_location=true
+		mineshafts_location=true
+		trail_ruins_location=true
+		trial_chambers_location=true
+		ancient_cities_location=true
+		abandoned_camp_location=true
+		strongholds_location=true
+		nether_complexes_location=true
+		nether_fossils_location=true
+		end_cities_location=true
+		""";
 
 	private static final String DEFAULTS = """
 		# HotSwap Link: what players with the mod may see on HotSwap's map on this server.
@@ -159,7 +227,7 @@ final class ServerSide {
 		shared_map=true
 		# seed_preview: answer terrain previews from this world's generator. The seed itself is never sent.
 		seed_preview=true
-		""";
+		""" + LOCATIONS;
 
 	private static Net.Config loadConfig() {
 		Path file = FabricLoader.getInstance().getConfigDir().resolve("hotswap.properties");
@@ -172,9 +240,17 @@ final class ServerSide {
 			try (var in = Files.newInputStream(file)) {
 				p.load(in);
 			}
+			// A config from before structures existed: add their switches (on), keep everything else.
+			if (!p.containsKey("overall_location")) {
+				Files.writeString(file, LOCATIONS, java.nio.file.StandardOpenOption.APPEND);
+				try (var in = Files.newInputStream(file)) {
+					p.load(in);
+				}
+			}
 		} catch (IOException e) {
 			HotSwapLinkCommon.LOG.warn("Could not read hotswap.properties, using the defaults", e);
 		}
+		props = p;
 		// Anything missing or misspelled counts as on, the default.
 		java.util.function.Predicate<String> on = k -> !"false".equalsIgnoreCase(p.getProperty(k, "true").trim());
 		return new Net.Config(on.test("is_map_allowed_at_all"), on.test("hostiles"), on.test("animals"), on.test("villagers"),

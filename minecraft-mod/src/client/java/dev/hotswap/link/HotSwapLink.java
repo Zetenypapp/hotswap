@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
  * terrain preview from the world's own generator. Never other players, entities or chat.
  */
 public final class HotSwapLink implements ClientModInitializer {
-	public static final String VERSION = "1.2.0";
+	public static final String VERSION = "1.4.0";
 	public static final Logger LOG = LoggerFactory.getLogger("HotSwap Link");
 
 	/** What HotSwap reads with GET /status, refreshed every client tick. */
@@ -78,6 +78,36 @@ public final class HotSwapLink implements ClientModInitializer {
 		return entities;
 	}
 
+	/** Bumped every client tick; the live stream waits on it. */
+	private static final Object TICK = new Object();
+	private static long tickSeq;
+	/** Bumped when the mobs list is read again. */
+	private static volatile long entitySeq;
+
+	public static long entitySeq() {
+		return entitySeq;
+	}
+
+	/** Waits (up to timeoutMs) for the tick after {@code seen}; returns the new tick number. */
+	public static long awaitTick(long seen, long timeoutMs) throws InterruptedException {
+		synchronized (TICK) {
+			long until = System.currentTimeMillis() + timeoutMs;
+			while (tickSeq == seen) {
+				long left = until - System.currentTimeMillis();
+				if (left <= 0) break;
+				TICK.wait(left);
+			}
+			return tickSeq;
+		}
+	}
+
+	private static void ticked() {
+		synchronized (TICK) {
+			tickSeq++;
+			TICK.notifyAll();
+		}
+	}
+
 	@Override
 	public void onInitializeClient() {
 		try {
@@ -127,10 +157,14 @@ public final class HotSwapLink implements ClientModInitializer {
 			sp != null ? Generator.supports(sp, mc.level.dimension()) : ClientNet.serverSeed());
 		scanner.tick(mc.level, mc.player, dim);
 		ClientNet.tick(mc);
-		if (ticks++ % 10 == 0) {
-			extras = readExtras(mc);
+		// Mobs 10 times a second (each has an id, so HotSwap can slide them smoothly); the rest twice.
+		if (ticks % 2 == 0) {
 			entities = readEntities(mc);
+			entitySeq++;
 		}
+		if (ticks % 10 == 0) extras = readExtras(mc);
+		ticks++;
+		ticked();
 	}
 
 	/** Your own state and the world's, straight from what the client already knows. */
@@ -189,6 +223,7 @@ public final class HotSwapLink implements ClientModInitializer {
 			};
 			if (!allowed) continue;
 			JsonObject o = new JsonObject();
+			o.addProperty("i", e.getId());
 			o.addProperty("k", kind);
 			o.addProperty("n", name != null ? name : e.getType().getDescription().getString());
 			o.addProperty("x", Math.round(e.getX() * 10) / 10.0);

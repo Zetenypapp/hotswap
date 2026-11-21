@@ -47,7 +47,8 @@ final class Server {
 
 	void start() throws IOException {
 		http = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 8);
-		http.setExecutor(Executors.newFixedThreadPool(2, r -> {
+		// Room for a couple of live streams (each holds a thread) plus normal requests.
+		http.setExecutor(Executors.newFixedThreadPool(6, r -> {
 			Thread t = new Thread(r, "HotSwap Link");
 			t.setDaemon(true);
 			return t;
@@ -98,10 +99,71 @@ final class Server {
 				case "/status" -> reply(ex, 200, status());
 				case "/chunks" -> reply(ex, 200, chunks(num(q.get("since"), 0)));
 				case "/generate" -> generate(ex, q);
+				case "/stream" -> stream(ex);
+				case "/structures" -> structures(ex, q);
 				default -> reply(ex, 404, error("Not found"));
 			}
 		} catch (Exception e) {
 			HotSwapLink.LOG.warn("HotSwap Link request failed", e);
+		}
+	}
+
+	private static final java.util.concurrent.atomic.AtomicInteger streams = new java.util.concurrent.atomic.AtomicInteger();
+
+	/**
+	 * A live feed: one JSON line per game tick (20 a second) with your position, plus the mobs
+	 * whenever they're read again (10 a second) and the full status twice a second. Ends when
+	 * HotSwap disconnects. At most 3 at once.
+	 */
+	private void stream(HttpExchange ex) throws IOException {
+		if (streams.incrementAndGet() > 3) {
+			streams.decrementAndGet();
+			reply(ex, 429, error("Too many streams"));
+			return;
+		}
+		try {
+			ex.getResponseHeaders().set("Content-Type", "application/x-ndjson");
+			ex.getResponseHeaders().set("Cache-Control", "no-store");
+			ex.sendResponseHeaders(200, 0);
+			OutputStream os = ex.getResponseBody();
+			long tick = -1, entSeen = -1;
+			int n = 0;
+			while (true) {
+				tick = HotSwapLink.awaitTick(tick, 1000);
+				JsonObject line;
+				if (n++ % 10 == 0) {
+					line = status();
+					line.addProperty("t", "s");
+					entSeen = HotSwapLink.entitySeq();
+				} else {
+					HotSwapLink.Snapshot s = HotSwapLink.snapshot();
+					Net.Config r = HotSwapLink.rules();
+					line = new JsonObject();
+					if (!s.inWorld() || (r != null && !r.mapAllowed())) {
+						line = status();
+						line.addProperty("t", "s");
+					} else {
+						line.addProperty("t", "p");
+						line.addProperty("dim", s.dim());
+						line.addProperty("x", s.x());
+						line.addProperty("y", s.y());
+						line.addProperty("z", s.z());
+						line.addProperty("yaw", s.yaw());
+						long es = HotSwapLink.entitySeq();
+						JsonArray ents = HotSwapLink.entities();
+						if (es != entSeen && ents != null) {
+							entSeen = es;
+							line.add("entities", ents);
+						}
+					}
+				}
+				os.write((line + "\n").getBytes(StandardCharsets.UTF_8));
+				os.flush();
+			}
+		} catch (IOException | InterruptedException gone) {
+			// HotSwap closed the map (or the game is closing).
+		} finally {
+			streams.decrementAndGet();
 		}
 	}
 
@@ -179,6 +241,51 @@ final class Server {
 		o.addProperty("size", Generator.SIZE);
 		o.addProperty("step", Generator.STEP);
 		o.addProperty("c", Base64.getEncoder().encodeToString(rgb));
+		reply(ex, 200, o);
+	}
+
+	/** Structures in one region: single-player asks the world itself, a server with the mod asks the server. */
+	private void structures(HttpExchange ex, Map<String, String> q) throws Exception {
+		IntegratedServer sp = Minecraft.getInstance().getSingleplayerServer();
+		String dim = q.getOrDefault("dim", "");
+		int rx = (int) num(q.get("rx"), 0), rz = (int) num(q.get("rz"), 0);
+		java.util.List<Structures.Found> found;
+		String rules;
+		try {
+			if (sp != null) {
+				found = Structures.region(sp, dim, rx, rz, set -> true);
+				rules = Structures.fingerprint(sp, "");
+			} else {
+				Net.StructData d = ClientNet.structures(dim, rx, rz);
+				found = d.found();
+				rules = d.rules();
+			}
+		} catch (Exception e) {
+			Throwable cause = e instanceof java.util.concurrent.ExecutionException && e.getCause() != null ? e.getCause() : e;
+			reply(ex, 409, error(String.valueOf(cause.getMessage())));
+			return;
+		}
+		if (found == null) {
+			reply(ex, 409, error("No such dimension"));
+			return;
+		}
+		JsonArray arr = new JsonArray();
+		for (Structures.Found f : found) {
+			JsonObject o = new JsonObject();
+			o.addProperty("t", f.type());
+			o.addProperty("set", f.set());
+			o.addProperty("x", f.x());
+			o.addProperty("z", f.z());
+			if (f.pieces() > 0) {
+				o.addProperty("pieces", f.pieces());
+				o.addProperty("height", f.height());
+			}
+			if (!f.tag().isEmpty()) o.addProperty("tag", f.tag());
+			arr.add(o);
+		}
+		JsonObject o = new JsonObject();
+		o.add("structures", arr);
+		o.addProperty("rules", rules);
 		reply(ex, 200, o);
 	}
 

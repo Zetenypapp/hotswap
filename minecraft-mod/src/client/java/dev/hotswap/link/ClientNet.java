@@ -33,6 +33,7 @@ final class ClientNet {
 	private static volatile List<Net.PlayerPos> players = null;
 	private static final AtomicInteger genIds = new AtomicInteger();
 	private static final Map<Integer, CompletableFuture<byte[]>> gens = new ConcurrentHashMap<>();
+	private static final Map<Integer, CompletableFuture<Net.StructData>> structs = new ConcurrentHashMap<>();
 	// Explored regions the server offered and we haven't fetched yet (one a second).
 	private static final ArrayDeque<Net.RegionKey> queue = new ArrayDeque<>();
 	private static final Set<String> fetched = new HashSet<>();
@@ -80,6 +81,12 @@ final class ClientNet {
 			if (!p.error().isEmpty()) f.completeExceptionally(new RuntimeException(p.error()));
 			else f.complete(p.rgb());
 		});
+		ClientPlayNetworking.registerGlobalReceiver(Net.StructData.TYPE, (p, ctx) -> {
+			CompletableFuture<Net.StructData> f = structs.remove(p.id());
+			if (f == null) return;
+			if (!p.error().isEmpty()) f.completeExceptionally(new RuntimeException(p.error()));
+			else f.complete(p);
+		});
 		ClientPlayNetworking.registerGlobalReceiver(Net.Players.TYPE, (p, ctx) -> {
 			String me = ctx.client().player != null ? ctx.client().player.getGameProfile().name() : "";
 			players = p.players().stream().filter(x -> !x.name().equals(me)).toList();
@@ -95,6 +102,8 @@ final class ClientNet {
 		}
 		gens.values().forEach(f -> f.completeExceptionally(new RuntimeException("Left the server")));
 		gens.clear();
+		structs.values().forEach(f -> f.completeExceptionally(new RuntimeException("Left the server")));
+		structs.clear();
 	}
 
 	/** Called every client tick (from the game thread). */
@@ -167,6 +176,24 @@ final class ClientNet {
 			return rgb;
 		} finally {
 			gens.remove(id);
+		}
+	}
+
+	/** Asks the server where the structures in a region are (from HotSwap's connection thread). */
+	static Net.StructData structures(String dim, int rx, int rz) throws Exception {
+		Net.Config c = cfg;
+		if (c == null || !c.mapAllowed()) throw new RuntimeException("This server doesn't have HotSwap Link");
+		int id = genIds.incrementAndGet();
+		CompletableFuture<Net.StructData> f = new CompletableFuture<>();
+		structs.put(id, f);
+		Minecraft.getInstance().execute(() -> {
+			if (ClientPlayNetworking.canSend(Net.StructReq.TYPE)) ClientPlayNetworking.send(new Net.StructReq(id, dim, rx, rz));
+			else f.completeExceptionally(new RuntimeException("This server's HotSwap Link can't locate structures"));
+		});
+		try {
+			return f.get(40, TimeUnit.SECONDS);
+		} finally {
+			structs.remove(id);
 		}
 	}
 

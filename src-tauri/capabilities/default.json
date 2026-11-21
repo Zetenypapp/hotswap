@@ -43,6 +43,8 @@
     "allow-map-background",
     "allow-mc-sync",
     "allow-mc-status",
+    "allow-mc-live",
+    "allow-mc-structures",
     "allow-mc-regions",
     "allow-mc-worlds",
     "allow-mc-generate",

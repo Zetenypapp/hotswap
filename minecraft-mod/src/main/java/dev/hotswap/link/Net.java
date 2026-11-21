@@ -131,6 +131,39 @@ public final class Net {
 		@Override public Type<GenData> type() { return TYPE; }
 	}
 
+	/** Client -> server: where are the structures in this region? */
+	public record StructReq(int id, String dim, int rx, int rz) implements CustomPacketPayload {
+		public static final Type<StructReq> TYPE = channel("struct_req");
+		public static final StreamCodec<FriendlyByteBuf, StructReq> CODEC = CustomPacketPayload.codec(
+			(v, b) -> { b.writeVarInt(v.id); b.writeUtf(v.dim, 128); b.writeVarInt(v.rx); b.writeVarInt(v.rz); },
+			b -> new StructReq(b.readVarInt(), b.readUtf(128), b.readVarInt(), b.readVarInt()));
+		@Override public Type<StructReq> type() { return TYPE; }
+	}
+
+	/** Server -> client: the structures the server allows showing, or why not. */
+	public record StructData(int id, List<Structures.Found> found, String error, String rules) implements CustomPacketPayload {
+		public static final Type<StructData> TYPE = channel("structs");
+		public static final StreamCodec<FriendlyByteBuf, StructData> CODEC = CustomPacketPayload.codec(
+			(v, b) -> {
+				b.writeVarInt(v.id);
+				b.writeVarInt(v.found.size());
+				for (Structures.Found f : v.found) {
+					b.writeUtf(f.type(), 64); b.writeUtf(f.set(), 64); b.writeVarInt(f.x()); b.writeVarInt(f.z());
+					b.writeVarInt(f.pieces()); b.writeVarInt(f.height()); b.writeUtf(f.tag(), 32);
+				}
+				b.writeUtf(v.error, 256);
+				b.writeUtf(v.rules, 64);
+			},
+			b -> {
+				int id = b.readVarInt();
+				int n = Math.min(b.readVarInt(), 512);
+				List<Structures.Found> out = new ArrayList<>(n);
+				for (int i = 0; i < n; i++) out.add(new Structures.Found(b.readUtf(64), b.readUtf(64), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readUtf(32)));
+				return new StructData(id, out, b.readUtf(256), b.readUtf(64));
+			});
+		@Override public Type<StructData> type() { return TYPE; }
+	}
+
 	public record PlayerPos(String name, String dim, double x, double y, double z, float yaw) {}
 
 	/** Server -> client: where everyone online is (only when the admin turned that on). */
@@ -161,5 +194,7 @@ public final class Net {
 		PayloadTypeRegistry.clientboundPlay().registerLarge(RegionData.TYPE, RegionData.CODEC, 4 << 20);
 		PayloadTypeRegistry.clientboundPlay().registerLarge(GenData.TYPE, GenData.CODEC, 256 << 10);
 		PayloadTypeRegistry.clientboundPlay().register(Players.TYPE, Players.CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(StructReq.TYPE, StructReq.CODEC);
+		PayloadTypeRegistry.clientboundPlay().registerLarge(StructData.TYPE, StructData.CODEC, 64 << 10);
 	}
 }
