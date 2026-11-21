@@ -131,9 +131,14 @@ public final class Net {
 		@Override public Type<GenData> type() { return TYPE; }
 	}
 
-	/** Client -> server: where are the structures in this region? */
+	/**
+	 * Client -> server: where are the structures in this region?
+	 * Channels are "struct_req2"/"structs2" since 1.4.1: early 1.4.0 builds sent entries without
+	 * details on "structs", and a mismatch disconnected players. The client only asks when the
+	 * server registered the same request channel, so mismatched builds never talk.
+	 */
 	public record StructReq(int id, String dim, int rx, int rz) implements CustomPacketPayload {
-		public static final Type<StructReq> TYPE = channel("struct_req");
+		public static final Type<StructReq> TYPE = channel("struct_req2");
 		public static final StreamCodec<FriendlyByteBuf, StructReq> CODEC = CustomPacketPayload.codec(
 			(v, b) -> { b.writeVarInt(v.id); b.writeUtf(v.dim, 128); b.writeVarInt(v.rx); b.writeVarInt(v.rz); },
 			b -> new StructReq(b.readVarInt(), b.readUtf(128), b.readVarInt(), b.readVarInt()));
@@ -142,23 +147,33 @@ public final class Net {
 
 	/** Server -> client: the structures the server allows showing, or why not. */
 	public record StructData(int id, List<Structures.Found> found, String error, String rules) implements CustomPacketPayload {
-		public static final Type<StructData> TYPE = channel("structs");
+		public static final Type<StructData> TYPE = channel("structs2");
 		public static final StreamCodec<FriendlyByteBuf, StructData> CODEC = CustomPacketPayload.codec(
 			(v, b) -> {
 				b.writeVarInt(v.id);
 				b.writeVarInt(v.found.size());
+				// Each entry is its own length-prefixed blob: fields added later are skipped by older readers.
 				for (Structures.Found f : v.found) {
-					b.writeUtf(f.type(), 64); b.writeUtf(f.set(), 64); b.writeVarInt(f.x()); b.writeVarInt(f.z());
-					b.writeVarInt(f.pieces()); b.writeVarInt(f.height()); b.writeUtf(f.tag(), 32);
+					FriendlyByteBuf e = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+					try {
+						e.writeUtf(f.type(), 64); e.writeUtf(f.set(), 64); e.writeVarInt(f.x()); e.writeVarInt(f.z());
+						e.writeVarInt(f.pieces()); e.writeVarInt(f.height()); e.writeUtf(f.tag(), 32);
+						b.writeByteArray(e.array().length == e.writerIndex() ? e.array() : java.util.Arrays.copyOf(e.array(), e.writerIndex()));
+					} finally {
+						e.release();
+					}
 				}
 				b.writeUtf(v.error, 256);
 				b.writeUtf(v.rules, 64);
 			},
 			b -> {
 				int id = b.readVarInt();
-				int n = Math.min(b.readVarInt(), 512);
-				List<Structures.Found> out = new ArrayList<>(n);
-				for (int i = 0; i < n; i++) out.add(new Structures.Found(b.readUtf(64), b.readUtf(64), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readUtf(32)));
+				int n = b.readVarInt();
+				List<Structures.Found> out = new ArrayList<>(Math.min(n, 512));
+				for (int i = 0; i < n; i++) {
+					FriendlyByteBuf e = new FriendlyByteBuf(io.netty.buffer.Unpooled.wrappedBuffer(b.readByteArray(1024)));
+					if (out.size() < 512) out.add(new Structures.Found(e.readUtf(64), e.readUtf(64), e.readVarInt(), e.readVarInt(), e.readVarInt(), e.readVarInt(), e.readUtf(32)));
+				}
 				return new StructData(id, out, b.readUtf(256), b.readUtf(64));
 			});
 		@Override public Type<StructData> type() { return TYPE; }

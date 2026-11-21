@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
  * terrain preview from the world's own generator. Never other players, entities or chat.
  */
 public final class HotSwapLink implements ClientModInitializer {
-	public static final String VERSION = "1.4.0";
+	public static final String VERSION = "1.4.1";
 	public static final Logger LOG = LoggerFactory.getLogger("HotSwap Link");
 
 	/** What HotSwap reads with GET /status, refreshed every client tick. */
