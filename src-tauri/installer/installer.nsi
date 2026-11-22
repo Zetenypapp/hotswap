@@ -790,9 +790,13 @@ Section Install
   {{/each}}
 
   ; Copy external binaries
+  ; HOTSWAP: the engine (hsengine bin) is its own download, so it never ships inside the installer.
   {{#each binaries}}
+    !if "{{this}}" != "hsengine.exe"
     File /a "/oname={{this}}" "{{no-escape @key}}"
+    !endif
   {{/each}}
+  Delete "$INSTDIR\hsengine.exe"
 
   ; Create file associations
   {{#each file_associations as |association| ~}}
